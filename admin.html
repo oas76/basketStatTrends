@@ -110,41 +110,35 @@
       <section class="panel">
         <h2>☁️ Cloud Sync</h2>
         <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
-          Sync your data across devices using JSONbin.io (free). Works with GitHub Pages!
+          Shared cloud storage for all users. Configure in <code>config.js</code> and deploy.
         </p>
         
-        <div id="cloudSyncSetup" class="cloud-sync-setup">
-          <div class="field">
-            <label for="jsonbinApiKey">JSONbin.io API Key</label>
-            <input type="password" id="jsonbinApiKey" placeholder="Enter your X-Master-Key">
-            <small>Get free key at <a href="https://jsonbin.io/app/api-keys" target="_blank">jsonbin.io/app/api-keys</a></small>
-          </div>
-          <div class="field">
-            <label for="jsonbinBinId">Bin ID (optional)</label>
-            <input type="text" id="jsonbinBinId" placeholder="Leave empty to create new">
-            <small>Enter existing bin ID or leave empty for first sync</small>
-          </div>
-          <button type="button" id="saveCloudConfig">Save Configuration</button>
-        </div>
-
-        <div id="cloudSyncStatus" class="cloud-sync-status" style="display: none;">
+        <div id="cloudSyncStatus" class="cloud-sync-status">
           <div class="cloud-status-info">
-            <span id="cloudStatusText">☁️ Cloud sync configured</span>
-            <button type="button" id="editCloudConfig" class="btn-icon" title="Edit configuration">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-            </button>
+            <span id="cloudStatusText">Checking configuration...</span>
           </div>
           <div class="cloud-sync-actions">
-            <button id="cloudSyncUp" class="secondary">
+            <button id="cloudSyncUp" class="secondary" disabled>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3"/><path d="m6 11 6-8 6 8"/><path d="M19 21H5"/></svg>
               Upload to Cloud
             </button>
-            <button id="cloudSyncDown" class="secondary">
+            <button id="cloudSyncDown" class="secondary" disabled>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14"/><path d="m6 13 6 8 6-8"/><path d="M19 21H5"/></svg>
               Download from Cloud
             </button>
           </div>
         </div>
+        
+        <details style="margin-top: 16px;">
+          <summary style="cursor: pointer; color: var(--text-secondary); font-size: 12px;">How to configure cloud sync</summary>
+          <ol style="font-size: 12px; color: var(--text-secondary); margin-top: 8px; padding-left: 20px;">
+            <li>Create free account at <a href="https://jsonbin.io" target="_blank">jsonbin.io</a></li>
+            <li>Get your API key from <a href="https://jsonbin.io/app/api-keys" target="_blank">API Keys page</a></li>
+            <li>Edit <code>config.js</code> and add your <code>apiKey</code></li>
+            <li>Upload data once, then copy the Bin ID to <code>config.js</code></li>
+            <li>Deploy to GitHub Pages - all users will share the same data!</li>
+          </ol>
+        </details>
       </section>
 
       <!-- Player Registry Section -->
@@ -226,6 +220,7 @@
       <span>Data stored locally in browser storage</span>
     </footer>
 
+    <script src="config.js"></script>
     <script src="data.js"></script>
     <script src="admin.js"></script>
   </body>
