@@ -275,11 +275,71 @@ const getAllStatKeys = () => {
   const data = loadData();
   const keys = new Set();
   data.games.forEach((game) => {
-    Object.values(game.performances).forEach((stats) => {
+    Object.values(game.performances || {}).forEach((stats) => {
       Object.keys(stats).forEach((key) => keys.add(key));
     });
   });
   return Array.from(keys);
+};
+
+/**
+ * Clean up data by removing players with no valid stats from all games
+ * Call this to fix existing data that has players who didn't actually play
+ */
+const cleanupData = () => {
+  const data = loadData();
+  let removedCount = 0;
+  
+  data.games.forEach((game) => {
+    if (!game.performances) return;
+    
+    const playersToRemove = [];
+    Object.entries(game.performances).forEach(([playerName, stats]) => {
+      if (!hasValidStats(stats)) {
+        playersToRemove.push(playerName);
+      }
+    });
+    
+    playersToRemove.forEach((name) => {
+      delete game.performances[name];
+      removedCount++;
+    });
+  });
+  
+  // Also clean up player registry - remove players who have no games
+  const playersWithGames = new Set();
+  data.games.forEach((game) => {
+    Object.keys(game.performances || {}).forEach((name) => {
+      playersWithGames.add(name);
+    });
+  });
+  
+  Object.keys(data.players || {}).forEach((name) => {
+    if (!playersWithGames.has(name)) {
+      delete data.players[name];
+    }
+  });
+  
+  saveData(data);
+  return removedCount;
+};
+
+/**
+ * Count games played for each player (only counting games with valid stats)
+ */
+const getPlayerGameCounts = () => {
+  const data = loadData();
+  const counts = {};
+  
+  data.games.forEach((game) => {
+    Object.entries(game.performances || {}).forEach(([name, stats]) => {
+      if (hasValidStats(stats)) {
+        counts[name] = (counts[name] || 0) + 1;
+      }
+    });
+  });
+  
+  return counts;
 };
 
 const unique = (values) => Array.from(new Set(values));
@@ -295,6 +355,9 @@ window.basketStatData = {
   updatePlayerStats,
   updatePlayer,
   getAllStatKeys,
+  cleanupData,
+  getPlayerGameCounts,
+  hasValidStats,
   unique,
   generateGameId,
 };

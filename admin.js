@@ -77,17 +77,12 @@ const renderGames = () => {
 
 // Render players table
 const renderPlayers = () => {
-  const { players, games } = window.basketStatData.loadData();
+  const { players } = window.basketStatData.loadData();
   
-  // Count games per player
-  const gamesPlayed = {};
-  games.forEach((game) => {
-    Object.keys(game.performances || {}).forEach((name) => {
-      gamesPlayed[name] = (gamesPlayed[name] || 0) + 1;
-    });
-  });
+  // Count games per player (only counting games with valid stats)
+  const gamesPlayed = window.basketStatData.getPlayerGameCounts();
 
-  // Get all unique player names from games (in case player registry is incomplete)
+  // Get all unique player names from games
   const allPlayers = new Set([...Object.keys(players), ...Object.keys(gamesPlayed)]);
   
   if (allPlayers.size === 0) {
@@ -288,5 +283,8 @@ clearData.addEventListener("click", () => {
 });
 
 // Initial render
+// Clean up any existing data with players who have no valid stats
+window.basketStatData.cleanupData();
+
 renderGames();
 renderPlayers();
