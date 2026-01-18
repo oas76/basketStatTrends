@@ -9,7 +9,7 @@ const renderGames = () => {
   if (games.length === 0) {
     gamesTable.innerHTML = `
       <tr>
-        <td colspan="3">No games uploaded yet.</td>
+        <td colspan="5">No games uploaded yet.</td>
       </tr>
     `;
     return;
@@ -21,7 +21,9 @@ const renderGames = () => {
         <tr>
           <td>${new Date(game.date).toLocaleDateString()}</td>
           <td>${game.opponent}</td>
-          <td>${game.entries.map((entry) => entry.player).join(", ")}</td>
+          <td>${game.league || "-"}</td>
+          <td>${game.homeAway === "home" ? "Home" : game.homeAway === "away" ? "Away" : "-"}</td>
+          <td>${game.entries.map((entry) => entry.name).join(", ")}</td>
         </tr>
       `
     )
@@ -32,23 +34,25 @@ uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const date = document.getElementById("gameDate").value;
   const opponent = document.getElementById("opponent").value.trim();
+  const league = document.getElementById("league").value.trim();
+  const homeAway = document.getElementById("homeAway").value;
   const file = document.getElementById("csvFile").files[0];
 
-  if (!date || !opponent || !file) {
+  if (!date || !opponent || !league || !homeAway || !file) {
     uploadStatus.textContent = "Missing data";
-    uploadDetails.textContent = "Please provide date, opponent, and CSV file.";
+    uploadDetails.textContent = "Please provide date, opponent, league, home/away, and CSV file.";
     return;
   }
 
   try {
     const { entries } = await window.basketStatData.parseCsv(file);
     const data = window.basketStatData.loadData();
-    data.games.push({ date, opponent, entries });
+    data.games.push({ date, opponent, league, homeAway, entries });
     data.games.sort((a, b) => new Date(a.date) - new Date(b.date));
     window.basketStatData.saveData(data);
 
     uploadStatus.textContent = "Upload complete";
-    uploadDetails.textContent = `Added ${entries.length} player rows for ${opponent}.`;
+    uploadDetails.textContent = `Added ${entries.length} players for ${opponent} (${league}, ${homeAway === "home" ? "Home" : "Away"}).`;
     uploadForm.reset();
     renderGames();
   } catch (error) {

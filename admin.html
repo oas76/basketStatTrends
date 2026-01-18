@@ -30,9 +30,21 @@
             <input type="text" id="opponent" placeholder="Team name" required />
           </div>
           <div class="field">
+            <label for="league">League</label>
+            <input type="text" id="league" placeholder="e.g. 1. divisjon, BLNO" required />
+          </div>
+          <div class="field">
+            <label for="homeAway">Home / Away</label>
+            <select id="homeAway" required>
+              <option value="">Select...</option>
+              <option value="home">Home</option>
+              <option value="away">Away</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="csvFile">CSV file</label>
             <input type="file" id="csvFile" accept=".csv" required />
-            <small>Expected columns: player, plus any stat columns (PTS, REB, AST, etc).</small>
+            <small>Expected format: player column with "#number Name", plus stat columns (fg, 3pt, pts, etc).</small>
           </div>
           <button type="submit">Upload game</button>
         </form>
@@ -51,6 +63,8 @@
               <tr>
                 <th>Date</th>
                 <th>Opponent</th>
+                <th>League</th>
+                <th>H/A</th>
                 <th>Players</th>
               </tr>
             </thead>

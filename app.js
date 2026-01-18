@@ -10,6 +10,30 @@ const statHeader = document.getElementById("statHeader");
 
 const formatDate = (value) => new Date(value).toLocaleDateString();
 
+/**
+ * Format a stat value for display
+ * Handles: objects { made, attempted }, numbers, null, strings
+ */
+const formatStatValue = (value) => {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "object" && "made" in value && "attempted" in value) {
+    return `${value.made}-${value.attempted}`;
+  }
+  return String(value);
+};
+
+/**
+ * Get numeric value from a stat for calculations/charting
+ * For made-attempted, returns the "made" value
+ */
+const getNumericStat = (value) => {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "object" && "made" in value) {
+    return value.made;
+  }
+  return Number(value) || 0;
+};
+
 const buildData = () => {
   const { games } = window.basketStatData.loadData();
   return games
@@ -17,7 +41,9 @@ const buildData = () => {
       game.entries.map((entry) => ({
         date: game.date,
         opponent: game.opponent,
-        player: entry.player,
+        league: game.league,
+        homeAway: game.homeAway,
+        player: entry.name,
         stats: entry.stats,
       }))
     )
@@ -41,10 +67,10 @@ const updateSelectors = (records) => {
 const updateDataPoints = (records, player, stat) => {
   const filtered = records.filter((record) => record.player === player);
   dataPointSelect.innerHTML = filtered
-    .map(
-      (record, index) =>
-        `<option value="${index}">${formatDate(record.date)} vs ${record.opponent}</option>`
-    )
+    .map((record, index) => {
+      const locationLabel = record.homeAway === "home" ? "vs" : "@";
+      return `<option value="${index}">${formatDate(record.date)} ${locationLabel} ${record.opponent}</option>`;
+    })
     .join("");
 
   statHeader.textContent = stat;
@@ -54,7 +80,7 @@ const updateDataPoints = (records, player, stat) => {
         <tr>
           <td>${formatDate(record.date)}</td>
           <td>${record.opponent}</td>
-          <td>${record.stats[stat] ?? "—"}</td>
+          <td>${formatStatValue(record.stats[stat])}</td>
         </tr>
       `
     )
@@ -69,7 +95,7 @@ const renderChart = (records, stat) => {
     return;
   }
 
-  const values = records.map((record) => Number(record.stats[stat]) || 0);
+  const values = records.map((record) => getNumericStat(record.stats[stat]));
   const max = Math.max(...values, 1);
   const points = values
     .map((value, index) => {
@@ -92,7 +118,7 @@ const renderInsight = (records, stat) => {
     return;
   }
 
-  const values = records.map((record) => Number(record.stats[stat]) || 0);
+  const values = records.map((record) => getNumericStat(record.stats[stat]));
   const average = values.reduce((sum, value) => sum + value, 0) / values.length;
   const recent = values.slice(-3);
   const recentAverage =
@@ -120,8 +146,9 @@ const updateHighlight = (records, stat, index) => {
     return;
   }
 
-  highlightValue.textContent = record.stats[stat] ?? "—";
-  highlightMeta.textContent = `${formatDate(record.date)} vs ${record.opponent}`;
+  highlightValue.textContent = formatStatValue(record.stats[stat]);
+  const locationLabel = record.homeAway === "home" ? "vs" : "@";
+  highlightMeta.textContent = `${formatDate(record.date)} ${locationLabel} ${record.opponent}`;
 };
 
 const refresh = () => {
