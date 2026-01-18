@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BasketStat Trends</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>BasketStat Trends</h1>
+        <p>Track player stats over time and surface simple trend insights.</p>
+      </div>
+      <nav>
+        <a href="admin.html">Admin Upload</a>
+      </nav>
+    </header>
+
+    <main class="app-shell">
+      <section class="panel">
+        <h2>Player focus</h2>
+        <div class="field">
+          <label for="playerSelect">Player</label>
+          <select id="playerSelect"></select>
+        </div>
+        <div class="field">
+          <label for="statSelect">Stat</label>
+          <select id="statSelect"></select>
+        </div>
+        <div class="field">
+          <label for="dataPointSelect">Game datapoint</label>
+          <select id="dataPointSelect"></select>
+        </div>
+        <div class="summary-card" id="highlightCard">
+          <p class="summary-label">Selected datapoint</p>
+          <h3 id="highlightValue">—</h3>
+          <p id="highlightMeta">Choose a player to begin.</p>
+        </div>
+      </section>
+
+      <section class="panel wide">
+        <h2>Trend overview</h2>
+        <div class="chart" id="chart"></div>
+        <div class="insights">
+          <h3>AI Insights</h3>
+          <p id="insightText">Upload data to see automatic observations.</p>
+        </div>
+        <div class="data-table">
+          <h3>Game log</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Opponent</th>
+                <th id="statHeader">Stat</th>
+              </tr>
+            </thead>
+            <tbody id="gameTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <span>Tip: Upload CSVs from the Admin page to build trends.</span>
+    </footer>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
