@@ -110,6 +110,33 @@ const parseStatValue = (value) => {
 };
 
 /**
+ * Check if a player has any meaningful stats (not all null/zero)
+ * Returns false if player should be excluded from the game
+ */
+const hasValidStats = (stats) => {
+  // Check if minutes played is 0 or null - if so, player didn't play
+  const minKey = Object.keys(stats).find(k => k.toLowerCase() === 'min');
+  if (minKey !== undefined) {
+    const mins = stats[minKey];
+    if (mins === null || mins === 0) {
+      return false;
+    }
+  }
+  
+  // Check if all stats are null
+  const values = Object.values(stats);
+  const hasAnyValue = values.some(v => {
+    if (v === null) return false;
+    if (typeof v === 'object' && 'made' in v) {
+      return v.made > 0 || v.attempted > 0;
+    }
+    return v !== 0;
+  });
+  
+  return hasAnyValue;
+};
+
+/**
  * Parse CSV file and return game data
  */
 const parseCsv = async (file) => {
@@ -136,9 +163,6 @@ const parseCsv = async (file) => {
     .forEach((columns) => {
       const { name, number } = extractPlayerInfo(columns[playerIndex]);
       
-      // Store player info
-      playersFound[name] = { number, active: true };
-      
       // Build stats object
       const stats = {};
       statHeaders.forEach((header) => {
@@ -146,7 +170,11 @@ const parseCsv = async (file) => {
         stats[header] = parseStatValue(value);
       });
       
-      performances[name] = stats;
+      // Only include players with valid stats (played in the game)
+      if (hasValidStats(stats)) {
+        playersFound[name] = { number, active: true };
+        performances[name] = stats;
+      }
     });
 
   return { statHeaders, performances, playersFound };
