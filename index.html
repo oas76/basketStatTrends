@@ -53,11 +53,6 @@
       <section class="panel wide">
         <h2>Performance Trend</h2>
         <div class="chart" id="chart"></div>
-        <div class="insights">
-          <h3>Player Analysis</h3>
-          <div id="insightText" class="insight-content">Upload data to see performance insights.</div>
-        </div>
-        
         <!-- AI-Powered Analysis -->
         <div class="ai-analysis">
           <div class="ai-header">
@@ -69,9 +64,19 @@
           
           <div id="aiSettings" class="ai-settings" style="display: none;">
             <div class="field">
-              <label for="geminiApiKey">Google Gemini API Key</label>
-              <input type="password" id="geminiApiKey" placeholder="Enter your Gemini API key">
-              <small>Get free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a></small>
+              <label for="aiProvider">AI Provider</label>
+              <select id="aiProvider">
+                <option value="groq">Groq (Recommended - generous free tier)</option>
+                <option value="openai">OpenAI / ChatGPT</option>
+                <option value="gemini">Google Gemini</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="aiApiKey">API Key</label>
+              <input type="password" id="aiApiKey" placeholder="Enter your API key">
+              <small id="apiKeyHelp">
+                Get free key at <a href="https://console.groq.com/keys" target="_blank">console.groq.com</a>
+              </small>
             </div>
             <button type="button" id="saveApiKey">Save Key</button>
           </div>

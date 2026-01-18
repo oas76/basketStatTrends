@@ -303,6 +303,175 @@ clearData.addEventListener("click", () => {
   }
 });
 
+// ========================================
+// EXPORT / IMPORT / SYNC FUNCTIONALITY
+// ========================================
+
+const exportDataBtn = document.getElementById("exportData");
+const importDataInput = document.getElementById("importData");
+const syncToServerBtn = document.getElementById("syncToServer");
+
+// Export data as JSON file
+if (exportDataBtn) {
+  exportDataBtn.addEventListener("click", () => {
+    const data = window.basketStatData.loadData();
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `basketstat-backup-${new Date().toISOString().split("T")[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    uploadStatus.textContent = "Exported";
+    uploadDetails.textContent = "Data backup downloaded";
+  });
+}
+
+// Import data from JSON file
+if (importDataInput) {
+  importDataInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      
+      // Validate basic structure
+      if (!data.players || !data.games || !Array.isArray(data.games)) {
+        throw new Error("Invalid data format");
+      }
+      
+      const existingData = window.basketStatData.loadData();
+      const hasExisting = existingData.games.length > 0;
+      
+      let action = "replace";
+      if (hasExisting) {
+        action = confirm(
+          `You have ${existingData.games.length} existing games.\n\n` +
+          `OK = Replace all data with imported file\n` +
+          `Cancel = Merge imported games with existing data`
+        ) ? "replace" : "merge";
+      }
+      
+      if (action === "replace") {
+        window.basketStatData.saveData(data);
+        uploadStatus.textContent = "Imported";
+        uploadDetails.textContent = `${data.games.length} games loaded`;
+      } else {
+        // Merge: add games that don't exist (by ID or date+opponent)
+        const existingIds = new Set(existingData.games.map(g => g.id));
+        const existingKeys = new Set(existingData.games.map(g => `${g.date}-${g.opponent}`));
+        
+        let added = 0;
+        data.games.forEach(game => {
+          const key = `${game.date}-${game.opponent}`;
+          if (!existingIds.has(game.id) && !existingKeys.has(key)) {
+            window.basketStatData.addGame(game);
+            added++;
+          }
+        });
+        
+        // Merge players
+        Object.entries(data.players || {}).forEach(([name, info]) => {
+          if (!existingData.players[name]) {
+            existingData.players[name] = info;
+          }
+        });
+        window.basketStatData.saveData(window.basketStatData.loadData());
+        
+        uploadStatus.textContent = "Merged";
+        uploadDetails.textContent = `${added} new games added`;
+      }
+      
+      renderGames();
+      renderPlayers();
+    } catch (error) {
+      uploadStatus.textContent = "Error";
+      uploadDetails.textContent = `Import failed: ${error.message}`;
+    }
+    
+    // Reset file input
+    importDataInput.value = "";
+  });
+}
+
+// Sync data to/from server
+if (syncToServerBtn) {
+  syncToServerBtn.addEventListener("click", async () => {
+    try {
+      syncToServerBtn.disabled = true;
+      syncToServerBtn.textContent = "Syncing...";
+      
+      // Check if server has data
+      const serverResponse = await fetch("/api/data");
+      
+      if (serverResponse.ok) {
+        const serverData = await serverResponse.json();
+        const localData = window.basketStatData.loadData();
+        
+        // If server has data but local doesn't, load from server
+        if (serverData.games?.length > 0 && localData.games.length === 0) {
+          window.basketStatData.saveData(serverData);
+          renderGames();
+          renderPlayers();
+          uploadStatus.textContent = "Synced";
+          uploadDetails.textContent = `Loaded ${serverData.games.length} games from server`;
+          return;
+        }
+        
+        // If local has data, save to server
+        if (localData.games.length > 0) {
+          const saveResponse = await fetch("/api/data", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(localData)
+          });
+          
+          if (saveResponse.ok) {
+            uploadStatus.textContent = "Synced";
+            uploadDetails.textContent = `${localData.games.length} games saved to server`;
+          } else {
+            throw new Error("Failed to save to server");
+          }
+        } else {
+          uploadStatus.textContent = "No data";
+          uploadDetails.textContent = "No local data to sync";
+        }
+      } else if (serverResponse.status === 404) {
+        // No server endpoint - save local data
+        const localData = window.basketStatData.loadData();
+        const saveResponse = await fetch("/api/data", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(localData)
+        });
+        
+        if (saveResponse.ok) {
+          uploadStatus.textContent = "Synced";
+          uploadDetails.textContent = `${localData.games.length} games saved to server`;
+        } else {
+          throw new Error("Server sync not available");
+        }
+      }
+    } catch (error) {
+      uploadStatus.textContent = "Sync failed";
+      uploadDetails.textContent = error.message;
+    } finally {
+      syncToServerBtn.disabled = false;
+      syncToServerBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+        Sync to Server
+      `;
+    }
+  });
+}
+
 // Initial render
 // Clean up any existing data with players who have no valid stats
 const removedCount = window.basketStatData.cleanupData();

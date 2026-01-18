@@ -120,7 +120,78 @@ app.get('/api/csv/:filename', (req, res) => {
 // Serve csv directory
 app.use('/csv', express.static(csvDir));
 
+// ========================================
+// DATA PERSISTENCE API
+// ========================================
+// Stores game data server-side for cross-session persistence
+
+const dataFilePath = path.join(__dirname, 'data', 'basketstat-data.json');
+const dataDir = path.dirname(dataFilePath);
+
+// Ensure data directory exists
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
+// Parse JSON body
+app.use(express.json({ limit: '10mb' }));
+
+// API: Get stored data
+app.get('/api/data', (req, res) => {
+  if (!fs.existsSync(dataFilePath)) {
+    return res.json({ players: {}, games: [] });
+  }
+  
+  try {
+    const data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
+    res.json(data);
+  } catch (error) {
+    console.error('Error reading data file:', error);
+    res.status(500).json({ error: 'Failed to read data file' });
+  }
+});
+
+// API: Save data
+app.post('/api/data', (req, res) => {
+  try {
+    const data = req.body;
+    
+    // Basic validation
+    if (!data || typeof data !== 'object') {
+      return res.status(400).json({ error: 'Invalid data format' });
+    }
+    
+    // Ensure required structure
+    if (!data.players) data.players = {};
+    if (!data.games) data.games = [];
+    
+    // Write with pretty formatting for debugging
+    fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), 'utf-8');
+    
+    // Create backup
+    const backupPath = path.join(dataDir, `basketstat-backup-${Date.now()}.json`);
+    fs.writeFileSync(backupPath, JSON.stringify(data, null, 2), 'utf-8');
+    
+    // Keep only last 5 backups
+    const backups = fs.readdirSync(dataDir)
+      .filter(f => f.startsWith('basketstat-backup-'))
+      .sort()
+      .reverse();
+    
+    backups.slice(5).forEach(backup => {
+      fs.unlinkSync(path.join(dataDir, backup));
+    });
+    
+    console.log(`Data saved: ${data.games.length} games, ${Object.keys(data.players).length} players`);
+    res.json({ success: true, games: data.games.length, players: Object.keys(data.players).length });
+  } catch (error) {
+    console.error('Error saving data:', error);
+    res.status(500).json({ error: 'Failed to save data' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`BasketStat server running at http://localhost:${PORT}`);
   console.log(`CSV files stored in: ${csvDir}`);
+  console.log(`Data file: ${dataFilePath}`);
 });

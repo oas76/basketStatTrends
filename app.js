@@ -3,7 +3,6 @@ const statSelect = document.getElementById("statSelect");
 const windowSizeSelect = document.getElementById("windowSize");
 const scorecardGrid = document.getElementById("scorecardGrid");
 const chart = document.getElementById("chart");
-const insightText = document.getElementById("insightText");
 const gameTable = document.getElementById("gameTable");
 const statHeader = document.getElementById("statHeader");
 
@@ -791,26 +790,6 @@ const generateRecommendation = (analysis) => {
   return null;
 };
 
-/**
- * Render the comprehensive insight analysis
- */
-const renderInsight = (records, stat) => {
-  const windowSize = parseInt(windowSizeSelect?.value || '5', 10);
-  const playerName = playerSelect.value;
-  
-  if (records.length < 2) {
-    insightText.innerHTML = "Need at least 2 games for trend analysis";
-    return;
-  }
-  
-  // Generate comprehensive analysis
-  const analysis = analyzePlayerPerformance(records, windowSize);
-  const report = generateAnalysisReport(playerName, analysis, windowSize);
-  
-  // Render the report
-  insightText.innerHTML = report;
-};
-
 const updateChartAndTable = () => {
   const data = buildData();
   if (data.length === 0) return;
@@ -819,7 +798,6 @@ const updateChartAndTable = () => {
   const stat = statSelect.value;
   const records = updateGameTable(data, player, stat);
   renderChart(records, stat);
-  renderInsight(records, stat);
 };
 
 const updateView = () => {
@@ -900,7 +878,6 @@ const init = () => {
     playerSelect.innerHTML = "<option>—</option>";
     if (scorecardGrid) scorecardGrid.innerHTML = '<div class="no-data-message">No game data yet. Upload CSVs from the Admin page.</div>';
     chart.innerHTML = "<p>No game data yet</p>";
-    insightText.textContent = "Upload game CSVs to see performance analysis";
     if (gameTable) gameTable.innerHTML = "";
     return;
   }
@@ -936,18 +913,48 @@ if (windowSizeSelect) {
 }
 
 // ========================================
-// GOOGLE GEMINI AI INTEGRATION
+// MULTI-PROVIDER AI INTEGRATION
 // ========================================
+// Supports: Groq (recommended), Google Gemini
+// Groq free tier: 30 RPM, 14,400 RPD - much more generous than Gemini
 
-const GEMINI_API_KEY_STORAGE = 'basketstat-gemini-key';
-// Using Gemini 2.0 Flash - the current free tier model (Dec 2025+)
-// API docs: https://ai.google.dev/gemini-api/docs/models/gemini
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const AI_STORAGE_KEY = 'basketstat-ai-key';
+const AI_PROVIDER_KEY = 'basketstat-ai-provider';
+
+// Provider configurations
+const AI_PROVIDERS = {
+  groq: {
+    name: 'Groq',
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    model: 'llama-3.3-70b-versatile', // Fast, high quality, free
+    helpUrl: 'https://console.groq.com/keys',
+    helpText: 'Get free key at console.groq.com',
+    type: 'openai' // OpenAI-compatible API format
+  },
+  openai: {
+    name: 'OpenAI',
+    url: 'https://api.openai.com/v1/chat/completions',
+    model: 'gpt-4o-mini', // Most cost-effective, great quality
+    helpUrl: 'https://platform.openai.com/api-keys',
+    helpText: 'Get key at platform.openai.com',
+    type: 'openai'
+  },
+  gemini: {
+    name: 'Google Gemini',
+    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+    model: 'gemini-2.0-flash',
+    helpUrl: 'https://aistudio.google.com/app/apikey',
+    helpText: 'Get free key at aistudio.google.com',
+    type: 'gemini'
+  }
+};
 
 // AI DOM elements
 const aiSettingsToggle = document.getElementById('aiSettingsToggle');
 const aiSettings = document.getElementById('aiSettings');
-const geminiApiKeyInput = document.getElementById('geminiApiKey');
+const aiProviderSelect = document.getElementById('aiProvider');
+const aiApiKeyInput = document.getElementById('aiApiKey');
+const apiKeyHelp = document.getElementById('apiKeyHelp');
 const saveApiKeyBtn = document.getElementById('saveApiKey');
 const generateAiBtn = document.getElementById('generateAiInsight');
 const aiStatusText = document.getElementById('aiStatusText');
@@ -955,21 +962,46 @@ const aiStatus = document.getElementById('aiStatus');
 const aiInsightText = document.getElementById('aiInsightText');
 
 /**
+ * Get current provider
+ */
+const getProvider = () => {
+  return sessionStorage.getItem(AI_PROVIDER_KEY) || 'groq';
+};
+
+/**
+ * Set provider
+ */
+const setProvider = (provider) => {
+  sessionStorage.setItem(AI_PROVIDER_KEY, provider);
+};
+
+/**
  * Load API key from session storage
  */
 const loadApiKey = () => {
-  return sessionStorage.getItem(GEMINI_API_KEY_STORAGE) || '';
+  const provider = getProvider();
+  return sessionStorage.getItem(`${AI_STORAGE_KEY}-${provider}`) || '';
 };
 
 /**
  * Save API key to session storage
  */
-const saveApiKey = (key) => {
+const saveApiKeyToStorage = (key) => {
+  const provider = getProvider();
   if (key) {
-    sessionStorage.setItem(GEMINI_API_KEY_STORAGE, key);
+    sessionStorage.setItem(`${AI_STORAGE_KEY}-${provider}`, key);
   } else {
-    sessionStorage.removeItem(GEMINI_API_KEY_STORAGE);
+    sessionStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
   }
+};
+
+/**
+ * Update provider help text
+ */
+const updateProviderHelp = () => {
+  if (!apiKeyHelp || !aiProviderSelect) return;
+  const provider = AI_PROVIDERS[aiProviderSelect.value];
+  apiKeyHelp.innerHTML = `Get free key at <a href="${provider.helpUrl}" target="_blank">${provider.helpUrl.replace('https://', '')}</a>`;
 };
 
 /**
@@ -977,9 +1009,10 @@ const saveApiKey = (key) => {
  */
 const updateAiStatus = () => {
   const hasKey = !!loadApiKey();
+  const provider = AI_PROVIDERS[getProvider()];
   
   if (hasKey) {
-    aiStatusText.textContent = '✓ API key configured';
+    aiStatusText.textContent = `✓ ${provider.name} configured`;
     aiStatus.className = 'ai-status connected';
     generateAiBtn.disabled = false;
   } else {
@@ -1079,15 +1112,51 @@ Keep the tone positive and age-appropriate. Be specific to the data provided.`;
 };
 
 /**
- * Call Gemini API
+ * Call OpenAI-compatible API (works for OpenAI, Groq, and other compatible providers)
  */
-const callGeminiApi = async (prompt) => {
-  const apiKey = loadApiKey();
-  if (!apiKey) {
-    throw new Error('No API key configured');
+const callOpenAiCompatibleApi = async (prompt, apiKey, config) => {
+  const response = await fetch(config.url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        { role: 'system', content: 'You are a helpful youth basketball coach providing analysis and advice for junior players (ages 14-16). Be encouraging, specific, and age-appropriate.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 1024
+    })
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    const errorMsg = error.error?.message || '';
+    
+    if (response.status === 401) {
+      throw new Error(`Invalid API key. Please check your ${config.name} API key.`);
+    }
+    if (response.status === 429) {
+      throw new Error('Rate limit exceeded. Please wait a moment and try again.');
+    }
+    if (response.status === 402 || errorMsg.includes('billing') || errorMsg.includes('quota')) {
+      throw new Error('Billing/quota issue. Check your account balance or try Groq (free tier).');
+    }
+    throw new Error(errorMsg || `API error: ${response.status}`);
   }
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || 'No response generated';
+};
+
+/**
+ * Call Gemini API
+ */
+const callGeminiApi = async (prompt, apiKey, config) => {
+  const response = await fetch(`${config.url}?key=${apiKey}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1111,19 +1180,41 @@ const callGeminiApi = async (prompt) => {
       throw new Error('Invalid API key. Please check your Gemini API key.');
     }
     if (response.status === 404 || errorMsg.includes('not found')) {
-      throw new Error('Model not available. Google may have updated their API. Try again later or check ai.google.dev for current models.');
+      throw new Error('Model not available. Google may have updated their API.');
     }
     if (response.status === 403) {
-      throw new Error('Access denied. Your API key may not have access to this model, or the free tier may not be available in your region.');
+      throw new Error('Access denied. Your API key may not have access to this model.');
     }
     if (response.status === 429) {
-      throw new Error('Rate limit exceeded. Please wait a moment and try again.');
+      throw new Error('Rate limit exceeded. Try Groq instead (more generous free tier).');
     }
     throw new Error(errorMsg || `API error: ${response.status}`);
   }
 
   const data = await response.json();
   return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
+};
+
+/**
+ * Call AI API (routes to correct provider based on type)
+ */
+const callAiApi = async (prompt) => {
+  const apiKey = loadApiKey();
+  if (!apiKey) {
+    throw new Error('No API key configured');
+  }
+
+  const providerKey = getProvider();
+  const config = AI_PROVIDERS[providerKey];
+
+  // Route based on API type
+  if (config.type === 'openai') {
+    return callOpenAiCompatibleApi(prompt, apiKey, config);
+  } else if (config.type === 'gemini') {
+    return callGeminiApi(prompt, apiKey, config);
+  } else {
+    throw new Error(`Unknown provider type: ${config.type}`);
+  }
 };
 
 /**
@@ -1150,7 +1241,7 @@ const generateAiInsight = async () => {
   try {
     const context = buildAiContext(playerName, records, windowSize);
     const prompt = buildGeminiPrompt(context);
-    const response = await callGeminiApi(prompt);
+    const response = await callAiApi(prompt);
     
     // Format the response
     const formattedResponse = response
@@ -1183,11 +1274,30 @@ if (aiSettingsToggle) {
   });
 }
 
+if (aiProviderSelect) {
+  // Set initial provider from storage
+  const savedProvider = getProvider();
+  aiProviderSelect.value = savedProvider;
+  updateProviderHelp();
+  
+  // Handle provider change
+  aiProviderSelect.addEventListener('change', () => {
+    setProvider(aiProviderSelect.value);
+    updateProviderHelp();
+    updateAiStatus();
+    // Clear the input since keys are per-provider
+    if (aiApiKeyInput) {
+      const hasKey = loadApiKey();
+      aiApiKeyInput.placeholder = hasKey ? '••••••••••••••••' : 'Enter your API key';
+    }
+  });
+}
+
 if (saveApiKeyBtn) {
   saveApiKeyBtn.addEventListener('click', () => {
-    const key = geminiApiKeyInput.value.trim();
-    saveApiKey(key);
-    geminiApiKeyInput.value = '';
+    const key = aiApiKeyInput.value.trim();
+    saveApiKeyToStorage(key);
+    aiApiKeyInput.value = '';
     aiSettings.style.display = 'none';
     updateAiStatus();
   });
@@ -1198,10 +1308,10 @@ if (generateAiBtn) {
 }
 
 // Load saved API key on page load
-if (geminiApiKeyInput) {
+if (aiApiKeyInput) {
   const savedKey = loadApiKey();
   if (savedKey) {
-    geminiApiKeyInput.placeholder = '••••••••••••••••';
+    aiApiKeyInput.placeholder = '••••••••••••••••';
   }
   updateAiStatus();
 }
