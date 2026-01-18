@@ -401,52 +401,36 @@ if (importDataInput) {
 }
 
 // ========================================
-// JSONBIN.IO CLOUD SYNC
+// JSONBIN.IO CLOUD SYNC (Shared Storage)
 // ========================================
-// Works with GitHub Pages - no server required!
+// Configuration is in config.js - shared by all users
 
 const JSONBIN_API_URL = "https://api.jsonbin.io/v3/b";
-const CLOUD_CONFIG_KEY = "basketstat-cloud-config";
 
 // Cloud sync DOM elements
-const cloudSyncSetup = document.getElementById("cloudSyncSetup");
-const cloudSyncStatus = document.getElementById("cloudSyncStatus");
-const jsonbinApiKeyInput = document.getElementById("jsonbinApiKey");
-const jsonbinBinIdInput = document.getElementById("jsonbinBinId");
-const saveCloudConfigBtn = document.getElementById("saveCloudConfig");
-const editCloudConfigBtn = document.getElementById("editCloudConfig");
 const cloudStatusText = document.getElementById("cloudStatusText");
 const cloudSyncUpBtn = document.getElementById("cloudSyncUp");
 const cloudSyncDownBtn = document.getElementById("cloudSyncDown");
 
-// Load cloud config from localStorage
-const loadCloudConfig = () => {
-  try {
-    const config = localStorage.getItem(CLOUD_CONFIG_KEY);
-    return config ? JSON.parse(config) : null;
-  } catch {
-    return null;
-  }
-};
-
-// Save cloud config to localStorage
-const saveCloudConfig = (config) => {
-  localStorage.setItem(CLOUD_CONFIG_KEY, JSON.stringify(config));
+// Get config from global CLOUD_CONFIG (set in config.js)
+const getCloudConfig = () => {
+  return window.CLOUD_CONFIG || { apiKey: "", binId: "" };
 };
 
 // Update cloud sync UI based on config
 const updateCloudSyncUI = () => {
-  const config = loadCloudConfig();
+  const config = getCloudConfig();
   
-  if (config && config.apiKey) {
-    cloudSyncSetup.style.display = "none";
-    cloudSyncStatus.style.display = "block";
+  if (config.apiKey) {
     cloudStatusText.textContent = config.binId 
       ? `☁️ Connected (Bin: ${config.binId.slice(0, 8)}...)`
-      : "☁️ Ready to create new bin";
+      : "☁️ Ready - will create new bin on first upload";
+    cloudSyncUpBtn.disabled = false;
+    cloudSyncDownBtn.disabled = !config.binId;
   } else {
-    cloudSyncSetup.style.display = "block";
-    cloudSyncStatus.style.display = "none";
+    cloudStatusText.textContent = "⚠️ Not configured - edit config.js";
+    cloudSyncUpBtn.disabled = true;
+    cloudSyncDownBtn.disabled = true;
   }
 };
 
@@ -508,48 +492,13 @@ const readBin = async (apiKey, binId) => {
   return result.record;
 };
 
-// Save cloud configuration
-if (saveCloudConfigBtn) {
-  saveCloudConfigBtn.addEventListener("click", () => {
-    const apiKey = jsonbinApiKeyInput.value.trim();
-    const binId = jsonbinBinIdInput.value.trim();
-    
-    if (!apiKey) {
-      uploadStatus.textContent = "Error";
-      uploadDetails.textContent = "API key is required";
-      return;
-    }
-    
-    saveCloudConfig({ apiKey, binId: binId || null });
-    jsonbinApiKeyInput.value = "";
-    jsonbinBinIdInput.value = "";
-    updateCloudSyncUI();
-    
-    uploadStatus.textContent = "Configured";
-    uploadDetails.textContent = "Cloud sync is ready";
-  });
-}
-
-// Edit cloud configuration
-if (editCloudConfigBtn) {
-  editCloudConfigBtn.addEventListener("click", () => {
-    const config = loadCloudConfig();
-    if (config) {
-      jsonbinApiKeyInput.value = config.apiKey || "";
-      jsonbinBinIdInput.value = config.binId || "";
-    }
-    cloudSyncSetup.style.display = "block";
-    cloudSyncStatus.style.display = "none";
-  });
-}
-
 // Upload to cloud
 if (cloudSyncUpBtn) {
   cloudSyncUpBtn.addEventListener("click", async () => {
-    const config = loadCloudConfig();
-    if (!config || !config.apiKey) {
+    const config = getCloudConfig();
+    if (!config.apiKey) {
       uploadStatus.textContent = "Error";
-      uploadDetails.textContent = "Cloud sync not configured";
+      uploadDetails.textContent = "Add apiKey to config.js";
       return;
     }
     
@@ -570,15 +519,24 @@ if (cloudSyncUpBtn) {
       if (!binId) {
         // Create new bin
         binId = await createBin(config.apiKey, localData);
-        saveCloudConfig({ ...config, binId });
-        updateCloudSyncUI();
+        console.log("=== NEW BIN CREATED ===");
+        console.log("Add this to config.js:");
+        console.log(`binId: "${binId}"`);
+        console.log("=======================");
+        
+        uploadStatus.textContent = "Uploaded!";
+        uploadDetails.textContent = `New bin created. Copy bin ID from console to config.js: ${binId}`;
+        
+        // Also show in alert for easy copying
+        alert(`New bin created!\n\nBin ID: ${binId}\n\nCopy this to config.js and redeploy.`);
       } else {
         // Update existing bin
         await updateBin(config.apiKey, binId, localData);
+        uploadStatus.textContent = "Uploaded";
+        uploadDetails.textContent = `${localData.games.length} games synced to cloud`;
       }
       
-      uploadStatus.textContent = "Uploaded";
-      uploadDetails.textContent = `${localData.games.length} games synced to cloud`;
+      updateCloudSyncUI();
     } catch (error) {
       uploadStatus.textContent = "Upload failed";
       uploadDetails.textContent = error.message;
@@ -595,10 +553,10 @@ if (cloudSyncUpBtn) {
 // Download from cloud
 if (cloudSyncDownBtn) {
   cloudSyncDownBtn.addEventListener("click", async () => {
-    const config = loadCloudConfig();
-    if (!config || !config.apiKey || !config.binId) {
+    const config = getCloudConfig();
+    if (!config.apiKey || !config.binId) {
       uploadStatus.textContent = "Error";
-      uploadDetails.textContent = config?.binId ? "Cloud sync not configured" : "No cloud data yet - upload first";
+      uploadDetails.textContent = !config.apiKey ? "Add apiKey to config.js" : "Add binId to config.js (upload first)";
       return;
     }
     

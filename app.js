@@ -1316,5 +1316,57 @@ if (aiApiKeyInput) {
   updateAiStatus();
 }
 
-// Initialize the app
-init();
+// ========================================
+// AUTO-LOAD FROM CLOUD (if configured)
+// ========================================
+
+const autoLoadFromCloud = async () => {
+  const config = window.CLOUD_CONFIG;
+  
+  // Check if auto-load is enabled and configured
+  if (!config || !config.autoLoadOnStart || !config.apiKey || !config.binId) {
+    return false;
+  }
+  
+  try {
+    console.log("Auto-loading data from cloud...");
+    
+    const response = await fetch(`https://api.jsonbin.io/v3/b/${config.binId}/latest`, {
+      method: "GET",
+      headers: {
+        "X-Master-Key": config.apiKey
+      }
+    });
+    
+    if (!response.ok) {
+      console.warn("Cloud load failed:", response.status);
+      return false;
+    }
+    
+    const result = await response.json();
+    const cloudData = result.record;
+    
+    if (cloudData && cloudData.games && Array.isArray(cloudData.games)) {
+      window.basketStatData.saveData(cloudData);
+      console.log(`Loaded ${cloudData.games.length} games from cloud`);
+      return true;
+    }
+  } catch (error) {
+    console.warn("Cloud auto-load error:", error.message);
+  }
+  
+  return false;
+};
+
+// Initialize the app (with optional cloud load)
+(async () => {
+  // Try to auto-load from cloud first
+  const loadedFromCloud = await autoLoadFromCloud();
+  
+  if (loadedFromCloud) {
+    console.log("Data loaded from cloud, initializing...");
+  }
+  
+  // Initialize the app
+  init();
+})();
