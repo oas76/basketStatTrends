@@ -380,15 +380,23 @@ const getPlayerGameCounts = () => {
 /**
  * Compute Assist to Turnover Ratio (A/TO)
  * Higher is better - measures playmaking efficiency
- * Formula: assists / turnovers (if TO > 0), or assists * 2 (if TO = 0)
+ * Formula: assists / turnovers
+ * When TO = 0: use assists directly (equivalent to assists per 1 theoretical TO)
+ * This keeps values within benchmark scale (p50=1.0, p90=2.5)
  */
 const computeAstToRatio = (stats) => {
   const assists = typeof stats.asst === 'number' ? stats.asst : 0;
   const turnovers = typeof stats.to === 'number' ? stats.to : 0;
   
+  // No assists and no turnovers = no playmaking activity
+  if (assists === 0 && turnovers === 0) {
+    return null;
+  }
+  
+  // No turnovers: use assists as the ratio (assists per 1 theoretical TO)
+  // This rewards good ball security while keeping values reasonable
   if (turnovers === 0) {
-    // No turnovers - reward with assists * 2
-    return assists * 2;
+    return Math.round(assists * 100) / 100;
   }
   
   return Math.round((assists / turnovers) * 100) / 100; // Round to 2 decimal places
