@@ -114,26 +114,51 @@ const parseStatValue = (value) => {
  * Returns false if player should be excluded from the game
  */
 const hasValidStats = (stats) => {
-  // Check if minutes played is 0 or null - if so, player didn't play
-  const minKey = Object.keys(stats).find(k => k.toLowerCase() === 'min');
-  if (minKey !== undefined) {
-    const mins = stats[minKey];
-    if (mins === null || mins === 0) {
-      return false;
+  // Check if player has any actual game stats (pts, fg attempts, rebounds, etc.)
+  // This is more reliable than just checking minutes, as some CSVs have min=0 for players who played
+  
+  let hasMinutes = false;
+  let hasPoints = false;
+  let hasFgAttempts = false;
+  let hasOtherStats = false;
+  
+  for (const [key, value] of Object.entries(stats)) {
+    if (value === null) continue;
+    
+    const keyLower = key.toLowerCase();
+    
+    // Check minutes
+    if (keyLower === 'min' && value > 0) {
+      hasMinutes = true;
+    }
+    
+    // Check points
+    if (keyLower === 'pts' && value > 0) {
+      hasPoints = true;
+    }
+    
+    // Check field goal attempts (made-attempted format)
+    if (keyLower === 'fg' && typeof value === 'object' && 'attempted' in value) {
+      if (value.attempted > 0) {
+        hasFgAttempts = true;
+      }
+    }
+    
+    // Check other counting stats (rebounds, assists, steals, blocks, fouls, turnovers)
+    if (['oreb', 'dreb', 'asst', 'stl', 'blk', 'foul', 'to'].includes(keyLower)) {
+      if (typeof value === 'number' && value > 0) {
+        hasOtherStats = true;
+      }
+    }
+    
+    // Check +/- (if non-zero, player was on court)
+    if (keyLower === '+/-' && typeof value === 'number' && value !== 0) {
+      hasOtherStats = true;
     }
   }
   
-  // Check if all stats are null
-  const values = Object.values(stats);
-  const hasAnyValue = values.some(v => {
-    if (v === null) return false;
-    if (typeof v === 'object' && 'made' in v) {
-      return v.made > 0 || v.attempted > 0;
-    }
-    return v !== 0;
-  });
-  
-  return hasAnyValue;
+  // Player played if they have: minutes > 0, OR points > 0, OR fg attempts > 0, OR other stats
+  return hasMinutes || hasPoints || hasFgAttempts || hasOtherStats;
 };
 
 /**

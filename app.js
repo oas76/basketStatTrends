@@ -103,6 +103,22 @@ const updateDataPoints = (records, player, stat) => {
   return filtered;
 };
 
+/**
+ * Get color based on performance relative to average
+ * Returns color from orange (bad) -> yellow (below avg) -> neutral -> green (good)
+ */
+const getPerformanceColor = (value, average, max) => {
+  if (average === 0) return 'var(--text-muted)';
+  
+  const ratio = value / average;
+  
+  if (ratio >= 1.3) return '#22c55e';      // Green - excellent (30%+ above avg)
+  if (ratio >= 1.1) return '#84cc16';      // Light green - good (10-30% above)
+  if (ratio >= 0.9) return '#eab308';      // Yellow - average (within 10%)
+  if (ratio >= 0.7) return '#f97316';      // Orange - below average (10-30% below)
+  return '#ef4444';                         // Red - poor (30%+ below)
+};
+
 const renderChart = (records, stat) => {
   if (records.length === 0) {
     chart.innerHTML = "<p>No data</p>";
@@ -110,26 +126,146 @@ const renderChart = (records, stat) => {
   }
 
   const values = records.map((record) => getNumericStat(record.stats[stat]));
+  const average = values.reduce((sum, v) => sum + v, 0) / values.length;
   const max = Math.max(...values, 1);
-  const padding = 8;
+  const min = Math.min(...values);
   
+  // Chart dimensions
+  const padding = { top: 15, right: 10, bottom: 25, left: 10 };
+  const width = 100;
+  const height = 100;
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  
+  // Calculate points
   const pointsData = values.map((value, index) => {
-    const x = padding + (index / Math.max(values.length - 1, 1)) * (100 - padding * 2);
-    const y = padding + (1 - value / max) * (100 - padding * 2);
-    return { x, y };
+    const x = padding.left + (index / Math.max(values.length - 1, 1)) * chartWidth;
+    const y = padding.top + (1 - value / max) * chartHeight;
+    const color = getPerformanceColor(value, average, max);
+    return { x, y, value, color, record: records[index] };
   });
   
+  // Average line Y position
+  const avgY = padding.top + (1 - average / max) * chartHeight;
+  
+  // Line path
   const linePoints = pointsData.map(p => `${p.x},${p.y}`).join(" ");
-  const dots = pointsData.map(p => 
-    `<circle cx="${p.x}" cy="${p.y}" r="2.5" fill="var(--accent)" />`
+  
+  // Create gradient for the line based on performance
+  const gradientStops = pointsData.map((p, i) => {
+    const percent = (i / Math.max(pointsData.length - 1, 1)) * 100;
+    return `<stop offset="${percent}%" stop-color="${p.color}" />`;
+  }).join("");
+  
+  // Interactive dots with hover areas
+  const dots = pointsData.map((p, i) => {
+    const record = p.record;
+    const locationLabel = record.homeAway === "home" ? "vs" : "@";
+    const dateStr = formatDate(record.date);
+    return `
+      <g class="chart-point" data-index="${i}">
+        <circle cx="${p.x}" cy="${p.y}" r="6" fill="transparent" class="hover-area" />
+        <circle cx="${p.x}" cy="${p.y}" r="4" fill="${p.color}" class="point-outer" />
+        <circle cx="${p.x}" cy="${p.y}" r="2.5" fill="var(--bg)" class="point-inner" />
+      </g>
+    `;
+  }).join("");
+  
+  // X-axis labels (first, middle, last dates)
+  const xLabels = [];
+  if (records.length > 0) {
+    xLabels.push({ x: pointsData[0].x, label: formatDate(records[0].date).split('/').slice(0,2).join('/') });
+    if (records.length > 2) {
+      const midIdx = Math.floor(records.length / 2);
+      xLabels.push({ x: pointsData[midIdx].x, label: formatDate(records[midIdx].date).split('/').slice(0,2).join('/') });
+    }
+    if (records.length > 1) {
+      const lastIdx = records.length - 1;
+      xLabels.push({ x: pointsData[lastIdx].x, label: formatDate(records[lastIdx].date).split('/').slice(0,2).join('/') });
+    }
+  }
+  
+  const xAxisLabels = xLabels.map(l => 
+    `<text x="${l.x}" y="${height - 3}" text-anchor="middle" class="axis-label">${l.label}</text>`
   ).join("");
 
   chart.innerHTML = `
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-      <polyline points="${linePoints}" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" class="performance-chart">
+      <defs>
+        <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          ${gradientStops}
+        </linearGradient>
+      </defs>
+      
+      <!-- Grid lines -->
+      <line x1="${padding.left}" y1="${avgY}" x2="${width - padding.right}" y2="${avgY}" 
+            stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.5" />
+      
+      <!-- Average label -->
+      <text x="${width - padding.right + 1}" y="${avgY + 1}" class="avg-label">avg</text>
+      
+      <!-- Data line -->
+      <polyline points="${linePoints}" fill="none" stroke="url(#lineGradient)" stroke-width="2" 
+                stroke-linecap="round" stroke-linejoin="round" />
+      
+      <!-- Data points -->
       ${dots}
+      
+      <!-- X-axis labels -->
+      ${xAxisLabels}
     </svg>
+    
+    <!-- Tooltip -->
+    <div class="chart-tooltip" id="chartTooltip"></div>
+    
+    <!-- Legend -->
+    <div class="chart-legend">
+      <div class="legend-item"><span class="legend-dot" style="background: #22c55e;"></span>Excellent</div>
+      <div class="legend-item"><span class="legend-dot" style="background: #84cc16;"></span>Good</div>
+      <div class="legend-item"><span class="legend-dot" style="background: #eab308;"></span>Average</div>
+      <div class="legend-item"><span class="legend-dot" style="background: #f97316;"></span>Below</div>
+      <div class="legend-item"><span class="legend-dot" style="background: #ef4444;"></span>Poor</div>
+      <div class="legend-item legend-avg"><span class="legend-line"></span>Avg: ${average.toFixed(1)}</div>
+    </div>
   `;
+  
+  // Add tooltip interactivity
+  setupChartTooltips(records, stat, pointsData);
+};
+
+const setupChartTooltips = (records, stat, pointsData) => {
+  const tooltip = document.getElementById('chartTooltip');
+  const chartEl = document.getElementById('chart');
+  
+  chartEl.querySelectorAll('.chart-point').forEach((point, index) => {
+    const data = pointsData[index];
+    const record = records[index];
+    
+    point.addEventListener('mouseenter', (e) => {
+      const locationLabel = record.homeAway === "home" ? "vs" : "@";
+      tooltip.innerHTML = `
+        <div class="tooltip-date">${formatDate(record.date)}</div>
+        <div class="tooltip-opponent">${locationLabel} ${record.opponent}</div>
+        <div class="tooltip-value" style="color: ${data.color}">${formatStatValue(record.stats[stat])}</div>
+      `;
+      tooltip.classList.add('visible');
+      
+      // Position tooltip
+      const rect = chartEl.getBoundingClientRect();
+      const pointRect = point.getBoundingClientRect();
+      tooltip.style.left = `${pointRect.left - rect.left + pointRect.width / 2}px`;
+      tooltip.style.top = `${pointRect.top - rect.top - 10}px`;
+    });
+    
+    point.addEventListener('mouseleave', () => {
+      tooltip.classList.remove('visible');
+    });
+    
+    point.addEventListener('click', () => {
+      dataPointSelect.selectedIndex = index;
+      updateHighlight(records, stat, index);
+    });
+  });
 };
 
 const renderInsight = (records, stat) => {
