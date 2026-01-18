@@ -304,12 +304,11 @@ clearData.addEventListener("click", () => {
 });
 
 // ========================================
-// EXPORT / IMPORT / SYNC FUNCTIONALITY
+// EXPORT / IMPORT FUNCTIONALITY
 // ========================================
 
 const exportDataBtn = document.getElementById("exportData");
 const importDataInput = document.getElementById("importData");
-const syncToServerBtn = document.getElementById("syncToServer");
 
 // Export data as JSON file
 if (exportDataBtn) {
@@ -401,76 +400,258 @@ if (importDataInput) {
   });
 }
 
-// Sync data to/from server
-if (syncToServerBtn) {
-  syncToServerBtn.addEventListener("click", async () => {
+// ========================================
+// JSONBIN.IO CLOUD SYNC
+// ========================================
+// Works with GitHub Pages - no server required!
+
+const JSONBIN_API_URL = "https://api.jsonbin.io/v3/b";
+const CLOUD_CONFIG_KEY = "basketstat-cloud-config";
+
+// Cloud sync DOM elements
+const cloudSyncSetup = document.getElementById("cloudSyncSetup");
+const cloudSyncStatus = document.getElementById("cloudSyncStatus");
+const jsonbinApiKeyInput = document.getElementById("jsonbinApiKey");
+const jsonbinBinIdInput = document.getElementById("jsonbinBinId");
+const saveCloudConfigBtn = document.getElementById("saveCloudConfig");
+const editCloudConfigBtn = document.getElementById("editCloudConfig");
+const cloudStatusText = document.getElementById("cloudStatusText");
+const cloudSyncUpBtn = document.getElementById("cloudSyncUp");
+const cloudSyncDownBtn = document.getElementById("cloudSyncDown");
+
+// Load cloud config from localStorage
+const loadCloudConfig = () => {
+  try {
+    const config = localStorage.getItem(CLOUD_CONFIG_KEY);
+    return config ? JSON.parse(config) : null;
+  } catch {
+    return null;
+  }
+};
+
+// Save cloud config to localStorage
+const saveCloudConfig = (config) => {
+  localStorage.setItem(CLOUD_CONFIG_KEY, JSON.stringify(config));
+};
+
+// Update cloud sync UI based on config
+const updateCloudSyncUI = () => {
+  const config = loadCloudConfig();
+  
+  if (config && config.apiKey) {
+    cloudSyncSetup.style.display = "none";
+    cloudSyncStatus.style.display = "block";
+    cloudStatusText.textContent = config.binId 
+      ? `☁️ Connected (Bin: ${config.binId.slice(0, 8)}...)`
+      : "☁️ Ready to create new bin";
+  } else {
+    cloudSyncSetup.style.display = "block";
+    cloudSyncStatus.style.display = "none";
+  }
+};
+
+// Create a new bin on JSONbin.io
+const createBin = async (apiKey, data) => {
+  const response = await fetch(JSONBIN_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Master-Key": apiKey,
+      "X-Bin-Name": "BasketStat Data"
+    },
+    body: JSON.stringify(data)
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || `Failed to create bin: ${response.status}`);
+  }
+  
+  const result = await response.json();
+  return result.metadata.id;
+};
+
+// Update existing bin on JSONbin.io
+const updateBin = async (apiKey, binId, data) => {
+  const response = await fetch(`${JSONBIN_API_URL}/${binId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Master-Key": apiKey
+    },
+    body: JSON.stringify(data)
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || `Failed to update bin: ${response.status}`);
+  }
+  
+  return await response.json();
+};
+
+// Read bin from JSONbin.io
+const readBin = async (apiKey, binId) => {
+  const response = await fetch(`${JSONBIN_API_URL}/${binId}/latest`, {
+    method: "GET",
+    headers: {
+      "X-Master-Key": apiKey
+    }
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || `Failed to read bin: ${response.status}`);
+  }
+  
+  const result = await response.json();
+  return result.record;
+};
+
+// Save cloud configuration
+if (saveCloudConfigBtn) {
+  saveCloudConfigBtn.addEventListener("click", () => {
+    const apiKey = jsonbinApiKeyInput.value.trim();
+    const binId = jsonbinBinIdInput.value.trim();
+    
+    if (!apiKey) {
+      uploadStatus.textContent = "Error";
+      uploadDetails.textContent = "API key is required";
+      return;
+    }
+    
+    saveCloudConfig({ apiKey, binId: binId || null });
+    jsonbinApiKeyInput.value = "";
+    jsonbinBinIdInput.value = "";
+    updateCloudSyncUI();
+    
+    uploadStatus.textContent = "Configured";
+    uploadDetails.textContent = "Cloud sync is ready";
+  });
+}
+
+// Edit cloud configuration
+if (editCloudConfigBtn) {
+  editCloudConfigBtn.addEventListener("click", () => {
+    const config = loadCloudConfig();
+    if (config) {
+      jsonbinApiKeyInput.value = config.apiKey || "";
+      jsonbinBinIdInput.value = config.binId || "";
+    }
+    cloudSyncSetup.style.display = "block";
+    cloudSyncStatus.style.display = "none";
+  });
+}
+
+// Upload to cloud
+if (cloudSyncUpBtn) {
+  cloudSyncUpBtn.addEventListener("click", async () => {
+    const config = loadCloudConfig();
+    if (!config || !config.apiKey) {
+      uploadStatus.textContent = "Error";
+      uploadDetails.textContent = "Cloud sync not configured";
+      return;
+    }
+    
     try {
-      syncToServerBtn.disabled = true;
-      syncToServerBtn.textContent = "Syncing...";
+      cloudSyncUpBtn.disabled = true;
+      cloudSyncUpBtn.textContent = "Uploading...";
       
-      // Check if server has data
-      const serverResponse = await fetch("/api/data");
+      const localData = window.basketStatData.loadData();
       
-      if (serverResponse.ok) {
-        const serverData = await serverResponse.json();
-        const localData = window.basketStatData.loadData();
-        
-        // If server has data but local doesn't, load from server
-        if (serverData.games?.length > 0 && localData.games.length === 0) {
-          window.basketStatData.saveData(serverData);
-          renderGames();
-          renderPlayers();
-          uploadStatus.textContent = "Synced";
-          uploadDetails.textContent = `Loaded ${serverData.games.length} games from server`;
-          return;
-        }
-        
-        // If local has data, save to server
-        if (localData.games.length > 0) {
-          const saveResponse = await fetch("/api/data", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(localData)
-          });
-          
-          if (saveResponse.ok) {
-            uploadStatus.textContent = "Synced";
-            uploadDetails.textContent = `${localData.games.length} games saved to server`;
-          } else {
-            throw new Error("Failed to save to server");
-          }
-        } else {
-          uploadStatus.textContent = "No data";
-          uploadDetails.textContent = "No local data to sync";
-        }
-      } else if (serverResponse.status === 404) {
-        // No server endpoint - save local data
-        const localData = window.basketStatData.loadData();
-        const saveResponse = await fetch("/api/data", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(localData)
-        });
-        
-        if (saveResponse.ok) {
-          uploadStatus.textContent = "Synced";
-          uploadDetails.textContent = `${localData.games.length} games saved to server`;
-        } else {
-          throw new Error("Server sync not available");
-        }
+      if (localData.games.length === 0) {
+        uploadStatus.textContent = "No data";
+        uploadDetails.textContent = "No local data to upload";
+        return;
       }
+      
+      let binId = config.binId;
+      
+      if (!binId) {
+        // Create new bin
+        binId = await createBin(config.apiKey, localData);
+        saveCloudConfig({ ...config, binId });
+        updateCloudSyncUI();
+      } else {
+        // Update existing bin
+        await updateBin(config.apiKey, binId, localData);
+      }
+      
+      uploadStatus.textContent = "Uploaded";
+      uploadDetails.textContent = `${localData.games.length} games synced to cloud`;
     } catch (error) {
-      uploadStatus.textContent = "Sync failed";
+      uploadStatus.textContent = "Upload failed";
       uploadDetails.textContent = error.message;
     } finally {
-      syncToServerBtn.disabled = false;
-      syncToServerBtn.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-        Sync to Server
+      cloudSyncUpBtn.disabled = false;
+      cloudSyncUpBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3"/><path d="m6 11 6-8 6 8"/><path d="M19 21H5"/></svg>
+        Upload to Cloud
       `;
     }
   });
 }
+
+// Download from cloud
+if (cloudSyncDownBtn) {
+  cloudSyncDownBtn.addEventListener("click", async () => {
+    const config = loadCloudConfig();
+    if (!config || !config.apiKey || !config.binId) {
+      uploadStatus.textContent = "Error";
+      uploadDetails.textContent = config?.binId ? "Cloud sync not configured" : "No cloud data yet - upload first";
+      return;
+    }
+    
+    try {
+      cloudSyncDownBtn.disabled = true;
+      cloudSyncDownBtn.textContent = "Downloading...";
+      
+      const cloudData = await readBin(config.apiKey, config.binId);
+      
+      // Validate data structure
+      if (!cloudData || !cloudData.games || !Array.isArray(cloudData.games)) {
+        throw new Error("Invalid data in cloud");
+      }
+      
+      const localData = window.basketStatData.loadData();
+      const hasLocal = localData.games.length > 0;
+      
+      if (hasLocal) {
+        const action = confirm(
+          `You have ${localData.games.length} local games.\n` +
+          `Cloud has ${cloudData.games.length} games.\n\n` +
+          `OK = Replace local with cloud data\n` +
+          `Cancel = Keep local data`
+        );
+        
+        if (!action) {
+          uploadStatus.textContent = "Cancelled";
+          uploadDetails.textContent = "Local data kept";
+          return;
+        }
+      }
+      
+      window.basketStatData.saveData(cloudData);
+      renderGames();
+      renderPlayers();
+      
+      uploadStatus.textContent = "Downloaded";
+      uploadDetails.textContent = `${cloudData.games.length} games loaded from cloud`;
+    } catch (error) {
+      uploadStatus.textContent = "Download failed";
+      uploadDetails.textContent = error.message;
+    } finally {
+      cloudSyncDownBtn.disabled = false;
+      cloudSyncDownBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14"/><path d="m6 13 6 8 6-8"/><path d="M19 21H5"/></svg>
+        Download from Cloud
+      `;
+    }
+  });
+}
+
+// Initialize cloud sync UI
+updateCloudSyncUI();
 
 // Initial render
 // Clean up any existing data with players who have no valid stats

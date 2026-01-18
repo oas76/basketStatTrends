@@ -1457,3 +1457,51 @@ button.danger:hover {
     max-height: calc(100vh - 32px);
   }
 }
+
+/* ========================================
+   CLOUD SYNC STYLES
+   ======================================== */
+
+.cloud-sync-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cloud-sync-setup .field {
+  margin-bottom: 8px;
+}
+
+.cloud-sync-status {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cloud-status-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: var(--surface-alt, rgba(255,255,255,0.03));
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.cloud-status-info span {
+  font-size: 14px;
+  color: var(--positive, #22c55e);
+}
+
+.cloud-sync-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.cloud-sync-actions button {
+  flex: 1;
+}
+
+.cloud-sync-actions button svg {
+  margin-right: 6px;
+}
