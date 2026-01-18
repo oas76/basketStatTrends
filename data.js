@@ -18,6 +18,20 @@ const saveData = (data) => {
 };
 
 /**
+ * Clean a CSV cell value by removing surrounding quotes and trimming whitespace
+ * e.g., '" player"' -> 'player', '" 9-19"' -> '9-19'
+ */
+const cleanCsvValue = (value) => {
+  let cleaned = value.trim();
+  // Remove surrounding quotes (single or double)
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || 
+      (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  return cleaned.trim();
+};
+
+/**
  * Extract player name from "#XX Name" format
  * e.g., "#22 Christoffer" -> "Christoffer"
  */
@@ -36,7 +50,7 @@ const extractPlayerName = (playerString) => {
  * - "10" -> 10 (plain number)
  */
 const parseStatValue = (value, header) => {
-  const trimmed = value.trim();
+  const trimmed = cleanCsvValue(value);
   
   // Empty or dash means no data
   if (trimmed === "-" || trimmed === "") {
@@ -63,7 +77,7 @@ const parseStatValue = (value, header) => {
 const parseCsv = async (file) => {
   const text = await file.text();
   const [headerLine, ...rows] = text.trim().split(/\r?\n/);
-  const headers = headerLine.split(",").map((item) => item.trim());
+  const headers = headerLine.split(",").map(cleanCsvValue);
   const playerIndex = headers.findIndex((header) => header.toLowerCase() === "player");
 
   if (playerIndex === -1) {
@@ -72,10 +86,10 @@ const parseCsv = async (file) => {
 
   const statHeaders = headers.filter((_, index) => index !== playerIndex);
   const entries = rows
-    .map((row) => row.split(",").map((item) => item.trim()))
+    .map((row) => row.split(",").map(cleanCsvValue))
     .filter((row) => row.length === headers.length)
     // Filter out rows that don't start with "#" (team totals, etc.)
-    .filter((columns) => columns[playerIndex].trim().startsWith("#"))
+    .filter((columns) => columns[playerIndex].startsWith("#"))
     .map((columns) => {
       const rawPlayer = columns[playerIndex];
       const name = extractPlayerName(rawPlayer);
