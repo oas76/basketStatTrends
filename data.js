@@ -221,6 +221,15 @@ const addGame = (gameData) => {
     }
   });
   
+  // Add computed stats (A/TO ratio) to each player's performance
+  const performancesWithComputed = {};
+  Object.entries(gameData.performances || {}).forEach(([name, stats]) => {
+    performancesWithComputed[name] = {
+      ...stats,
+      'a/to': computeAstToRatio(stats)
+    };
+  });
+  
   // Add game
   const game = {
     id: generateGameId(),
@@ -228,7 +237,7 @@ const addGame = (gameData) => {
     opponent: gameData.opponent,
     league: gameData.league,
     homeAway: gameData.homeAway,
-    performances: gameData.performances,
+    performances: performancesWithComputed,
     csvFile: gameData.csvFile || null, // Reference to source CSV file
   };
   
@@ -368,7 +377,63 @@ const getPlayerGameCounts = () => {
   return counts;
 };
 
+/**
+ * Compute Assist to Turnover Ratio (A/TO)
+ * Higher is better - measures playmaking efficiency
+ * Formula: assists / turnovers (if TO > 0), or assists * 2 (if TO = 0)
+ */
+const computeAstToRatio = (stats) => {
+  const assists = typeof stats.asst === 'number' ? stats.asst : 0;
+  const turnovers = typeof stats.to === 'number' ? stats.to : 0;
+  
+  if (turnovers === 0) {
+    // No turnovers - reward with assists * 2
+    return assists * 2;
+  }
+  
+  return Math.round((assists / turnovers) * 100) / 100; // Round to 2 decimal places
+};
+
+/**
+ * Add computed stats (like A/TO ratio) to a player's stats object
+ * Returns a new object with the computed stats added
+ */
+const addComputedStats = (stats) => {
+  return {
+    ...stats,
+    'a/to': computeAstToRatio(stats)
+  };
+};
+
+/**
+ * Process all games and add computed stats to each player's performance
+ * This updates the stored data with the computed stats
+ */
+const addComputedStatsToAllGames = () => {
+  const data = loadData();
+  let updated = false;
+  
+  data.games.forEach((game) => {
+    Object.entries(game.performances || {}).forEach(([name, stats]) => {
+      const atoRatio = computeAstToRatio(stats);
+      if (stats['a/to'] !== atoRatio) {
+        stats['a/to'] = atoRatio;
+        updated = true;
+      }
+    });
+  });
+  
+  if (updated) {
+    saveData(data);
+  }
+  
+  return updated;
+};
+
 const unique = (values) => Array.from(new Set(values));
+
+// On module load, add computed stats to all existing games
+addComputedStatsToAllGames();
 
 // Export API
 window.basketStatData = {
@@ -386,4 +451,7 @@ window.basketStatData = {
   hasValidStats,
   unique,
   generateGameId,
+  computeAstToRatio,
+  addComputedStats,
+  addComputedStatsToAllGames,
 };

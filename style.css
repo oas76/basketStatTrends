@@ -250,39 +250,13 @@ button.secondary:hover {
 
 /* ===== CHART ===== */
 .chart {
-  height: 260px;
   background: var(--surface-raised);
   border-radius: var(--radius-md);
-  padding: 20px;
+  padding: 16px;
   margin-bottom: 20px;
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow: visible;
-}
-
-.chart::before {
-  content: '';
-  position: absolute;
-  inset: 20px;
-  bottom: 60px;
-  background: 
-    linear-gradient(var(--border-subtle) 1px, transparent 1px),
-    linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
-  background-size: 20% 20%;
-  opacity: 0.4;
-  pointer-events: none;
-}
-
-.chart svg.performance-chart {
-  width: 100%;
-  flex: 1;
-  position: relative;
-  z-index: 1;
-}
-
-.chart svg polyline {
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 .chart p {
@@ -290,42 +264,119 @@ button.secondary:hover {
   font-size: 13px;
   text-align: center;
   margin: auto;
+  padding: 60px 0;
 }
 
-/* Chart axis labels */
-.chart svg .axis-label {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 3px;
-  fill: var(--text-muted);
+/* Chart area - contains line and points */
+.chart-area {
+  position: relative;
+  height: 140px;
+  margin-bottom: 8px;
 }
 
-.chart svg .avg-label {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 3px;
-  fill: var(--text-muted);
-  dominant-baseline: middle;
+.chart-area::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: 
+    linear-gradient(var(--border-subtle) 1px, transparent 1px);
+  background-size: 100% 25%;
+  opacity: 0.3;
+  pointer-events: none;
 }
 
-/* Chart points */
+/* SVG line layer - stretches to fill */
+.chart-line-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.chart-line-svg polyline {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+}
+
+/* Points layer - HTML elements */
+.chart-points {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .chart-point {
+  position: absolute;
+  transform: translate(-50%, -50%);
   cursor: pointer;
-  transition: transform 0.15s ease;
-}
-
-.chart-point:hover {
-  transform: scale(1.3);
-}
-
-.chart-point .hover-area {
   pointer-events: all;
+  z-index: 10;
 }
 
-.chart-point .point-outer {
+.chart-point .point-ring {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
   transition: all 0.15s ease;
 }
 
-.chart-point:hover .point-outer {
-  filter: brightness(1.2) drop-shadow(0 0 4px currentColor);
+.chart-point .point-fill {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+}
+
+.chart-point:hover .point-ring {
+  opacity: 1;
+}
+
+.chart-point:hover .point-fill {
+  transform: scale(1.2);
+}
+
+/* Average label */
+.chart-area .avg-label {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* X-axis */
+.x-axis {
+  position: relative;
+  height: 20px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 4px;
+}
+
+.x-label {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  padding-top: 6px;
+  white-space: nowrap;
+}
+
+.x-label:first-child {
+  transform: translateX(0);
+}
+
+.x-label:last-child {
+  transform: translateX(-100%);
 }
 
 /* Chart tooltip */
@@ -379,6 +430,22 @@ button.secondary:hover {
   line-height: 1;
 }
 
+.tooltip-level {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 4px;
+}
+
+.tooltip-ref {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+
 /* Chart legend */
 .chart-legend {
   display: flex;
@@ -404,6 +471,391 @@ button.secondary:hover {
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+.legend-ref {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px dashed var(--border-subtle);
+  font-size: 10px;
+}
+
+.ref-label {
+  color: var(--text-muted);
+}
+
+.ref-values {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-secondary);
+}
+
+.legend-note {
+  width: 100%;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding-top: 6px;
+}
+
+/* ===== BENCHMARKS INFO ===== */
+.benchmarks-info {
+  margin: 16px 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+}
+
+.benchmarks-info summary {
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+}
+
+.benchmarks-info summary::-webkit-details-marker {
+  display: none;
+}
+
+.benchmarks-info summary::before {
+  content: '▶';
+  font-size: 8px;
+  transition: transform 0.2s ease;
+}
+
+.benchmarks-info[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.benchmarks-info summary:hover {
+  color: var(--text);
+}
+
+.benchmarks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.benchmark-card {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.benchmark-card .stat-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.benchmark-card .thresholds {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+}
+
+.benchmark-card .threshold {
+  text-align: center;
+  padding: 4px 2px;
+  border-radius: 3px;
+}
+
+.benchmark-card .threshold-label {
+  display: block;
+  font-size: 8px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.benchmark-card .threshold-value {
+  font-weight: 600;
+}
+
+.benchmark-card .threshold.poor {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.benchmark-card .threshold.below {
+  background: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+}
+
+.benchmark-card .threshold.avg {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+}
+
+.benchmark-card .threshold.good {
+  background: rgba(132, 204, 22, 0.15);
+  color: #84cc16;
+}
+
+/* ===== SCORECARD ===== */
+.scorecard-panel {
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+}
+
+.scorecard-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.stat-scorecard {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.stat-scorecard:hover {
+  border-color: var(--border);
+  background: var(--border-subtle);
+}
+
+.stat-scorecard.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.stat-scorecard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.stat-scorecard-name {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.stat-scorecard-avg {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 20px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stat-scorecard-trend {
+  font-size: 14px;
+}
+
+.stat-scorecard-trend.up {
+  color: #22c55e;
+}
+
+.stat-scorecard-trend.down {
+  color: #ef4444;
+}
+
+.stat-scorecard-trend.neutral {
+  color: var(--text-muted);
+}
+
+.stat-scorecard-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.stat-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-detail-label {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 9px;
+}
+
+.stat-detail-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-detail-trend {
+  font-size: 10px;
+}
+
+.stat-detail-trend.up {
+  color: #22c55e;
+}
+
+.stat-detail-trend.down {
+  color: #ef4444;
+}
+
+.stat-detail-trend.neutral {
+  color: var(--text-muted);
+}
+
+.variance-range {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.variance-range .high {
+  color: #22c55e;
+}
+
+.variance-range .low {
+  color: #f97316;
+}
+
+/* Performance colors for scorecard */
+.perf-excellent { color: #22c55e; }
+.perf-good { color: #84cc16; }
+.perf-average { color: #eab308; }
+.perf-below { color: #f97316; }
+.perf-poor { color: #ef4444; }
+
+.no-data-message {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ===== DEFAULT BENCHMARKS GRID ===== */
+.default-benchmarks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.default-benchmark-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  transition: all 0.15s ease;
+}
+
+.default-benchmark-card:hover {
+  border-color: var(--border);
+  transform: translateY(-1px);
+}
+
+.benchmark-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.benchmark-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.inverted-badge {
+  font-size: 9px;
+  background: rgba(249, 115, 22, 0.2);
+  color: #f97316;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.benchmark-description {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.benchmark-thresholds {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.threshold-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  border-radius: 4px;
+  gap: 2px;
+}
+
+.threshold-item .threshold-label {
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.8;
+}
+
+.threshold-item .threshold-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.threshold-item.poor {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.threshold-item.below {
+  background: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+}
+
+.threshold-item.good {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+}
+
+.threshold-item.excellent {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.benchmark-unit {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  font-style: italic;
 }
 
 .legend-avg {

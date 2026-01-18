@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reference Stats Editor - BasketStat Trends</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
+    <style>
+      .editable-benchmark-card {
+        background: var(--surface-raised);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        padding: 12px;
+        transition: all 0.15s ease;
+        overflow: hidden;
+        min-width: 0;
+      }
+      .editable-benchmark-card:hover {
+        border-color: var(--border);
+      }
+      .editable-benchmark-card.modified {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px var(--accent-dim);
+      }
+      .benchmark-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .benchmark-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .benchmark-key {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 9px;
+        color: var(--text-muted);
+        background: var(--surface);
+        padding: 2px 5px;
+        border-radius: 3px;
+      }
+      .benchmark-description {
+        font-size: 10px;
+        color: var(--text-muted);
+        margin-bottom: 10px;
+        line-height: 1.3;
+      }
+      .benchmark-inputs {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4px;
+        margin-bottom: 6px;
+      }
+      .threshold-input-group {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 4px 2px;
+        border-radius: 4px;
+        gap: 2px;
+        min-width: 0;
+      }
+      .threshold-input-group label {
+        font-size: 8px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        opacity: 0.9;
+      }
+      .threshold-input-group input {
+        width: 100%;
+        max-width: 44px;
+        min-width: 32px;
+        text-align: center;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 3px 2px;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        background: rgba(0,0,0,0.2);
+        color: inherit;
+        box-sizing: border-box;
+      }
+      .threshold-input-group input:focus {
+        outline: none;
+        border-color: var(--accent);
+        background: var(--surface);
+      }
+      /* Remove spinner buttons from number inputs */
+      .threshold-input-group input[type="number"]::-webkit-inner-spin-button,
+      .threshold-input-group input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      .threshold-input-group input[type="number"] {
+        -moz-appearance: textfield;
+        appearance: textfield;
+      }
+      .threshold-input-group.poor {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+      }
+      .threshold-input-group.below {
+        background: rgba(249, 115, 22, 0.15);
+        color: #f97316;
+      }
+      .threshold-input-group.good {
+        background: rgba(234, 179, 8, 0.15);
+        color: #eab308;
+      }
+      .threshold-input-group.excellent {
+        background: rgba(34, 197, 94, 0.15);
+        color: #22c55e;
+      }
+      .benchmark-unit {
+        font-size: 9px;
+        color: var(--text-muted);
+        text-align: center;
+        font-style: italic;
+      }
+      /* Override grid for this page */
+      .default-benchmarks-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 10px;
+      }
+      .action-buttons {
+        display: flex;
+        gap: 12px;
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border-subtle);
+      }
+      .action-buttons button {
+        flex: 1;
+      }
+      #statusMessage {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: var(--radius-sm);
+        text-align: center;
+        font-size: 13px;
+      }
+      #statusMessage.success {
+        background: var(--accent-dim);
+        color: var(--accent);
+      }
+      #statusMessage.error {
+        background: rgba(248, 113, 113, 0.15);
+        color: #ef4444;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>Reference Stats Editor</h1>
+        <p>Edit benchmark statistics for U14-U16 players</p>
+      </div>
+      <nav>
+        <a href="index.html">← Dashboard</a>
+        <a href="admin.html">Upload Data</a>
+      </nav>
+    </header>
+
+    <main class="app-shell" style="grid-template-columns: 1fr;">
+      <section class="panel">
+        <h2>📊 U14-U16 Benchmark Values</h2>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
+          Edit the benchmark values directly in each card. Changes are saved to your browser's local storage.
+          <br><br>
+          <span style="color: #ef4444;">■</span> p25 (Poor) → 
+          <span style="color: #f97316;">■</span> p50 (Below Avg) → 
+          <span style="color: #eab308;">■</span> p75 (Good) → 
+          <span style="color: #22c55e;">■</span> p90 (Excellent)
+        </p>
+        
+        <div class="default-benchmarks-grid" id="benchmarksGrid">
+          <!-- Populated by JavaScript -->
+        </div>
+        
+        <div class="action-buttons">
+          <button type="button" id="saveBtn">💾 Save All Changes</button>
+          <button type="button" id="resetBtn" class="secondary">↺ Reset to Defaults</button>
+        </div>
+        
+        <div id="statusMessage" style="display: none;"></div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <span>Reference stats help compare player performance to age-appropriate benchmarks</span>
+    </footer>
+
+    <script src="reference-stats.js"></script>
+    <script>
+      // Default benchmark values (used for reset)
+      const defaultBenchmarks = {
+        pts: { name: "Points", description: "Total points scored per game", unit: "per game", p25: 4, p50: 8, p75: 14, p90: 20 },
+        fg: { name: "Field Goals", description: "Made 2pt + 3pt shots", unit: "made per game", p25: 1, p50: 3, p75: 5, p90: 8 },
+        "fg%": { name: "FG %", description: "Field goal accuracy", unit: "percentage", p25: 30, p50: 38, p75: 45, p90: 52 },
+        "3pt": { name: "3-Pointers", description: "Made 3-point shots", unit: "made per game", p25: 0, p50: 1, p75: 2, p90: 3 },
+        "3pt%": { name: "3PT %", description: "3-point shooting accuracy", unit: "percentage", p25: 20, p50: 28, p75: 35, p90: 42 },
+        ft: { name: "Free Throws", description: "Made free throws", unit: "made per game", p25: 0, p50: 1, p75: 3, p90: 5 },
+        "ft%": { name: "FT %", description: "Free throw accuracy", unit: "percentage", p25: 50, p50: 62, p75: 72, p90: 82 },
+        oreb: { name: "Off Rebounds", description: "Offensive rebounds", unit: "per game", p25: 0, p50: 1, p75: 2, p90: 4 },
+        dreb: { name: "Def Rebounds", description: "Defensive rebounds", unit: "per game", p25: 1, p50: 2, p75: 4, p90: 6 },
+        reb: { name: "Total Rebounds", description: "All rebounds combined", unit: "per game", p25: 2, p50: 4, p75: 6, p90: 9 },
+        asst: { name: "Assists", description: "Passes leading to scores", unit: "per game", p25: 0, p50: 1, p75: 3, p90: 5 },
+        stl: { name: "Steals", description: "Defensive takeaways", unit: "per game", p25: 0, p50: 1, p75: 2, p90: 4 },
+        blk: { name: "Blocks", description: "Blocked shots", unit: "per game", p25: 0, p50: 0, p75: 1, p90: 2 },
+        to: { name: "Turnovers", description: "Ball losses (fewer = better)", unit: "per game", p25: 4, p50: 3, p75: 2, p90: 1, invertedScale: true },
+        foul: { name: "Personal Fouls", description: "Fouls committed (fewer = better)", unit: "per game", p25: 4, p50: 3, p75: 2, p90: 1, invertedScale: true },
+        "a/to": { name: "Assist/Turnover", description: "Assists per turnover (playmaking efficiency)", unit: "ratio", p25: 0.5, p50: 1.0, p75: 1.5, p90: 2.5 }
+      };
+
+      // Track modifications
+      let modifications = {};
+      
+      // Load current values (from localStorage if available)
+      const loadCurrentValues = () => {
+        const saved = localStorage.getItem('referenceStats');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.stats) {
+              return { ...defaultBenchmarks, ...parsed.stats };
+            }
+          } catch (e) {
+            console.error('Failed to load saved stats:', e);
+          }
+        }
+        return { ...defaultBenchmarks };
+      };
+
+      // Render benchmark cards with editable inputs
+      const renderBenchmarks = () => {
+        const grid = document.getElementById('benchmarksGrid');
+        const currentValues = loadCurrentValues();
+        
+        grid.innerHTML = Object.entries(currentValues).map(([key, stat]) => `
+          <div class="editable-benchmark-card" data-stat-key="${key}">
+            <div class="benchmark-header">
+              <span class="benchmark-name">${stat.name}</span>
+              <span class="benchmark-key">${key}</span>
+            </div>
+            ${stat.invertedScale ? '<span class="inverted-badge" style="font-size: 9px; background: rgba(249, 115, 22, 0.2); color: #f97316; padding: 2px 6px; border-radius: 3px; font-weight: 500; margin-bottom: 6px; display: inline-block;">↓ Lower is better</span>' : ''}
+            <div class="benchmark-description">${stat.description}</div>
+            <div class="benchmark-inputs">
+              <div class="threshold-input-group poor">
+                <label>p25</label>
+                <input type="number" step="0.1" data-field="p25" value="${stat.p25}">
+              </div>
+              <div class="threshold-input-group below">
+                <label>p50</label>
+                <input type="number" step="0.1" data-field="p50" value="${stat.p50}">
+              </div>
+              <div class="threshold-input-group good">
+                <label>p75</label>
+                <input type="number" step="0.1" data-field="p75" value="${stat.p75}">
+              </div>
+              <div class="threshold-input-group excellent">
+                <label>p90</label>
+                <input type="number" step="0.1" data-field="p90" value="${stat.p90}">
+              </div>
+            </div>
+            <div class="benchmark-unit">${stat.unit}</div>
+          </div>
+        `).join('');
+        
+        // Add change listeners
+        grid.querySelectorAll('input').forEach(input => {
+          input.addEventListener('input', (e) => {
+            const card = e.target.closest('.editable-benchmark-card');
+            const statKey = card.dataset.statKey;
+            const field = e.target.dataset.field;
+            const value = parseFloat(e.target.value) || 0;
+            
+            if (!modifications[statKey]) {
+              modifications[statKey] = {};
+            }
+            modifications[statKey][field] = value;
+            
+            // Visual feedback
+            card.classList.add('modified');
+          });
+        });
+      };
+
+      // Show status message
+      const showStatus = (message, isError = false) => {
+        const statusMessage = document.getElementById('statusMessage');
+        statusMessage.textContent = message;
+        statusMessage.style.display = 'block';
+        statusMessage.className = isError ? 'error' : 'success';
+        setTimeout(() => {
+          statusMessage.style.display = 'none';
+        }, 3000);
+      };
+
+      // Save changes
+      document.getElementById('saveBtn').addEventListener('click', () => {
+        const modCount = Object.keys(modifications).length;
+        
+        if (modCount === 0) {
+          showStatus('No changes to save', true);
+          return;
+        }
+        
+        // Get current saved data or start fresh
+        let savedData = { stats: loadCurrentValues() };
+        
+        // Apply modifications
+        for (const [statKey, updates] of Object.entries(modifications)) {
+          if (savedData.stats[statKey]) {
+            Object.assign(savedData.stats[statKey], updates);
+          }
+        }
+        
+        // Save to localStorage
+        localStorage.setItem('referenceStats', JSON.stringify(savedData));
+        
+        // Update reference-stats.js runtime data if available
+        if (window.referenceStats && window.referenceStats.data) {
+          for (const [statKey, updates] of Object.entries(modifications)) {
+            if (window.referenceStats.data.stats[statKey]) {
+              Object.assign(window.referenceStats.data.stats[statKey], updates);
+            }
+          }
+        }
+        
+        showStatus(`✓ Saved ${modCount} stat(s) successfully!`);
+        modifications = {};
+        
+        // Remove modified styling
+        document.querySelectorAll('.editable-benchmark-card.modified').forEach(card => {
+          card.classList.remove('modified');
+        });
+      });
+
+      // Reset to defaults
+      document.getElementById('resetBtn').addEventListener('click', () => {
+        if (confirm('Reset all benchmark values to defaults? This cannot be undone.')) {
+          localStorage.removeItem('referenceStats');
+          modifications = {};
+          renderBenchmarks();
+          showStatus('✓ Reset to default values');
+        }
+      });
+
+      // Initialize
+      renderBenchmarks();
+    </script>
+  </body>
+</html>

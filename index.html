@@ -13,7 +13,11 @@
         <h1>BasketStat Trends</h1>
         <p>Player performance tracking & analytics</p>
       </div>
-      <nav>
+      <nav style="display: flex; gap: 12px;">
+        <a href="reference-admin.html">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          Benchmarks
+        </a>
         <a href="admin.html">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
           Upload Data
@@ -22,25 +26,28 @@
     </header>
 
     <main class="app-shell">
-      <section class="panel">
-        <h2>Player Focus</h2>
+      <section class="panel scorecard-panel">
+        <h2>Player Scorecard</h2>
         <div class="field">
           <label for="playerSelect">Player</label>
           <select id="playerSelect"></select>
         </div>
         <div class="field">
-          <label for="statSelect">Stat Category</label>
-          <select id="statSelect"></select>
+          <label for="windowSize">Window Size (games)</label>
+          <select id="windowSize">
+            <option value="5" selected>Last 5 games</option>
+            <option value="7">Last 7 games</option>
+            <option value="10">Last 10 games</option>
+            <option value="15">Last 15 games</option>
+            <option value="20">Last 20 games</option>
+          </select>
         </div>
-        <div class="field">
-          <label for="dataPointSelect">Game</label>
-          <select id="dataPointSelect"></select>
+        
+        <div class="scorecard-grid" id="scorecardGrid">
+          <!-- Populated by JavaScript -->
         </div>
-        <div class="summary-card" id="highlightCard">
-          <p class="summary-label">Selected Game</p>
-          <h3 id="highlightValue">—</h3>
-          <p id="highlightMeta">Select a player to begin</p>
-        </div>
+        
+        <input type="hidden" id="statSelect" value="pts">
       </section>
 
       <section class="panel wide">
@@ -50,6 +57,14 @@
           <h3>Analysis</h3>
           <p id="insightText">Upload data to see performance insights.</p>
         </div>
+        
+        <details class="benchmarks-info">
+          <summary>View U14-U16 Benchmark Thresholds</summary>
+          <div class="benchmarks-grid" id="benchmarksGrid">
+            <!-- Populated by JavaScript -->
+          </div>
+        </details>
+        
         <div class="data-table">
           <h3>Game Log</h3>
           <table>
@@ -71,6 +86,7 @@
     </footer>
 
     <script src="data.js"></script>
+    <script src="reference-stats.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
