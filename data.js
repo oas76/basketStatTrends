@@ -22,12 +22,13 @@ const saveData = (data) => {
  * e.g., '" player"' -> 'player', '" 9-19"' -> '9-19'
  */
 const cleanCsvValue = (value) => {
+  // First trim whitespace
   let cleaned = value.trim();
-  // Remove surrounding quotes (single or double)
-  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || 
-      (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
-    cleaned = cleaned.slice(1, -1);
-  }
+  // Remove surrounding double quotes
+  cleaned = cleaned.replace(/^"(.*)"$/, '$1');
+  // Remove surrounding single quotes
+  cleaned = cleaned.replace(/^'(.*)'$/, '$1');
+  // Final trim for any inner whitespace
   return cleaned.trim();
 };
 
@@ -78,10 +79,16 @@ const parseCsv = async (file) => {
   const text = await file.text();
   const [headerLine, ...rows] = text.trim().split(/\r?\n/);
   const headers = headerLine.split(",").map(cleanCsvValue);
+  
+  // Debug: log headers to console
+  console.log("CSV Headers (raw):", headerLine);
+  console.log("CSV Headers (cleaned):", headers);
+  
   const playerIndex = headers.findIndex((header) => header.toLowerCase() === "player");
 
   if (playerIndex === -1) {
-    throw new Error("CSV must include a 'player' column.");
+    console.log("Player column not found. Headers are:", headers.map(h => `[${h}]`));
+    throw new Error(`CSV must include a 'player' column. Found columns: ${headers.join(", ")}`);
   }
 
   const statHeaders = headers.filter((_, index) => index !== playerIndex);
