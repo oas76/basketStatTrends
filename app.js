@@ -516,44 +516,299 @@ const setupChartTooltips = (allRecords, stat, pointsData) => {
   });
 };
 
-const renderInsight = (records, stat) => {
+/**
+ * Comprehensive Player Analysis Engine
+ * Generates detailed insights based on all stats, trends, and benchmarks
+ */
+const analyzePlayerPerformance = (records, windowSize) => {
   if (records.length < 2) {
-    insightText.textContent = "Need at least 2 games for trend analysis";
+    return { summary: "Need at least 2 games for analysis", details: [] };
+  }
+
+  const stats = getAvailableStats(records);
+  const analysis = {
+    strengths: [],
+    weaknesses: [],
+    improving: [],
+    declining: [],
+    consistent: [],
+    hotStreaks: [],
+    coldStreaks: [],
+    benchmarkComparisons: []
+  };
+
+  // Analyze each stat category
+  stats.forEach(stat => {
+    const validRecords = records.filter(r => hasValidStatValue(r.stats[stat]));
+    if (validRecords.length < 2) return;
+    
+    const values = validRecords.map(r => getNumericStat(r.stats[stat]));
+    const recentValues = values.slice(-windowSize);
+    const previousValues = values.slice(-windowSize * 2, -windowSize);
+    
+    // Skip if not enough data
+    if (recentValues.length === 0) return;
+    
+    const recentAvg = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
+    const seasonAvg = values.reduce((a, b) => a + b, 0) / values.length;
+    const prevAvg = previousValues.length > 0 
+      ? previousValues.reduce((a, b) => a + b, 0) / previousValues.length 
+      : seasonAvg;
+    
+    // Get reference data
+    const refStat = window.referenceStats?.getStatReference(stat);
+    const isInverted = refStat?.invertedScale || false;
+    const perfLevel = window.referenceStats?.getPerformanceLevel(stat, recentAvg) || 'average';
+    
+    // Calculate trend (comparing recent window to previous window)
+    const trendValue = recentAvg - prevAvg;
+    const trendPercent = prevAvg !== 0 ? ((trendValue / prevAvg) * 100) : 0;
+    
+    // For inverted stats (TO, fouls), negative trend is good
+    const trendDirection = isInverted 
+      ? (trendValue < -0.2 ? 'improving' : trendValue > 0.2 ? 'declining' : 'consistent')
+      : (trendValue > 0.2 ? 'improving' : trendValue < -0.2 ? 'declining' : 'consistent');
+    
+    // Identify strengths/weaknesses based on benchmark
+    if (perfLevel === 'excellent' || perfLevel === 'good') {
+      analysis.strengths.push({
+        stat,
+        avg: recentAvg,
+        level: perfLevel,
+        refP50: refStat?.p50,
+        refP75: refStat?.p75
+      });
+    } else if (perfLevel === 'poor' || perfLevel === 'below') {
+      analysis.weaknesses.push({
+        stat,
+        avg: recentAvg,
+        level: perfLevel,
+        refP50: refStat?.p50,
+        refP25: refStat?.p25
+      });
+    }
+    
+    // Track trends
+    if (trendDirection === 'improving') {
+      analysis.improving.push({
+        stat,
+        change: Math.abs(trendValue).toFixed(1),
+        changePercent: Math.abs(trendPercent).toFixed(0),
+        from: prevAvg.toFixed(1),
+        to: recentAvg.toFixed(1)
+      });
+    } else if (trendDirection === 'declining') {
+      analysis.declining.push({
+        stat,
+        change: Math.abs(trendValue).toFixed(1),
+        changePercent: Math.abs(trendPercent).toFixed(0),
+        from: prevAvg.toFixed(1),
+        to: recentAvg.toFixed(1)
+      });
+    }
+    
+    // Detect hot/cold streaks (last 3 games)
+    if (recentValues.length >= 3) {
+      const last3 = recentValues.slice(-3);
+      const last3Avg = last3.reduce((a, b) => a + b, 0) / 3;
+      const last3AllGood = last3.every(v => {
+        const level = window.referenceStats?.getPerformanceLevel(stat, v);
+        return level === 'excellent' || level === 'good';
+      });
+      const last3AllPoor = last3.every(v => {
+        const level = window.referenceStats?.getPerformanceLevel(stat, v);
+        return level === 'poor' || level === 'below';
+      });
+      
+      if (last3AllGood) {
+        analysis.hotStreaks.push({ stat, games: 3, avg: last3Avg.toFixed(1) });
+      } else if (last3AllPoor) {
+        analysis.coldStreaks.push({ stat, games: 3, avg: last3Avg.toFixed(1) });
+      }
+    }
+    
+    // Benchmark comparisons
+    if (refStat) {
+      const vsMedian = ((recentAvg / refStat.p50 - 1) * 100).toFixed(0);
+      analysis.benchmarkComparisons.push({
+        stat,
+        avg: recentAvg.toFixed(1),
+        level: perfLevel,
+        vsMedian: vsMedian,
+        p50: refStat.p50,
+        p75: refStat.p75,
+        p90: refStat.p90
+      });
+    }
+  });
+
+  return analysis;
+};
+
+/**
+ * Generate human-readable analysis report
+ */
+const generateAnalysisReport = (playerName, analysis, windowSize) => {
+  const sections = [];
+  
+  // Overall summary
+  let summaryParts = [];
+  if (analysis.strengths.length > 0) {
+    summaryParts.push(`${analysis.strengths.length} strength${analysis.strengths.length > 1 ? 's' : ''}`);
+  }
+  if (analysis.weaknesses.length > 0) {
+    summaryParts.push(`${analysis.weaknesses.length} area${analysis.weaknesses.length > 1 ? 's' : ''} to develop`);
+  }
+  if (analysis.improving.length > 0) {
+    summaryParts.push(`${analysis.improving.length} improving trend${analysis.improving.length > 1 ? 's' : ''}`);
+  }
+  
+  // Strengths section
+  if (analysis.strengths.length > 0) {
+    const topStrengths = analysis.strengths.slice(0, 3);
+    const strengthText = topStrengths.map(s => {
+      const statName = getStatDisplayName(s.stat);
+      const levelEmoji = s.level === 'excellent' ? '🌟' : '✓';
+      return `${levelEmoji} <strong>${statName}</strong> (${s.avg.toFixed(1)} avg, ${s.level})`;
+    }).join(', ');
+    sections.push(`<div class="insight-section"><span class="insight-label">💪 Strengths:</span> ${strengthText}</div>`);
+  }
+  
+  // Areas to improve section
+  if (analysis.weaknesses.length > 0) {
+    const topWeaknesses = analysis.weaknesses.slice(0, 2);
+    const weaknessText = topWeaknesses.map(w => {
+      const statName = getStatDisplayName(w.stat);
+      return `<strong>${statName}</strong> (${w.avg.toFixed(1)} avg, target: ${w.refP50})`;
+    }).join(', ');
+    sections.push(`<div class="insight-section"><span class="insight-label">📈 Focus areas:</span> ${weaknessText}</div>`);
+  }
+  
+  // Trending section
+  if (analysis.improving.length > 0) {
+    const topImproving = analysis.improving.slice(0, 2);
+    const improvingText = topImproving.map(i => {
+      const statName = getStatDisplayName(i.stat);
+      return `<strong>${statName}</strong> ↑${i.changePercent}%`;
+    }).join(', ');
+    sections.push(`<div class="insight-section"><span class="insight-label">📊 Improving:</span> ${improvingText}</div>`);
+  }
+  
+  if (analysis.declining.length > 0) {
+    const topDeclining = analysis.declining.slice(0, 2);
+    const decliningText = topDeclining.map(d => {
+      const statName = getStatDisplayName(d.stat);
+      return `<strong>${statName}</strong> ↓${d.changePercent}%`;
+    }).join(', ');
+    sections.push(`<div class="insight-section"><span class="insight-label">⚠️ Watch:</span> ${decliningText}</div>`);
+  }
+  
+  // Hot/cold streaks
+  if (analysis.hotStreaks.length > 0) {
+    const streakText = analysis.hotStreaks.map(h => `${getStatDisplayName(h.stat)} 🔥`).join(', ');
+    sections.push(`<div class="insight-section"><span class="insight-label">🔥 Hot streak:</span> ${streakText}</div>`);
+  }
+  
+  if (analysis.coldStreaks.length > 0) {
+    const streakText = analysis.coldStreaks.map(c => `${getStatDisplayName(c.stat)}`).join(', ');
+    sections.push(`<div class="insight-section"><span class="insight-label">❄️ Cold streak:</span> ${streakText}</div>`);
+  }
+  
+  // Generate recommendation
+  const recommendation = generateRecommendation(analysis);
+  if (recommendation) {
+    sections.push(`<div class="insight-section insight-recommendation"><span class="insight-label">💡 Tip:</span> ${recommendation}</div>`);
+  }
+  
+  return sections.length > 0 
+    ? sections.join('') 
+    : `<div class="insight-section">Consistent performance across categories. Keep up the good work!</div>`;
+};
+
+/**
+ * Get friendly display name for a stat
+ */
+const getStatDisplayName = (stat) => {
+  const names = {
+    'pts': 'Points',
+    'fg': 'Field Goals',
+    'fg%': 'FG%',
+    '3pt': '3-Pointers',
+    '3pt%': '3PT%',
+    'ft': 'Free Throws',
+    'ft%': 'FT%',
+    'oreb': 'Off. Rebounds',
+    'dreb': 'Def. Rebounds',
+    'reb': 'Rebounds',
+    'asst': 'Assists',
+    'stl': 'Steals',
+    'blk': 'Blocks',
+    'to': 'Turnovers',
+    'foul': 'Fouls',
+    'a/to': 'Assist/TO Ratio'
+  };
+  return names[stat.toLowerCase()] || stat;
+};
+
+/**
+ * Generate actionable recommendation based on analysis
+ */
+const generateRecommendation = (analysis) => {
+  // Prioritize recommendations
+  if (analysis.coldStreaks.some(c => c.stat === 'fg%' || c.stat === '3pt%')) {
+    return "Shooting is cold. Focus on high-percentage shots closer to the basket.";
+  }
+  
+  if (analysis.declining.some(d => d.stat === 'to') || analysis.weaknesses.some(w => w.stat === 'to')) {
+    return "Work on ball security. Look for safer passing lanes and avoid forcing plays.";
+  }
+  
+  if (analysis.declining.some(d => d.stat === 'a/to')) {
+    return "Assist-to-turnover ratio declining. Focus on smart decision-making with the ball.";
+  }
+  
+  if (analysis.weaknesses.some(w => w.stat === 'ft%')) {
+    return "Free throw practice can add easy points. Aim for 10+ FTs daily.";
+  }
+  
+  if (analysis.weaknesses.some(w => w.stat === 'dreb')) {
+    return "Box out on defensive rebounds. Position yourself between opponent and basket.";
+  }
+  
+  if (analysis.improving.length >= 2 && analysis.declining.length === 0) {
+    return "Great progress! Maintain this momentum and keep pushing.";
+  }
+  
+  if (analysis.hotStreaks.length >= 2) {
+    return "Playing with confidence! Stay aggressive and trust your game.";
+  }
+  
+  if (analysis.strengths.length > 0 && analysis.weaknesses.length > 0) {
+    const strength = analysis.strengths[0];
+    return `Build on your ${getStatDisplayName(strength.stat)} strength while developing weaker areas.`;
+  }
+  
+  return null;
+};
+
+/**
+ * Render the comprehensive insight analysis
+ */
+const renderInsight = (records, stat) => {
+  const windowSize = parseInt(windowSizeSelect?.value || '5', 10);
+  const playerName = playerSelect.value;
+  
+  if (records.length < 2) {
+    insightText.innerHTML = "Need at least 2 games for trend analysis";
     return;
   }
-
-  const windowSize = parseInt(windowSizeSelect?.value || '5', 10);
-  const values = records.map((record) => getNumericStat(record.stats[stat]));
-  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
   
-  // Use window size for recent games
-  const recent = values.slice(-windowSize);
-  const recentAverage = recent.reduce((sum, value) => sum + value, 0) / recent.length;
-  const trend = recentAverage - average;
+  // Generate comprehensive analysis
+  const analysis = analyzePlayerPerformance(records, windowSize);
+  const report = generateAnalysisReport(playerName, analysis, windowSize);
   
-  // Get reference stats for context
-  const refStat = window.referenceStats?.getStatReference(stat);
-  
-  let refContext = '';
-  if (refStat) {
-    const diff = recentAverage - refStat.p50;
-    const percentAbove = ((recentAverage / refStat.p50 - 1) * 100).toFixed(0);
-    if (diff > 0) {
-      refContext = ` Compared to U14-U16 benchmarks: ${Math.abs(percentAbove)}% above median.`;
-    } else if (diff < 0) {
-      refContext = ` Compared to U14-U16 benchmarks: ${Math.abs(percentAbove)}% below median.`;
-    } else {
-      refContext = ` Right at the U14-U16 median benchmark.`;
-    }
-  }
-
-  if (trend > 0.5) {
-    insightText.textContent = `↑ Trending up: Last ${recent.length} games averaging +${trend.toFixed(1)} ${stat} above season average (${average.toFixed(1)}).${refContext}`;
-  } else if (trend < -0.5) {
-    insightText.textContent = `↓ Trending down: Last ${recent.length} games ${stat} is ${Math.abs(trend).toFixed(1)} below season average (${average.toFixed(1)}).${refContext}`;
-  } else {
-    insightText.textContent = `→ Consistent: Last ${recent.length} games ${stat} matches season average of ${average.toFixed(1)}.${refContext}`;
-  }
+  // Render the report
+  insightText.innerHTML = report;
 };
 
 const updateChartAndTable = () => {
@@ -680,4 +935,263 @@ if (windowSizeSelect) {
   windowSizeSelect.addEventListener("change", updateView);
 }
 
+// ========================================
+// GOOGLE GEMINI AI INTEGRATION
+// ========================================
+
+const GEMINI_API_KEY_STORAGE = 'basketstat-gemini-key';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+
+// AI DOM elements
+const aiSettingsToggle = document.getElementById('aiSettingsToggle');
+const aiSettings = document.getElementById('aiSettings');
+const geminiApiKeyInput = document.getElementById('geminiApiKey');
+const saveApiKeyBtn = document.getElementById('saveApiKey');
+const generateAiBtn = document.getElementById('generateAiInsight');
+const aiStatusText = document.getElementById('aiStatusText');
+const aiStatus = document.getElementById('aiStatus');
+const aiInsightText = document.getElementById('aiInsightText');
+
+/**
+ * Load API key from session storage
+ */
+const loadApiKey = () => {
+  return sessionStorage.getItem(GEMINI_API_KEY_STORAGE) || '';
+};
+
+/**
+ * Save API key to session storage
+ */
+const saveApiKey = (key) => {
+  if (key) {
+    sessionStorage.setItem(GEMINI_API_KEY_STORAGE, key);
+  } else {
+    sessionStorage.removeItem(GEMINI_API_KEY_STORAGE);
+  }
+};
+
+/**
+ * Update AI status UI
+ */
+const updateAiStatus = () => {
+  const hasKey = !!loadApiKey();
+  
+  if (hasKey) {
+    aiStatusText.textContent = '✓ API key configured';
+    aiStatus.className = 'ai-status connected';
+    generateAiBtn.disabled = false;
+  } else {
+    aiStatusText.textContent = 'Configure API key to enable AI coaching';
+    aiStatus.className = 'ai-status';
+    generateAiBtn.disabled = true;
+  }
+};
+
+/**
+ * Build context for AI from player data
+ */
+const buildAiContext = (playerName, records, windowSize) => {
+  const analysis = analyzePlayerPerformance(records, windowSize);
+  const stats = getAvailableStats(records);
+  
+  // Build detailed stats summary
+  let statsContext = [];
+  stats.forEach(stat => {
+    const validRecords = records.filter(r => hasValidStatValue(r.stats[stat]));
+    if (validRecords.length < 2) return;
+    
+    const values = validRecords.map(r => getNumericStat(r.stats[stat]));
+    const recentValues = values.slice(-windowSize);
+    const avg = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
+    const refStat = window.referenceStats?.getStatReference(stat);
+    const perfLevel = window.referenceStats?.getPerformanceLevel(stat, avg) || 'average';
+    
+    statsContext.push({
+      stat: getStatDisplayName(stat),
+      key: stat,
+      avg: avg.toFixed(1),
+      level: perfLevel,
+      benchmark: refStat ? { p50: refStat.p50, p75: refStat.p75, p90: refStat.p90 } : null,
+      recent: recentValues.slice(-3).map(v => v.toFixed(1)).join(', ')
+    });
+  });
+  
+  // Build game history summary
+  const recentGames = records.slice(-windowSize).map(r => ({
+    date: r.date,
+    opponent: r.opponent,
+    pts: getNumericStat(r.stats.pts),
+    fg: r.stats.fg ? `${r.stats.fg.made}-${r.stats.fg.attempted}` : '-',
+    asst: getNumericStat(r.stats.asst),
+    to: getNumericStat(r.stats.to)
+  }));
+
+  return {
+    player: playerName,
+    ageGroup: 'U14-U16 (14-16 years old)',
+    league: 'Norwegian junior basketball (1. divisjon)',
+    windowSize,
+    totalGames: records.length,
+    stats: statsContext,
+    recentGames,
+    strengths: analysis.strengths.map(s => ({ stat: getStatDisplayName(s.stat), level: s.level })),
+    weaknesses: analysis.weaknesses.map(w => ({ stat: getStatDisplayName(w.stat), level: w.level })),
+    improving: analysis.improving.map(i => ({ stat: getStatDisplayName(i.stat), change: `+${i.changePercent}%` })),
+    declining: analysis.declining.map(d => ({ stat: getStatDisplayName(d.stat), change: `-${d.changePercent}%` })),
+    hotStreaks: analysis.hotStreaks.map(h => getStatDisplayName(h.stat)),
+    coldStreaks: analysis.coldStreaks.map(c => getStatDisplayName(c.stat))
+  };
+};
+
+/**
+ * Build the prompt for Gemini
+ */
+const buildGeminiPrompt = (context) => {
+  return `You are an experienced youth basketball coach providing analysis for a player. Be encouraging but honest. Focus on actionable advice.
+
+PLAYER: ${context.player}
+AGE GROUP: ${context.ageGroup}
+LEAGUE: ${context.league}
+ANALYSIS WINDOW: Last ${context.windowSize} games (${context.totalGames} total games played)
+
+CURRENT PERFORMANCE BY CATEGORY:
+${context.stats.map(s => `- ${s.stat}: ${s.avg} avg (${s.level} level)${s.benchmark ? ` [Benchmarks: avg=${s.benchmark.p50}, good=${s.benchmark.p75}, excellent=${s.benchmark.p90}]` : ''}`).join('\n')}
+
+STRENGTHS (performing well vs benchmarks): ${context.strengths.length > 0 ? context.strengths.map(s => s.stat).join(', ') : 'None identified'}
+AREAS TO DEVELOP: ${context.weaknesses.length > 0 ? context.weaknesses.map(w => w.stat).join(', ') : 'None identified'}
+IMPROVING TRENDS: ${context.improving.length > 0 ? context.improving.map(i => `${i.stat} ${i.change}`).join(', ') : 'Stable'}
+DECLINING TRENDS: ${context.declining.length > 0 ? context.declining.map(d => `${d.stat} ${d.change}`).join(', ') : 'None'}
+HOT STREAKS: ${context.hotStreaks.length > 0 ? context.hotStreaks.join(', ') : 'None'}
+COLD STREAKS: ${context.coldStreaks.length > 0 ? context.coldStreaks.join(', ') : 'None'}
+
+RECENT GAME LOG:
+${context.recentGames.map(g => `${g.date} vs ${g.opponent}: ${g.pts} pts, ${g.fg} FG, ${g.asst} ast, ${g.to} TO`).join('\n')}
+
+Please provide a brief coaching analysis (3-4 short paragraphs) that includes:
+1. Overall assessment - how is the player performing for their age group?
+2. Key strengths to build on and how to leverage them
+3. One or two specific areas to focus on improving, with a simple drill or practice tip
+4. Motivational closing with realistic short-term goal
+
+Keep the tone positive and age-appropriate. Be specific to the data provided.`;
+};
+
+/**
+ * Call Gemini API
+ */
+const callGeminiApi = async (prompt) => {
+  const apiKey = loadApiKey();
+  if (!apiKey) {
+    throw new Error('No API key configured');
+  }
+
+  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1024,
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    if (response.status === 400) {
+      throw new Error('Invalid API key. Please check your Gemini API key.');
+    }
+    throw new Error(error.error?.message || `API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
+};
+
+/**
+ * Generate AI insight
+ */
+const generateAiInsight = async () => {
+  const playerName = playerSelect.value;
+  const windowSize = parseInt(windowSizeSelect?.value || '5', 10);
+  const data = buildData();
+  const records = data.filter(r => r.player === playerName);
+  
+  if (records.length < 3) {
+    aiInsightText.innerHTML = '<p>Need at least 3 games for AI analysis.</p>';
+    aiInsightText.classList.add('visible');
+    return;
+  }
+
+  // Show loading state
+  generateAiBtn.classList.add('loading');
+  generateAiBtn.disabled = true;
+  aiInsightText.innerHTML = '';
+  aiInsightText.classList.remove('visible');
+
+  try {
+    const context = buildAiContext(playerName, records, windowSize);
+    const prompt = buildGeminiPrompt(context);
+    const response = await callGeminiApi(prompt);
+    
+    // Format the response
+    const formattedResponse = response
+      .split('\n\n')
+      .filter(p => p.trim())
+      .map(p => `<p>${p.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</p>`)
+      .join('');
+    
+    aiInsightText.innerHTML = formattedResponse;
+    aiInsightText.classList.add('visible');
+  } catch (error) {
+    console.error('AI generation error:', error);
+    aiInsightText.innerHTML = `<p style="color: var(--negative);">Error: ${error.message}</p>`;
+    aiInsightText.classList.add('visible');
+    
+    if (error.message.includes('API key')) {
+      aiStatus.className = 'ai-status error';
+      aiStatusText.textContent = '✗ Invalid API key';
+    }
+  } finally {
+    generateAiBtn.classList.remove('loading');
+    generateAiBtn.disabled = false;
+  }
+};
+
+// AI event listeners
+if (aiSettingsToggle) {
+  aiSettingsToggle.addEventListener('click', () => {
+    aiSettings.style.display = aiSettings.style.display === 'none' ? 'block' : 'none';
+  });
+}
+
+if (saveApiKeyBtn) {
+  saveApiKeyBtn.addEventListener('click', () => {
+    const key = geminiApiKeyInput.value.trim();
+    saveApiKey(key);
+    geminiApiKeyInput.value = '';
+    aiSettings.style.display = 'none';
+    updateAiStatus();
+  });
+}
+
+if (generateAiBtn) {
+  generateAiBtn.addEventListener('click', generateAiInsight);
+}
+
+// Load saved API key on page load
+if (geminiApiKeyInput) {
+  const savedKey = loadApiKey();
+  if (savedKey) {
+    geminiApiKeyInput.placeholder = '••••••••••••••••';
+  }
+  updateAiStatus();
+}
+
+// Initialize the app
 init();
