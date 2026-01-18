@@ -940,7 +940,9 @@ if (windowSizeSelect) {
 // ========================================
 
 const GEMINI_API_KEY_STORAGE = 'basketstat-gemini-key';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+// Using Gemini 2.0 Flash - the current free tier model (Dec 2025+)
+// API docs: https://ai.google.dev/gemini-api/docs/models/gemini
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 // AI DOM elements
 const aiSettingsToggle = document.getElementById('aiSettingsToggle');
@@ -1103,10 +1105,21 @@ const callGeminiApi = async (prompt) => {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
+    const errorMsg = error.error?.message || '';
+    
     if (response.status === 400) {
       throw new Error('Invalid API key. Please check your Gemini API key.');
     }
-    throw new Error(error.error?.message || `API error: ${response.status}`);
+    if (response.status === 404 || errorMsg.includes('not found')) {
+      throw new Error('Model not available. Google may have updated their API. Try again later or check ai.google.dev for current models.');
+    }
+    if (response.status === 403) {
+      throw new Error('Access denied. Your API key may not have access to this model, or the free tier may not be available in your region.');
+    }
+    if (response.status === 429) {
+      throw new Error('Rate limit exceeded. Please wait a moment and try again.');
+    }
+    throw new Error(errorMsg || `API error: ${response.status}`);
   }
 
   const data = await response.json();
