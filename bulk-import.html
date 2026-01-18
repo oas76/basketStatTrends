@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bulk Import | BasketStat</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>Bulk Data Import</h1>
+      <p>Clear and rebuild data from CSV files</p>
+    </div>
+    <nav>
+      <a href="admin.html">Back to Admin</a>
+    </nav>
+  </header>
+
+  <main class="app-shell" style="grid-template-columns: 1fr;">
+    <section class="panel">
+      <h2>Step 1: Clear Existing Data</h2>
+      <p style="color: var(--text-secondary); margin-bottom: 16px;">
+        This will remove all games and player data from localStorage.
+      </p>
+      <button id="clearBtn" class="danger secondary">Clear All Data</button>
+      <div id="clearStatus" style="margin-top: 12px; color: var(--text-muted);"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Step 2: Import CSV Files</h2>
+      <p style="color: var(--text-secondary); margin-bottom: 16px;">
+        Select all your CSV files to import. Each file needs game metadata.
+      </p>
+      
+      <div id="importList"></div>
+      
+      <div class="field" style="margin-top: 16px;">
+        <label for="csvFiles">Select CSV Files</label>
+        <input type="file" id="csvFiles" accept=".csv" multiple />
+      </div>
+      
+      <div id="fileList" style="margin-top: 16px;"></div>
+      
+      <button id="importBtn" style="margin-top: 16px;" disabled>Import All Files</button>
+      <div id="importStatus" style="margin-top: 12px;"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Step 3: Verify Results</h2>
+      <div id="results"></div>
+      <button id="verifyBtn" class="secondary" style="margin-top: 16px;">Refresh Player Counts</button>
+    </section>
+  </main>
+
+  <script src="data.js"></script>
+  <script>
+    const clearBtn = document.getElementById('clearBtn');
+    const clearStatus = document.getElementById('clearStatus');
+    const csvFilesInput = document.getElementById('csvFiles');
+    const fileList = document.getElementById('fileList');
+    const importBtn = document.getElementById('importBtn');
+    const importStatus = document.getElementById('importStatus');
+    const results = document.getElementById('results');
+    const verifyBtn = document.getElementById('verifyBtn');
+
+    let selectedFiles = [];
+    let gameMetadata = {};
+
+    // Game metadata from filenames (you can edit these)
+    const knownGames = {
+      'box-scores-11 Oct 2025.csv': { date: '2025-10-11', opponent: 'Fredrikstad', league: '1. divisjon', homeAway: 'home' },
+      'box-scores-18 Oct 2025.csv': { date: '2025-10-18', opponent: 'Eidsvoll', league: '1. divisjon', homeAway: 'away' },
+      'box-scores-14 Nov 2025.csv': { date: '2025-11-14', opponent: 'Asker', league: '1. divisjon', homeAway: 'away' },
+      'box-scores-22 Nov 2025.csv': { date: '2025-11-22', opponent: 'Haugerud Hawks', league: '1. divisjon', homeAway: 'home' },
+      'box-scores-29 Nov 2025.csv': { date: '2025-11-29', opponent: 'Oppsal', league: '1. divisjon', homeAway: 'away' },
+      'box-scores-30 Nov 2025.csv': { date: '2025-11-30', opponent: 'Bislett', league: '1. divisjon', homeAway: 'home' },
+      'box-scores-6 Dec 2025.csv': { date: '2025-12-06', opponent: 'Skien', league: '1. divisjon', homeAway: 'away' },
+      'box-scores-13 Dec 2025.csv': { date: '2025-12-13', opponent: 'Asker', league: '1. divisjon', homeAway: 'home' },
+      'box-scores-14 Dec 2025.csv': { date: '2025-12-14', opponent: 'Oppsal', league: '1. divisjon', homeAway: 'home' },
+      'box-scores-10 Jan 2026.csv': { date: '2026-01-10', opponent: 'Bislet', league: '1. divisjon', homeAway: 'away' },
+      'box-scores-17 Jan 2026.csv': { date: '2026-01-17', opponent: 'Asker', league: '1. divisjon', homeAway: 'home' },
+    };
+
+    // Clear data
+    clearBtn.addEventListener('click', () => {
+      if (confirm('Clear ALL stored data? This cannot be undone.')) {
+        window.basketStatData.saveData({ players: {}, games: [] });
+        clearStatus.innerHTML = '<span style="color: var(--positive);">✓ Data cleared</span>';
+        updateResults();
+      }
+    });
+
+    // File selection
+    csvFilesInput.addEventListener('change', (e) => {
+      selectedFiles = Array.from(e.target.files);
+      renderFileList();
+    });
+
+    function renderFileList() {
+      if (selectedFiles.length === 0) {
+        fileList.innerHTML = '<p style="color: var(--text-muted);">No files selected</p>';
+        importBtn.disabled = true;
+        return;
+      }
+
+      fileList.innerHTML = '<h3 style="margin-bottom: 12px;">Files to import:</h3>' +
+        '<div class="data-table"><table><thead><tr><th>File</th><th>Date</th><th>Opponent</th><th>League</th><th>H/A</th></tr></thead><tbody>' +
+        selectedFiles.map(file => {
+          const meta = knownGames[file.name] || { date: '', opponent: '?', league: '?', homeAway: '?' };
+          gameMetadata[file.name] = meta;
+          return `<tr>
+            <td>${file.name}</td>
+            <td><input type="date" value="${meta.date}" onchange="updateMeta('${file.name}', 'date', this.value)" style="width: 130px;"></td>
+            <td><input type="text" value="${meta.opponent}" onchange="updateMeta('${file.name}', 'opponent', this.value)" style="width: 120px;"></td>
+            <td><input type="text" value="${meta.league}" onchange="updateMeta('${file.name}', 'league', this.value)" style="width: 100px;"></td>
+            <td><select onchange="updateMeta('${file.name}', 'homeAway', this.value)">
+              <option value="home" ${meta.homeAway === 'home' ? 'selected' : ''}>Home</option>
+              <option value="away" ${meta.homeAway === 'away' ? 'selected' : ''}>Away</option>
+            </select></td>
+          </tr>`;
+        }).join('') +
+        '</tbody></table></div>';
+      
+      importBtn.disabled = false;
+    }
+
+    window.updateMeta = (filename, field, value) => {
+      if (!gameMetadata[filename]) gameMetadata[filename] = {};
+      gameMetadata[filename][field] = value;
+    };
+
+    // Import all files
+    importBtn.addEventListener('click', async () => {
+      importBtn.disabled = true;
+      importStatus.innerHTML = '<p>Importing...</p>';
+      
+      let imported = 0;
+      let errors = [];
+
+      for (const file of selectedFiles) {
+        const meta = gameMetadata[file.name];
+        if (!meta.date || !meta.opponent) {
+          errors.push(`${file.name}: Missing date or opponent`);
+          continue;
+        }
+
+        try {
+          const { performances, playersFound } = await window.basketStatData.parseCsv(file);
+          const playerCount = Object.keys(performances).length;
+          
+          if (playerCount === 0) {
+            errors.push(`${file.name}: No valid players found`);
+            continue;
+          }
+
+          window.basketStatData.addGame({
+            date: meta.date,
+            opponent: meta.opponent,
+            league: meta.league || '',
+            homeAway: meta.homeAway || 'home',
+            performances,
+            playersFound,
+            csvFile: file.name
+          });
+
+          imported++;
+          importStatus.innerHTML = `<p>Imported ${imported}/${selectedFiles.length} files...</p>`;
+        } catch (err) {
+          errors.push(`${file.name}: ${err.message}`);
+        }
+      }
+
+      let statusHtml = `<p style="color: var(--positive);">✓ Successfully imported ${imported} games</p>`;
+      if (errors.length > 0) {
+        statusHtml += `<p style="color: var(--negative);">Errors:</p><ul style="color: var(--negative);">` +
+          errors.map(e => `<li>${e}</li>`).join('') + '</ul>';
+      }
+      importStatus.innerHTML = statusHtml;
+      importBtn.disabled = false;
+      updateResults();
+    });
+
+    // Verify results
+    function updateResults() {
+      const counts = window.basketStatData.getPlayerGameCounts();
+      const { games } = window.basketStatData.loadData();
+      
+      const sorted = Object.entries(counts).sort(([,a], [,b]) => b - a);
+      
+      results.innerHTML = `
+        <p style="margin-bottom: 16px;"><strong>Total Games:</strong> ${games.length}</p>
+        <h3 style="margin-bottom: 12px;">Player Game Counts:</h3>
+        <div class="data-table"><table>
+          <thead><tr><th>Player</th><th>Games</th></tr></thead>
+          <tbody>
+            ${sorted.map(([name, count]) => `<tr><td>${name}</td><td>${count}</td></tr>`).join('')}
+          </tbody>
+        </table></div>
+        <p style="margin-top: 12px; color: var(--text-muted);">Total: ${sorted.length} players</p>
+      `;
+    }
+
+    verifyBtn.addEventListener('click', updateResults);
+    updateResults();
+  </script>
+</body>
+</html>
