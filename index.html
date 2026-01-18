@@ -5,55 +5,59 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BasketStat Trends</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
   </head>
   <body>
     <header class="app-header">
       <div>
         <h1>BasketStat Trends</h1>
-        <p>Track player stats over time and surface simple trend insights.</p>
+        <p>Player performance tracking & analytics</p>
       </div>
       <nav>
-        <a href="admin.html">Admin Upload</a>
+        <a href="admin.html">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          Upload Data
+        </a>
       </nav>
     </header>
 
     <main class="app-shell">
       <section class="panel">
-        <h2>Player focus</h2>
+        <h2>Player Focus</h2>
         <div class="field">
           <label for="playerSelect">Player</label>
           <select id="playerSelect"></select>
         </div>
         <div class="field">
-          <label for="statSelect">Stat</label>
+          <label for="statSelect">Stat Category</label>
           <select id="statSelect"></select>
         </div>
         <div class="field">
-          <label for="dataPointSelect">Game datapoint</label>
+          <label for="dataPointSelect">Game</label>
           <select id="dataPointSelect"></select>
         </div>
         <div class="summary-card" id="highlightCard">
-          <p class="summary-label">Selected datapoint</p>
+          <p class="summary-label">Selected Game</p>
           <h3 id="highlightValue">—</h3>
-          <p id="highlightMeta">Choose a player to begin.</p>
+          <p id="highlightMeta">Select a player to begin</p>
         </div>
       </section>
 
       <section class="panel wide">
-        <h2>Trend overview</h2>
+        <h2>Performance Trend</h2>
         <div class="chart" id="chart"></div>
         <div class="insights">
-          <h3>AI Insights</h3>
-          <p id="insightText">Upload data to see automatic observations.</p>
+          <h3>Analysis</h3>
+          <p id="insightText">Upload data to see performance insights.</p>
         </div>
         <div class="data-table">
-          <h3>Game log</h3>
+          <h3>Game Log</h3>
           <table>
             <thead>
               <tr>
                 <th>Date</th>
                 <th>Opponent</th>
-                <th id="statHeader">Stat</th>
+                <th id="statHeader">Value</th>
               </tr>
             </thead>
             <tbody id="gameTable"></tbody>
@@ -63,7 +67,7 @@
     </main>
 
     <footer class="app-footer">
-      <span>Tip: Upload CSVs from the Admin page to build trends.</span>
+      <span>Upload game CSVs from the Admin page to build player trends</span>
     </footer>
 
     <script src="data.js"></script>

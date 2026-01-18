@@ -9,7 +9,7 @@ const renderGames = () => {
   if (games.length === 0) {
     gamesTable.innerHTML = `
       <tr>
-        <td colspan="5">No games uploaded yet.</td>
+        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 32px;">No games uploaded yet</td>
       </tr>
     `;
     return;
@@ -39,8 +39,8 @@ uploadForm.addEventListener("submit", async (event) => {
   const file = document.getElementById("csvFile").files[0];
 
   if (!date || !opponent || !league || !homeAway || !file) {
-    uploadStatus.textContent = "Missing data";
-    uploadDetails.textContent = "Please provide date, opponent, league, home/away, and CSV file.";
+    uploadStatus.textContent = "Missing";
+    uploadDetails.textContent = "Fill in all fields and select a CSV file";
     return;
   }
 
@@ -51,12 +51,12 @@ uploadForm.addEventListener("submit", async (event) => {
     data.games.sort((a, b) => new Date(a.date) - new Date(b.date));
     window.basketStatData.saveData(data);
 
-    uploadStatus.textContent = "Upload complete";
-    uploadDetails.textContent = `Added ${entries.length} players for ${opponent} (${league}, ${homeAway === "home" ? "Home" : "Away"}).`;
+    uploadStatus.textContent = "✓ Done";
+    uploadDetails.textContent = `${entries.length} players · ${opponent} · ${homeAway === "home" ? "Home" : "Away"}`;
     uploadForm.reset();
     renderGames();
   } catch (error) {
-    uploadStatus.textContent = "Upload failed";
+    uploadStatus.textContent = "✗ Error";
     uploadDetails.textContent = error.message;
   }
 });
@@ -65,8 +65,8 @@ clearData.addEventListener("click", () => {
   if (window.confirm("Clear all stored games?")) {
     window.basketStatData.saveData({ games: [] });
     renderGames();
-    uploadStatus.textContent = "Data cleared";
-    uploadDetails.textContent = "All stored games have been removed.";
+    uploadStatus.textContent = "Cleared";
+    uploadDetails.textContent = "All game data has been removed";
   }
 });
 

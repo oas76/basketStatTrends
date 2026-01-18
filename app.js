@@ -91,30 +91,36 @@ const updateDataPoints = (records, player, stat) => {
 
 const renderChart = (records, stat) => {
   if (records.length === 0) {
-    chart.innerHTML = "<p>No data yet.</p>";
+    chart.innerHTML = "<p>No data</p>";
     return;
   }
 
   const values = records.map((record) => getNumericStat(record.stats[stat]));
   const max = Math.max(...values, 1);
-  const points = values
-    .map((value, index) => {
-      const x = (index / Math.max(values.length - 1, 1)) * 100;
-      const y = 100 - (value / max) * 100;
-      return `${x},${y}`;
-    })
-    .join(" ");
+  const padding = 8;
+  
+  const pointsData = values.map((value, index) => {
+    const x = padding + (index / Math.max(values.length - 1, 1)) * (100 - padding * 2);
+    const y = padding + (1 - value / max) * (100 - padding * 2);
+    return { x, y };
+  });
+  
+  const linePoints = pointsData.map(p => `${p.x},${p.y}`).join(" ");
+  const dots = pointsData.map(p => 
+    `<circle cx="${p.x}" cy="${p.y}" r="2.5" fill="var(--accent)" />`
+  ).join("");
 
   chart.innerHTML = `
     <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-      <polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="2" />
+      <polyline points="${linePoints}" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      ${dots}
     </svg>
   `;
 };
 
 const renderInsight = (records, stat) => {
   if (records.length < 2) {
-    insightText.textContent = "Add at least two games for trend insights.";
+    insightText.textContent = "Need at least 2 games for trend analysis";
     return;
   }
 
@@ -126,15 +132,11 @@ const renderInsight = (records, stat) => {
   const trend = recentAverage - average;
 
   if (trend > 0.5) {
-    insightText.textContent = `The last ${recent.length} games are trending above the season average by ${trend.toFixed(
-      1
-    )} ${stat}. Keep leaning into what's working.`;
+    insightText.textContent = `↑ Trending up: Last ${recent.length} games averaging +${trend.toFixed(1)} ${stat} above season average (${average.toFixed(1)})`;
   } else if (trend < -0.5) {
-    insightText.textContent = `Recent production is ${Math.abs(trend).toFixed(
-      1
-    )} ${stat} below the season average. Consider a reset focus for this player.`;
+    insightText.textContent = `↓ Trending down: Recent ${stat} is ${Math.abs(trend).toFixed(1)} below season average (${average.toFixed(1)})`;
   } else {
-    insightText.textContent = `Consistency alert: recent ${stat} output mirrors the season average.`;
+    insightText.textContent = `→ Consistent: Recent ${stat} matches season average of ${average.toFixed(1)}`;
   }
 };
 
@@ -154,14 +156,14 @@ const updateHighlight = (records, stat, index) => {
 const refresh = () => {
   const data = buildData();
   if (data.length === 0) {
-    playerSelect.innerHTML = "<option>No data</option>";
-    statSelect.innerHTML = "<option>No data</option>";
-    dataPointSelect.innerHTML = "<option>No data</option>";
-    chart.innerHTML = "<p>No data yet. Upload CSVs from the Admin page.</p>";
-    insightText.textContent = "Upload data to see automatic observations.";
+    playerSelect.innerHTML = "<option>—</option>";
+    statSelect.innerHTML = "<option>—</option>";
+    dataPointSelect.innerHTML = "<option>—</option>";
+    chart.innerHTML = "<p>No game data yet</p>";
+    insightText.textContent = "Upload game CSVs to see performance analysis";
     gameTable.innerHTML = "";
     highlightValue.textContent = "—";
-    highlightMeta.textContent = "Upload a CSV to begin.";
+    highlightMeta.textContent = "Upload data to begin";
     return;
   }
 
