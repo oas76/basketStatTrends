@@ -3,7 +3,10 @@ const uploadForm = document.getElementById("uploadForm");
 const uploadStatus = document.getElementById("uploadStatus");
 const uploadDetails = document.getElementById("uploadDetails");
 const gamesTable = document.getElementById("gamesTable");
-const playersTable = document.getElementById("playersTable");
+const playersGrid = document.getElementById("playersGrid");
+const gameCount = document.getElementById("gameCount");
+const playerCount = document.getElementById("playerCount");
+const cloudBadge = document.getElementById("cloudBadge");
 const clearData = document.getElementById("clearData");
 
 // Edit Game Modal
@@ -36,6 +39,9 @@ const formatStatValue = (value) => {
 const renderGames = () => {
   const { games } = window.basketStatData.loadData();
   
+  // Update count
+  if (gameCount) gameCount.textContent = games.length;
+  
   if (games.length === 0) {
     gamesTable.innerHTML = `
       <tr>
@@ -48,8 +54,8 @@ const renderGames = () => {
   gamesTable.innerHTML = games
     .map((game) => {
       const playerNames = Object.keys(game.performances || {});
-      const playerCount = playerNames.length;
-      const locationLabel = game.homeAway === "home" ? "Home" : "Away";
+      const numPlayers = playerNames.length;
+      const locationLabel = game.homeAway === "home" ? "H" : "A";
       
       return `
         <tr data-game-id="${game.id}">
@@ -57,7 +63,7 @@ const renderGames = () => {
           <td>${game.opponent}</td>
           <td>${game.league || "—"}</td>
           <td>${locationLabel}</td>
-          <td>${playerCount} players</td>
+          <td>${numPlayers}</td>
           <td class="actions">
             <button class="btn-icon" onclick="viewGameStats('${game.id}')" title="View Stats">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -75,7 +81,7 @@ const renderGames = () => {
     .join("");
 };
 
-// Render players table
+// Render players grid
 const renderPlayers = () => {
   const { players } = window.basketStatData.loadData();
   
@@ -85,27 +91,32 @@ const renderPlayers = () => {
   // Get all unique player names from games
   const allPlayers = new Set([...Object.keys(players), ...Object.keys(gamesPlayed)]);
   
+  // Update count
+  if (playerCount) playerCount.textContent = allPlayers.size;
+  
+  if (!playersGrid) return;
+  
   if (allPlayers.size === 0) {
-    playersTable.innerHTML = `
-      <tr>
-        <td colspan="3" class="empty-state">No players yet</td>
-      </tr>
-    `;
+    playersGrid.innerHTML = `<p class="empty-state">No players yet</p>`;
     return;
   }
 
-  const sortedPlayers = Array.from(allPlayers).sort((a, b) => a.localeCompare(b));
+  const sortedPlayers = Array.from(allPlayers).sort((a, b) => {
+    // Sort by games played (descending), then by name
+    const countA = gamesPlayed[a] || 0;
+    const countB = gamesPlayed[b] || 0;
+    if (countB !== countA) return countB - countA;
+    return a.localeCompare(b);
+  });
 
-  playersTable.innerHTML = sortedPlayers
+  playersGrid.innerHTML = sortedPlayers
     .map((name) => {
-      const info = players[name] || {};
       const count = gamesPlayed[name] || 0;
       return `
-        <tr>
-          <td>${info.number || "—"}</td>
-          <td>${name}</td>
-          <td>${count}</td>
-        </tr>
+        <div class="player-chip">
+          <span class="name">${name}</span>
+          <span class="games">${count} games</span>
+        </div>
       `;
     })
     .join("");
@@ -422,15 +433,25 @@ const updateCloudSyncUI = () => {
   const config = getCloudConfig();
   
   if (config.apiKey) {
-    cloudStatusText.textContent = config.binId 
-      ? `☁️ Connected (Bin: ${config.binId.slice(0, 8)}...)`
-      : "☁️ Ready - will create new bin on first upload";
-    cloudSyncUpBtn.disabled = false;
-    cloudSyncDownBtn.disabled = !config.binId;
+    if (cloudStatusText) {
+      cloudStatusText.textContent = config.binId 
+        ? `Connected (${config.binId.slice(0, 8)}...)`
+        : "Ready - upload to create bin";
+    }
+    if (cloudBadge) {
+      cloudBadge.textContent = config.binId ? "Connected" : "Ready";
+      cloudBadge.className = "badge connected";
+    }
+    if (cloudSyncUpBtn) cloudSyncUpBtn.disabled = false;
+    if (cloudSyncDownBtn) cloudSyncDownBtn.disabled = !config.binId;
   } else {
-    cloudStatusText.textContent = "⚠️ Not configured - edit config.js";
-    cloudSyncUpBtn.disabled = true;
-    cloudSyncDownBtn.disabled = true;
+    if (cloudStatusText) cloudStatusText.textContent = "Not configured";
+    if (cloudBadge) {
+      cloudBadge.textContent = "Not configured";
+      cloudBadge.className = "badge";
+    }
+    if (cloudSyncUpBtn) cloudSyncUpBtn.disabled = true;
+    if (cloudSyncDownBtn) cloudSyncDownBtn.disabled = true;
   }
 };
 

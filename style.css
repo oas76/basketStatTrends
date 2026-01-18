@@ -618,11 +618,84 @@ button.secondary:hover {
   align-self: start;
 }
 
+/* ===== TRENDING INDEX ===== */
+.trending-index {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin: 16px 0;
+  text-align: center;
+}
+
+.trending-index-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.trending-index-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.trending-index-value.positive {
+  color: #22c55e;
+}
+
+.trending-index-value.negative {
+  color: #ef4444;
+}
+
+.trending-index-value.neutral {
+  color: #eab308;
+}
+
+.trending-index-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.trending-index-detail .up-count {
+  color: #22c55e;
+}
+
+.trending-index-detail .down-count {
+  color: #ef4444;
+}
+
+/* ===== SECTION HEADER WITH CONTEXT ===== */
+.section-header-with-context {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.section-header-with-context h2 {
+  margin: 0;
+}
+
+.trend-stat-indicator {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-dim);
+  padding: 4px 10px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .scorecard-grid {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 16px;
 }
 
 .stat-scorecard {
@@ -1459,49 +1532,229 @@ button.danger:hover {
 }
 
 /* ========================================
-   CLOUD SYNC STYLES
+   SETTINGS PAGE STYLES
    ======================================== */
 
-.cloud-sync-setup {
+.settings-layout {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 24px;
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.settings-column {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
 }
 
-.cloud-sync-setup .field {
-  margin-bottom: 8px;
+.settings-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
 }
 
-.cloud-sync-status {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.cloud-status-info {
+.settings-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px;
-  background: var(--surface-alt, rgba(255,255,255,0.03));
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  margin-bottom: 16px;
 }
 
-.cloud-status-info span {
-  font-size: 14px;
-  color: var(--positive, #22c55e);
+.settings-card-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
 }
 
-.cloud-sync-actions {
+.settings-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.button-row {
   display: flex;
   gap: 8px;
 }
 
-.cloud-sync-actions button {
+.button-row button,
+.button-row label {
   flex: 1;
+  justify-content: center;
 }
 
-.cloud-sync-actions button svg {
-  margin-right: 6px;
+.primary-btn {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.upload-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--surface-alt, rgba(255,255,255,0.03));
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.status-label {
+  color: var(--text-secondary);
+}
+
+#uploadStatus {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.status-detail {
+  color: var(--text-secondary);
+}
+
+.badge {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--surface-alt);
+  color: var(--text-secondary);
+}
+
+.badge.connected {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--positive);
+}
+
+.settings-details {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.settings-details summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.settings-details ol {
+  margin-top: 8px;
+  padding-left: 20px;
+  line-height: 1.8;
+}
+
+.settings-details a {
+  color: var(--accent);
+}
+
+.quick-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quick-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-alt, rgba(255,255,255,0.03));
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.quick-link:hover {
+  background: var(--surface-hover, rgba(255,255,255,0.06));
+}
+
+.quick-link svg {
+  opacity: 0.7;
+}
+
+.danger-link {
+  background: none;
+  border: none;
+  color: var(--negative);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.danger-link:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.players-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.player-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--surface-alt, rgba(255,255,255,0.03));
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.player-chip .name {
+  font-weight: 500;
+}
+
+.player-chip .games {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.settings-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.settings-link:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+@media (max-width: 900px) {
+  .settings-layout {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }

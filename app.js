@@ -2,6 +2,9 @@ const playerSelect = document.getElementById("playerSelect");
 const statSelect = document.getElementById("statSelect");
 const windowSizeSelect = document.getElementById("windowSize");
 const scorecardGrid = document.getElementById("scorecardGrid");
+const trendingIndexValue = document.getElementById("trendingIndexValue");
+const trendingIndexDetail = document.getElementById("trendingIndexDetail");
+const trendStatIndicator = document.getElementById("trendStatIndicator");
 const chart = document.getElementById("chart");
 const gameTable = document.getElementById("gameTable");
 const statHeader = document.getElementById("statHeader");
@@ -170,6 +173,60 @@ const getTrendIndicator = (trend, threshold = 0.5) => {
 };
 
 /**
+ * Calculate trending index - ratio of improving to declining trends
+ * Returns: { index, improving, declining, total }
+ */
+const calculateTrendingIndex = (records, windowSize) => {
+  const stats = getAvailableStats(records);
+  let improving = 0;
+  let declining = 0;
+  let stable = 0;
+  
+  stats.forEach(stat => {
+    const ws = calculateWindowedStats(records, stat, windowSize);
+    if (!ws || !ws.hasPrevWindow) return;
+    
+    const refStat = window.referenceStats?.getStatReference(stat);
+    const isInverted = refStat?.invertedScale || false;
+    
+    // Determine if this trend is improving or declining
+    // For inverted stats (TO, fouls), negative trend = improving
+    const trend = ws.avgTrend;
+    const threshold = 0.5;
+    
+    if (Math.abs(trend) < threshold) {
+      stable++;
+    } else if (isInverted) {
+      // Inverted: lower is better
+      if (trend < 0) improving++;
+      else declining++;
+    } else {
+      // Normal: higher is better
+      if (trend > 0) improving++;
+      else declining++;
+    }
+  });
+  
+  const total = improving + declining + stable;
+  
+  // Calculate index: ratio of improving to declining
+  // If no declining, use improving count as index
+  // If no improving, return 0
+  let index;
+  if (declining === 0 && improving === 0) {
+    index = 1; // All stable = neutral
+  } else if (declining === 0) {
+    index = improving + 1; // All improving = good (2, 3, 4, etc.)
+  } else if (improving === 0) {
+    index = 1 / (declining + 1); // All declining = bad (0.5, 0.33, 0.25, etc.)
+  } else {
+    index = improving / declining;
+  }
+  
+  return { index, improving, declining, stable, total };
+};
+
+/**
  * Render the player scorecard
  */
 const renderScorecard = (records, player, windowSize) => {
@@ -179,7 +236,37 @@ const renderScorecard = (records, player, windowSize) => {
   
   if (playerRecords.length === 0) {
     scorecardGrid.innerHTML = '<div class="no-data-message">No games recorded for this player</div>';
+    if (trendingIndexValue) {
+      trendingIndexValue.textContent = '—';
+      trendingIndexValue.className = 'trending-index-value';
+    }
+    if (trendingIndexDetail) trendingIndexDetail.textContent = '';
     return;
+  }
+  
+  // Calculate and render trending index
+  const trendIndex = calculateTrendingIndex(playerRecords, windowSize);
+  if (trendingIndexValue) {
+    trendingIndexValue.textContent = trendIndex.index.toFixed(2);
+    // Color based on index value
+    if (trendIndex.index > 1.2) {
+      trendingIndexValue.className = 'trending-index-value positive';
+    } else if (trendIndex.index < 0.8) {
+      trendingIndexValue.className = 'trending-index-value negative';
+    } else {
+      trendingIndexValue.className = 'trending-index-value neutral';
+    }
+  }
+  if (trendingIndexDetail) {
+    if (trendIndex.total === 0) {
+      trendingIndexDetail.innerHTML = 'Need more games for trend data';
+    } else {
+      trendingIndexDetail.innerHTML = `
+        <span class="up-count">↑ ${trendIndex.improving}</span> improving · 
+        <span class="down-count">↓ ${trendIndex.declining}</span> declining · 
+        ${trendIndex.stable} stable
+      `;
+    }
   }
   
   scorecardGrid.innerHTML = stats.map(stat => {
@@ -798,6 +885,11 @@ const updateChartAndTable = () => {
   const stat = statSelect.value;
   const records = updateGameTable(data, player, stat);
   renderChart(records, stat);
+  
+  // Update the trend stat indicator
+  if (trendStatIndicator) {
+    trendStatIndicator.textContent = getStatDisplayName(stat);
+  }
 };
 
 const updateView = () => {
