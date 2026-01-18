@@ -248,8 +248,28 @@ uploadForm.addEventListener("submit", async (event) => {
   }
 
   try {
+    // Parse CSV data
     const { performances, playersFound } = await window.basketStatData.parseCsv(file);
     
+    // Save CSV file to server
+    const formData = new FormData();
+    formData.append('csvFile', file);
+    
+    try {
+      const uploadResponse = await fetch('/api/upload-csv', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (uploadResponse.ok) {
+        const result = await uploadResponse.json();
+        console.log(`CSV saved to: ${result.path}`);
+      }
+    } catch (saveError) {
+      console.warn('Could not save CSV to server (server may not be running):', saveError);
+    }
+    
+    // Add game to local storage
     window.basketStatData.addGame({
       date,
       opponent,
@@ -257,16 +277,17 @@ uploadForm.addEventListener("submit", async (event) => {
       homeAway,
       performances,
       playersFound,
+      csvFile: file.name // Store reference to CSV filename
     });
 
     const playerCount = Object.keys(performances).length;
-    uploadStatus.textContent = "✓ Done";
-    uploadDetails.textContent = `${playerCount} players · ${opponent} · ${homeAway === "home" ? "Home" : "Away"}`;
+    uploadStatus.textContent = "Done";
+    uploadDetails.textContent = `${playerCount} players - ${opponent} - ${homeAway === "home" ? "Home" : "Away"}`;
     uploadForm.reset();
     renderGames();
     renderPlayers();
   } catch (error) {
-    uploadStatus.textContent = "✗ Error";
+    uploadStatus.textContent = "Error";
     uploadDetails.textContent = error.message;
   }
 });
@@ -284,7 +305,30 @@ clearData.addEventListener("click", () => {
 
 // Initial render
 // Clean up any existing data with players who have no valid stats
-window.basketStatData.cleanupData();
+const removedCount = window.basketStatData.cleanupData();
+if (removedCount > 0) {
+  console.log(`Cleaned up ${removedCount} player entries with no valid stats`);
+}
 
 renderGames();
 renderPlayers();
+
+// Report player game counts to console
+const reportPlayerCounts = () => {
+  const counts = window.basketStatData.getPlayerGameCounts();
+  console.log("=== Player Game Counts ===");
+  const sorted = Object.entries(counts).sort(([,a], [,b]) => b - a);
+  sorted.forEach(([name, count]) => console.log(`  ${name}: ${count} game(s)`));
+  console.log(`Total: ${sorted.length} players with games`);
+  return counts;
+};
+reportPlayerCounts();
+
+// Make rebuild available globally for manual use
+window.rebuildData = () => {
+  const removed = window.basketStatData.cleanupData();
+  renderGames();
+  renderPlayers();
+  console.log(`Rebuild complete. Removed ${removed} invalid entries.`);
+  return reportPlayerCounts();
+};

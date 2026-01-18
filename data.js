@@ -204,6 +204,7 @@ const addGame = (gameData) => {
     league: gameData.league,
     homeAway: gameData.homeAway,
     performances: gameData.performances,
+    csvFile: gameData.csvFile || null, // Reference to source CSV file
   };
   
   data.games.push(game);
