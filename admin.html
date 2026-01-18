@@ -3,15 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Upload | BasketStat</title>
+    <title>Admin | BasketStat</title>
     <link rel="stylesheet" href="style.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
   </head>
   <body>
     <header class="app-header">
       <div>
-        <h1>Data Upload</h1>
-        <p>Import game statistics from CSV files</p>
+        <h1>Data Management</h1>
+        <p>Upload, view, and edit game statistics</p>
       </div>
       <nav>
         <a href="index.html">
@@ -21,9 +21,10 @@
       </nav>
     </header>
 
-    <main class="app-shell">
+    <main class="app-shell admin-layout">
+      <!-- Upload Section -->
       <section class="panel">
-        <h2>New Game</h2>
+        <h2>Upload New Game</h2>
         <form id="uploadForm" class="upload-form">
           <div class="field">
             <label for="gameDate">Date</label>
@@ -58,12 +59,13 @@
         <div class="summary-card" id="uploadSummary">
           <p class="summary-label">Status</p>
           <h3 id="uploadStatus">Ready</h3>
-          <p id="uploadDetails">Uploaded games appear on the dashboard immediately</p>
+          <p id="uploadDetails">Uploaded games appear below</p>
         </div>
       </section>
 
+      <!-- Games List Section -->
       <section class="panel wide">
-        <h2>Uploaded Games</h2>
+        <h2>Games</h2>
         <div class="data-table">
           <table>
             <thead>
@@ -73,17 +75,94 @@
                 <th>League</th>
                 <th>H/A</th>
                 <th>Players</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="gamesTable"></tbody>
           </table>
         </div>
-        <button id="clearData" class="secondary" style="margin-top: 16px;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-          Clear All Data
-        </button>
+        <div class="action-bar">
+          <button id="clearData" class="secondary danger">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            Clear All Data
+          </button>
+        </div>
+      </section>
+
+      <!-- Player Registry Section -->
+      <section class="panel">
+        <h2>Player Registry</h2>
+        <div class="data-table compact">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Games</th>
+              </tr>
+            </thead>
+            <tbody id="playersTable"></tbody>
+          </table>
+        </div>
       </section>
     </main>
+
+    <!-- Edit Game Modal -->
+    <div class="modal-overlay" id="editGameModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Edit Game</h3>
+          <button class="modal-close" id="closeEditGame">&times;</button>
+        </div>
+        <form id="editGameForm" class="modal-body">
+          <input type="hidden" id="editGameId" />
+          <div class="field">
+            <label for="editGameDate">Date</label>
+            <input type="date" id="editGameDate" required />
+          </div>
+          <div class="field">
+            <label for="editOpponent">Opponent</label>
+            <input type="text" id="editOpponent" required />
+          </div>
+          <div class="field">
+            <label for="editLeague">League</label>
+            <input type="text" id="editLeague" required />
+          </div>
+          <div class="field">
+            <label for="editHomeAway">Location</label>
+            <select id="editHomeAway" required>
+              <option value="home">Home</option>
+              <option value="away">Away</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" id="cancelEditGame">Cancel</button>
+            <button type="submit">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- View/Edit Stats Modal -->
+    <div class="modal-overlay" id="statsModal">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h3 id="statsModalTitle">Game Stats</h3>
+          <button class="modal-close" id="closeStats">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="data-table">
+            <table id="statsTable">
+              <thead id="statsTableHead"></thead>
+              <tbody id="statsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="closeStatsBtn">Close</button>
+        </div>
+      </div>
+    </div>
 
     <footer class="app-footer">
       <span>Data stored locally in browser storage</span>

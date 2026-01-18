@@ -37,16 +37,30 @@ const getNumericStat = (value) => {
 const buildData = () => {
   const { games } = window.basketStatData.loadData();
   return games
-    .flatMap((game) =>
-      game.entries.map((entry) => ({
-        date: game.date,
-        opponent: game.opponent,
-        league: game.league,
-        homeAway: game.homeAway,
-        player: entry.name,
-        stats: entry.stats,
-      }))
-    )
+    .flatMap((game) => {
+      // Handle both old format (entries array) and new format (performances object)
+      if (game.performances) {
+        return Object.entries(game.performances).map(([playerName, stats]) => ({
+          date: game.date,
+          opponent: game.opponent,
+          league: game.league,
+          homeAway: game.homeAway,
+          player: playerName,
+          stats: stats,
+        }));
+      } else if (game.entries) {
+        // Legacy format support
+        return game.entries.map((entry) => ({
+          date: game.date,
+          opponent: game.opponent,
+          league: game.league,
+          homeAway: game.homeAway,
+          player: entry.name || entry.player,
+          stats: entry.stats,
+        }));
+      }
+      return [];
+    })
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 };
 
@@ -153,7 +167,21 @@ const updateHighlight = (records, stat, index) => {
   highlightMeta.textContent = `${formatDate(record.date)} ${locationLabel} ${record.opponent}`;
 };
 
-const refresh = () => {
+const updateView = () => {
+  const data = buildData();
+  if (data.length === 0) {
+    return;
+  }
+
+  const player = playerSelect.value;
+  const stat = statSelect.value;
+  const records = updateDataPoints(data, player, stat);
+  renderChart(records, stat);
+  renderInsight(records, stat);
+  updateHighlight(records, stat, dataPointSelect.selectedIndex || 0);
+};
+
+const init = () => {
   const data = buildData();
   if (data.length === 0) {
     playerSelect.innerHTML = "<option>—</option>";
@@ -167,17 +195,25 @@ const refresh = () => {
     return;
   }
 
+  // Store current selections to preserve them if possible
+  const currentPlayer = playerSelect.value;
+  const currentStat = statSelect.value;
+
   updateSelectors(data);
-  const player = playerSelect.value;
-  const stat = statSelect.value;
-  const records = updateDataPoints(data, player, stat);
-  renderChart(records, stat);
-  renderInsight(records, stat);
-  updateHighlight(records, stat, dataPointSelect.selectedIndex || 0);
+
+  // Restore selections if they still exist
+  if (currentPlayer && [...playerSelect.options].some(opt => opt.value === currentPlayer)) {
+    playerSelect.value = currentPlayer;
+  }
+  if (currentStat && [...statSelect.options].some(opt => opt.value === currentStat)) {
+    statSelect.value = currentStat;
+  }
+
+  updateView();
 };
 
-playerSelect.addEventListener("change", refresh);
-statSelect.addEventListener("change", refresh);
+playerSelect.addEventListener("change", updateView);
+statSelect.addEventListener("change", updateView);
 
 dataPointSelect.addEventListener("change", () => {
   const data = buildData();
@@ -185,4 +221,4 @@ dataPointSelect.addEventListener("change", () => {
   updateHighlight(records, statSelect.value, dataPointSelect.selectedIndex);
 });
 
-refresh();
+init();
