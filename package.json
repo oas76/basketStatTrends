@@ -1,0 +1,9 @@
+{
+  "name": "basketstat-trends",
+  "version": "1.0.0",
+  "description": "Simple stats dashboard for coaches.",
+  "private": true,
+  "scripts": {
+    "dev": "npx serve ."
+  }
+}
