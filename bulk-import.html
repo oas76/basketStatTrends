@@ -97,6 +97,13 @@
       renderFileList();
     });
 
+    // Escape HTML to prevent XSS
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
     function renderFileList() {
       if (selectedFiles.length === 0) {
         fileList.innerHTML = '<p style="color: var(--text-muted);">No files selected</p>';
@@ -104,31 +111,88 @@
         return;
       }
 
-      fileList.innerHTML = '<h3 style="margin-bottom: 12px;">Files to import:</h3>' +
-        '<div class="data-table"><table><thead><tr><th>File</th><th>Date</th><th>Opponent</th><th>League</th><th>H/A</th></tr></thead><tbody>' +
-        selectedFiles.map(file => {
-          const meta = knownGames[file.name] || { date: '', opponent: '?', league: '?', homeAway: '?' };
-          gameMetadata[file.name] = meta;
-          return `<tr>
-            <td>${file.name}</td>
-            <td><input type="date" value="${meta.date}" onchange="updateMeta('${file.name}', 'date', this.value)" style="width: 130px;"></td>
-            <td><input type="text" value="${meta.opponent}" onchange="updateMeta('${file.name}', 'opponent', this.value)" style="width: 120px;"></td>
-            <td><input type="text" value="${meta.league}" onchange="updateMeta('${file.name}', 'league', this.value)" style="width: 100px;"></td>
-            <td><select onchange="updateMeta('${file.name}', 'homeAway', this.value)">
-              <option value="home" ${meta.homeAway === 'home' ? 'selected' : ''}>Home</option>
-              <option value="away" ${meta.homeAway === 'away' ? 'selected' : ''}>Away</option>
-            </select></td>
-          </tr>`;
-        }).join('') +
-        '</tbody></table></div>';
+      // Build table structure
+      const table = document.createElement('div');
+      table.innerHTML = '<h3 style="margin-bottom: 12px;">Files to import:</h3>' +
+        '<div class="data-table"><table><thead><tr><th>File</th><th>Date</th><th>Opponent</th><th>League</th><th>H/A</th></tr></thead><tbody id="fileTableBody"></tbody></table></div>';
+      
+      fileList.innerHTML = '';
+      fileList.appendChild(table);
+      
+      const tbody = document.getElementById('fileTableBody');
+      
+      selectedFiles.forEach((file, index) => {
+        const meta = knownGames[file.name] || { date: '', opponent: '?', league: '?', homeAway: '?' };
+        gameMetadata[file.name] = meta;
+        
+        const tr = document.createElement('tr');
+        tr.dataset.fileIndex = index;
+        
+        // Filename cell (escaped)
+        const tdName = document.createElement('td');
+        tdName.textContent = file.name;
+        tr.appendChild(tdName);
+        
+        // Date input
+        const tdDate = document.createElement('td');
+        const dateInput = document.createElement('input');
+        dateInput.type = 'date';
+        dateInput.value = meta.date;
+        dateInput.style.width = '130px';
+        dateInput.dataset.field = 'date';
+        tdDate.appendChild(dateInput);
+        tr.appendChild(tdDate);
+        
+        // Opponent input
+        const tdOpponent = document.createElement('td');
+        const opponentInput = document.createElement('input');
+        opponentInput.type = 'text';
+        opponentInput.value = meta.opponent;
+        opponentInput.style.width = '120px';
+        opponentInput.dataset.field = 'opponent';
+        tdOpponent.appendChild(opponentInput);
+        tr.appendChild(tdOpponent);
+        
+        // League input
+        const tdLeague = document.createElement('td');
+        const leagueInput = document.createElement('input');
+        leagueInput.type = 'text';
+        leagueInput.value = meta.league;
+        leagueInput.style.width = '100px';
+        leagueInput.dataset.field = 'league';
+        tdLeague.appendChild(leagueInput);
+        tr.appendChild(tdLeague);
+        
+        // Home/Away select
+        const tdHomeAway = document.createElement('td');
+        const homeAwaySelect = document.createElement('select');
+        homeAwaySelect.dataset.field = 'homeAway';
+        homeAwaySelect.innerHTML = `
+          <option value="home" ${meta.homeAway === 'home' ? 'selected' : ''}>Home</option>
+          <option value="away" ${meta.homeAway === 'away' ? 'selected' : ''}>Away</option>
+        `;
+        tdHomeAway.appendChild(homeAwaySelect);
+        tr.appendChild(tdHomeAway);
+        
+        tbody.appendChild(tr);
+      });
+      
+      // Event delegation for all inputs/selects
+      tbody.addEventListener('change', (e) => {
+        const field = e.target.dataset.field;
+        if (!field) return;
+        
+        const row = e.target.closest('tr');
+        const fileIndex = parseInt(row.dataset.fileIndex, 10);
+        const file = selectedFiles[fileIndex];
+        
+        if (file && gameMetadata[file.name]) {
+          gameMetadata[file.name][field] = e.target.value;
+        }
+      });
       
       importBtn.disabled = false;
     }
-
-    window.updateMeta = (filename, field, value) => {
-      if (!gameMetadata[filename]) gameMetadata[filename] = {};
-      gameMetadata[filename][field] = value;
-    };
 
     // Import all files
     importBtn.addEventListener('click', async () => {

@@ -39,6 +39,29 @@ const upload = multer({
 // Serve static files
 app.use(express.static(__dirname));
 
+/**
+ * Validate that a filename is safe and resolves within the csv directory.
+ * Prevents path traversal attacks (e.g., ../../etc/passwd)
+ * @param {string} filename - The filename to validate
+ * @returns {string|null} - Safe absolute path or null if invalid
+ */
+function getSafeFilePath(filename) {
+  // Reject if filename contains path separators or is empty
+  if (!filename || filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+    return null;
+  }
+  
+  // Resolve the full path
+  const filePath = path.resolve(csvDir, filename);
+  
+  // Ensure the resolved path is within csvDir
+  if (!filePath.startsWith(csvDir + path.sep) && filePath !== csvDir) {
+    return null;
+  }
+  
+  return filePath;
+}
+
 // API: Upload CSV file
 app.post('/api/upload-csv', upload.single('csvFile'), (req, res) => {
   if (!req.file) {
@@ -80,7 +103,12 @@ app.get('/api/csv-files', (req, res) => {
 
 // API: Get CSV file content
 app.get('/api/csv/:filename', (req, res) => {
-  const filePath = path.join(csvDir, req.params.filename);
+  const filePath = getSafeFilePath(req.params.filename);
+  
+  // Reject path traversal attempts
+  if (!filePath) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
   
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ error: 'File not found' });
