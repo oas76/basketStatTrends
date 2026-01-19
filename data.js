@@ -3,9 +3,14 @@ const STORAGE_KEY = "basketstat-data";
 /**
  * Data Structure:
  * {
- *   players: { [name]: { number, active } },
+ *   players: { [name]: { number, active, height, position, birthdate } },
  *   games: [{ id, date, opponent, league, homeAway, performances: { [playerName]: stats } }]
  * }
+ * 
+ * Player profile fields:
+ * - height: number (in meters, e.g., 1.75)
+ * - position: string (e.g., "PG", "SG", "SF", "PF", "C")
+ * - birthdate: string (ISO date, e.g., "2010-05-15")
  */
 
 const loadData = () => {
@@ -305,6 +310,39 @@ const updatePlayer = (playerName, updates) => {
   }
   data.players[playerName] = { ...data.players[playerName], ...updates };
   saveData(data);
+};
+
+/**
+ * Get player profile info
+ */
+const getPlayerProfile = (playerName) => {
+  const data = loadData();
+  const player = data.players[playerName];
+  if (!player) {
+    return { number: null, active: true, height: null, position: null, birthdate: null };
+  }
+  return {
+    number: player.number || null,
+    active: player.active !== false,
+    height: player.height || null,
+    position: player.position || null,
+    birthdate: player.birthdate || null
+  };
+};
+
+/**
+ * Calculate age from birthdate
+ */
+const calculateAge = (birthdate) => {
+  if (!birthdate) return null;
+  const birth = new Date(birthdate);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
 };
 
 /**
@@ -807,6 +845,8 @@ window.basketStatData = {
   deleteGame,
   updatePlayerStats,
   updatePlayer,
+  getPlayerProfile,
+  calculateAge,
   getAllStatKeys,
   cleanupData,
   getPlayerGameCounts,

@@ -48,6 +48,60 @@
           </select>
         </div>
         
+        <!-- Player Profile Card -->
+        <div class="player-profile-card" id="playerProfileCard">
+          <div class="profile-header">
+            <span class="profile-number" id="profileNumber">#—</span>
+            <button type="button" class="profile-edit-btn" id="profileEditBtn" title="Edit profile">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            </button>
+          </div>
+          <div class="profile-details">
+            <div class="profile-item">
+              <span class="profile-label">Position</span>
+              <span class="profile-value" id="profilePosition">—</span>
+            </div>
+            <div class="profile-item">
+              <span class="profile-label">Height</span>
+              <span class="profile-value" id="profileHeight">—</span>
+            </div>
+            <div class="profile-item">
+              <span class="profile-label">Age</span>
+              <span class="profile-value" id="profileAge">—</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Player Profile Edit Modal -->
+        <div id="profileModal" class="profile-modal" style="display: none;">
+          <div class="profile-modal-content">
+            <h3>Edit Player Profile</h3>
+            <div class="field">
+              <label for="editHeight">Height (m)</label>
+              <input type="number" id="editHeight" step="0.01" min="1.00" max="2.50" placeholder="e.g., 1.75">
+            </div>
+            <div class="field">
+              <label for="editPosition">Primary Position</label>
+              <select id="editPosition">
+                <option value="">Select position...</option>
+                <option value="PG">PG - Point Guard</option>
+                <option value="SG">SG - Shooting Guard</option>
+                <option value="SF">SF - Small Forward</option>
+                <option value="PF">PF - Power Forward</option>
+                <option value="C">C - Center</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="editBirthdate">Birth Date</label>
+              <input type="date" id="editBirthdate">
+            </div>
+            <div class="profile-modal-actions">
+              <button type="button" id="cancelProfileBtn" class="btn-secondary">Cancel</button>
+              <button type="button" id="saveProfileBtn" class="btn-primary">Save</button>
+            </div>
+          </div>
+        </div>
+        
         <!-- Trending Index -->
         <div class="trending-index" id="trendingIndex">
           <div class="trending-index-label">Trending Index</div>

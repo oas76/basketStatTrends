@@ -10,6 +10,19 @@ const chart = document.getElementById("chart");
 const gameTable = document.getElementById("gameTable");
 const statHeader = document.getElementById("statHeader");
 
+// Player profile elements
+const profileNumber = document.getElementById("profileNumber");
+const profilePosition = document.getElementById("profilePosition");
+const profileHeight = document.getElementById("profileHeight");
+const profileAge = document.getElementById("profileAge");
+const profileEditBtn = document.getElementById("profileEditBtn");
+const profileModal = document.getElementById("profileModal");
+const editHeight = document.getElementById("editHeight");
+const editPosition = document.getElementById("editPosition");
+const editBirthdate = document.getElementById("editBirthdate");
+const saveProfileBtn = document.getElementById("saveProfileBtn");
+const cancelProfileBtn = document.getElementById("cancelProfileBtn");
+
 // Aggregate stat elements
 const AGGREGATE_STATS = ['atk', 'def', 'shoot'];
 
@@ -1039,6 +1052,9 @@ const updateView = () => {
   const player = playerSelect.value;
   const windowSize = parseInt(windowSizeSelect?.value || '5', 10);
   
+  // Render player profile card
+  renderPlayerProfile(player);
+  
   // Render scorecard for player
   renderScorecard(data, player, windowSize);
   
@@ -1149,6 +1165,165 @@ playerSelect.addEventListener("change", updateView);
 
 if (windowSizeSelect) {
   windowSizeSelect.addEventListener("change", updateView);
+}
+
+// ========================================
+// PLAYER PROFILE FUNCTIONALITY
+// ========================================
+
+/**
+ * Render the player profile card
+ */
+const renderPlayerProfile = (playerName) => {
+  if (!playerName || !profileNumber) return;
+  
+  const profile = window.basketStatData.getPlayerProfile(playerName);
+  
+  // Update number
+  profileNumber.textContent = profile.number ? `#${profile.number}` : '#—';
+  
+  // Update position
+  if (profilePosition) {
+    profilePosition.textContent = profile.position || '—';
+  }
+  
+  // Update height (in meters)
+  if (profileHeight) {
+    profileHeight.textContent = profile.height ? `${profile.height}m` : '—';
+  }
+  
+  // Update age (calculated from birthdate)
+  if (profileAge) {
+    const age = window.basketStatData.calculateAge(profile.birthdate);
+    profileAge.textContent = age !== null ? `${age}y` : '—';
+  }
+};
+
+/**
+ * Open the profile edit modal
+ */
+const openProfileModal = () => {
+  const playerName = playerSelect.value;
+  if (!playerName) return;
+  
+  const profile = window.basketStatData.getPlayerProfile(playerName);
+  
+  // Populate form fields
+  if (editHeight) editHeight.value = profile.height || '';
+  if (editPosition) editPosition.value = profile.position || '';
+  if (editBirthdate) editBirthdate.value = profile.birthdate || '';
+  
+  // Show modal
+  if (profileModal) {
+    profileModal.style.display = 'flex';
+  }
+};
+
+/**
+ * Close the profile edit modal
+ */
+const closeProfileModal = () => {
+  if (profileModal) {
+    profileModal.style.display = 'none';
+  }
+};
+
+/**
+ * Sync data to cloud (if configured)
+ */
+const syncToCloud = async () => {
+  const config = window.CLOUD_CONFIG;
+  if (!config || !config.apiKey || !config.binId) {
+    return false;
+  }
+  
+  try {
+    const localData = window.basketStatData.loadData();
+    
+    const response = await fetch(`https://api.jsonbin.io/v3/b/${config.binId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Master-Key": config.apiKey
+      },
+      body: JSON.stringify(localData)
+    });
+    
+    if (!response.ok) {
+      console.warn("Cloud sync failed:", response.status);
+      return false;
+    }
+    
+    console.log("✓ Synced to cloud");
+    return true;
+  } catch (error) {
+    console.warn("Cloud sync error:", error.message);
+    return false;
+  }
+};
+
+/**
+ * Save the player profile
+ */
+const savePlayerProfile = async () => {
+  const playerName = playerSelect.value;
+  if (!playerName) return;
+  
+  const updates = {};
+  
+  // Get height value
+  if (editHeight && editHeight.value) {
+    const height = parseFloat(editHeight.value);
+    if (!isNaN(height) && height >= 1.0 && height <= 2.5) {
+      updates.height = Math.round(height * 100) / 100; // Round to 2 decimal places
+    }
+  } else {
+    updates.height = null;
+  }
+  
+  // Get position value
+  if (editPosition) {
+    updates.position = editPosition.value || null;
+  }
+  
+  // Get birthdate value
+  if (editBirthdate) {
+    updates.birthdate = editBirthdate.value || null;
+  }
+  
+  // Save to data layer (localStorage)
+  window.basketStatData.updatePlayer(playerName, updates);
+  
+  // Sync to cloud
+  await syncToCloud();
+  
+  // Re-render profile
+  renderPlayerProfile(playerName);
+  
+  // Close modal
+  closeProfileModal();
+};
+
+// Profile event listeners
+if (profileEditBtn) {
+  profileEditBtn.addEventListener('click', openProfileModal);
+}
+
+if (cancelProfileBtn) {
+  cancelProfileBtn.addEventListener('click', closeProfileModal);
+}
+
+if (saveProfileBtn) {
+  saveProfileBtn.addEventListener('click', savePlayerProfile);
+}
+
+// Close modal on backdrop click
+if (profileModal) {
+  profileModal.addEventListener('click', (e) => {
+    if (e.target === profileModal) {
+      closeProfileModal();
+    }
+  });
 }
 
 // ========================================
@@ -1268,6 +1443,10 @@ const buildAiContext = (playerName, records, windowSize) => {
   const analysis = analyzePlayerPerformance(records, windowSize);
   const stats = getAvailableStats(records);
   
+  // Get player profile info
+  const profile = window.basketStatData.getPlayerProfile(playerName);
+  const playerAge = window.basketStatData.calculateAge(profile.birthdate);
+  
   // Build detailed stats summary
   let statsContext = [];
   stats.forEach(stat => {
@@ -1302,6 +1481,9 @@ const buildAiContext = (playerName, records, windowSize) => {
 
   return {
     player: playerName,
+    age: playerAge,
+    height: profile.height,
+    position: profile.position,
     ageGroup: 'U14-U16 (14-16 years old)',
     league: 'Norwegian junior basketball (1. divisjon)',
     windowSize,
@@ -1321,10 +1503,20 @@ const buildAiContext = (playerName, records, windowSize) => {
  * Build the prompt for Gemini
  */
 const buildGeminiPrompt = (context) => {
+  // Build player profile string
+  const profileParts = [];
+  if (context.age) profileParts.push(`${context.age} years old`);
+  if (context.height) profileParts.push(`${context.height}m tall`);
+  if (context.position) {
+    const positionNames = { PG: 'Point Guard', SG: 'Shooting Guard', SF: 'Small Forward', PF: 'Power Forward', C: 'Center' };
+    profileParts.push(positionNames[context.position] || context.position);
+  }
+  const profileStr = profileParts.length > 0 ? `PLAYER PROFILE: ${profileParts.join(', ')}\n` : '';
+
   return `You are an experienced youth basketball coach providing analysis for a player. Be encouraging but honest. Focus on actionable advice.
 
 PLAYER: ${context.player}
-AGE GROUP: ${context.ageGroup}
+${profileStr}AGE GROUP: ${context.ageGroup}
 LEAGUE: ${context.league}
 ANALYSIS WINDOW: Last ${context.windowSize} games (${context.totalGames} total games played)
 
@@ -1342,8 +1534,8 @@ RECENT GAME LOG:
 ${context.recentGames.map(g => `${g.date} vs ${g.opponent}: ${g.pts} pts, ${g.fg} FG, ${g.asst} ast, ${g.to} TO`).join('\n')}
 
 Please provide a brief coaching analysis (3-4 short paragraphs) that includes:
-1. Overall assessment - how is the player performing for their age group?
-2. Key strengths to build on and how to leverage them
+1. Overall assessment - how is the player performing for their age group?${context.position ? ' Consider their position.' : ''}
+2. Key strengths to build on and how to leverage them${context.height ? ' (consider their height)' : ''}
 3. One or two specific areas to focus on improving, with a simple drill or practice tip
 4. Motivational closing with realistic short-term goal
 
