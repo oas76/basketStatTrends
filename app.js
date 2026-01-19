@@ -29,13 +29,11 @@ const formatStatValue = (value) => {
 
 /**
  * Get numeric value from a stat for calculations/charting
- * For made-attempted, returns the "made" value
+ * Uses the shared function from data.js
  */
-const getNumericStat = (value) => {
+const getNumericStatValue = (value) => {
   if (value === null || value === undefined) return 0;
-  if (typeof value === "object" && "made" in value) {
-    return value.made;
-  }
+  if (typeof value === "object" && "made" in value) return value.made;
   return Number(value) || 0;
 };
 
@@ -46,8 +44,8 @@ const buildData = () => {
       // Handle both old format (entries array) and new format (performances object)
       if (game.performances) {
         return Object.entries(game.performances).map(([playerName, stats]) => ({
-          date: game.date,
-          opponent: game.opponent,
+        date: game.date,
+        opponent: game.opponent,
           league: game.league,
           homeAway: game.homeAway,
           player: playerName,
@@ -61,7 +59,7 @@ const buildData = () => {
           league: game.league,
           homeAway: game.homeAway,
           player: entry.name || entry.player,
-          stats: entry.stats,
+        stats: entry.stats,
         }));
       }
       return [];
@@ -70,10 +68,10 @@ const buildData = () => {
 };
 
 // Stats to hide from the dashboard
-const HIDDEN_STATS = ['min', '+/-'];
+const HIDDEN_STATS = ['+/-'];
 
-// Stat display order
-const STAT_ORDER = ['pts', 'fg', 'fg%', '3pt', '3pt%', 'ft', 'ft%', 'oreb', 'dreb', 'asst', 'stl', 'blk', 'to', 'foul', 'a/to'];
+// Stat display order (min first as it's contextual, then scoring stats)
+const STAT_ORDER = ['min', 'pts', 'fg', 'fg%', '3pt', '3pt%', 'ft', 'ft%', 'oreb', 'dreb', 'asst', 'stl', 'blk', 'to', 'foul', 'a/to'];
 
 const updatePlayerSelector = (records) => {
   const players = window.basketStatData.unique(records.map((record) => record.player));
@@ -98,69 +96,11 @@ const getAvailableStats = (records) => {
 
 /**
  * Calculate windowed statistics for a stat
+ * Uses the shared implementation from data.js
  */
 const calculateWindowedStats = (records, stat, windowSize) => {
-  // Filter to records with valid stat values
-  const validRecords = records.filter(r => hasValidStatValue(r.stats[stat]));
-  const values = validRecords.map(r => getNumericStat(r.stats[stat]));
-  
-  if (values.length === 0) {
-    return null;
-  }
-  
-  // Current window (last N games)
-  const currentWindow = values.slice(-windowSize);
-  // Previous window (N games before current window)
-  const prevWindow = values.slice(-windowSize * 2, -windowSize);
-  
-  if (currentWindow.length === 0) {
-    return null;
-  }
-  
-  // Calculate current window stats
-  const currentAvg = currentWindow.reduce((a, b) => a + b, 0) / currentWindow.length;
-  const sortedCurrent = [...currentWindow].sort((a, b) => a - b);
-  const currentMedian = sortedCurrent.length % 2 === 0
-    ? (sortedCurrent[sortedCurrent.length / 2 - 1] + sortedCurrent[sortedCurrent.length / 2]) / 2
-    : sortedCurrent[Math.floor(sortedCurrent.length / 2)];
-  const currentMax = Math.max(...currentWindow);
-  const currentMin = Math.min(...currentWindow);
-  
-  // Calculate previous window stats (if available)
-  let prevAvg = null;
-  let prevMedian = null;
-  let prevMax = null;
-  let prevMin = null;
-  
-  if (prevWindow.length >= 3) {
-    prevAvg = prevWindow.reduce((a, b) => a + b, 0) / prevWindow.length;
-    const sortedPrev = [...prevWindow].sort((a, b) => a - b);
-    prevMedian = sortedPrev.length % 2 === 0
-      ? (sortedPrev[sortedPrev.length / 2 - 1] + sortedPrev[sortedPrev.length / 2]) / 2
-      : sortedPrev[Math.floor(sortedPrev.length / 2)];
-    prevMax = Math.max(...prevWindow);
-    prevMin = Math.min(...prevWindow);
-  }
-  
-  // Calculate trends
-  const avgTrend = prevAvg !== null ? currentAvg - prevAvg : 0;
-  const medianTrend = prevMedian !== null ? currentMedian - prevMedian : 0;
-  const varianceTrend = prevMax !== null && prevMin !== null 
-    ? ((currentMax - currentMin) - (prevMax - prevMin)) 
-    : 0;
-  
-  return {
-    gamesInWindow: currentWindow.length,
-    totalGames: values.length,
-    average: currentAvg,
-    avgTrend,
-    median: currentMedian,
-    medianTrend,
-    max: currentMax,
-    min: currentMin,
-    varianceTrend,
-    hasPrevWindow: prevWindow.length >= 3
-  };
+  // Use the shared function - statsNested=true for dashboard format
+  return window.basketStatData.calculateWindowedStatsShared(records, stat, windowSize, true);
 };
 
 /**
@@ -487,17 +427,17 @@ const updateGameTable = (records, player, stat) => {
   
   if (statHeader) statHeader.textContent = stat;
   if (gameTable) {
-    gameTable.innerHTML = filtered
-      .map(
-        (record) => `
-          <tr>
-            <td>${formatDate(record.date)}</td>
-            <td>${record.opponent}</td>
+  gameTable.innerHTML = filtered
+    .map(
+      (record) => `
+        <tr>
+          <td>${formatDate(record.date)}</td>
+          <td>${record.opponent}</td>
             <td>${formatStatValue(record.stats[stat])}</td>
-          </tr>
-        `
-      )
-      .join("");
+        </tr>
+      `
+    )
+    .join("");
   }
 
   return filtered;
@@ -532,11 +472,11 @@ const getPerformanceColor = (value, stat) => {
 };
 
 /**
- * Check if a stat value is meaningful (not null, not empty, has actual data)
+ * Check if a stat value is meaningful for display (not null, has actual data)
  * For made-attempted stats, requires at least 1 attempt
- * For percentages, requires a non-null value
+ * Uses shared function from data.js when checking for calculations
  */
-const hasValidStatValue = (statValue) => {
+const hasValidStatForDisplay = (statValue) => {
   if (statValue === null || statValue === undefined) return false;
   
   // For made-attempted objects (fg, 3fg, ft), check if there were any attempts
@@ -555,14 +495,14 @@ const renderChart = (records, stat) => {
   }
 
   // Filter records to only include those with valid stat values
-  const validRecords = records.filter(record => hasValidStatValue(record.stats[stat]));
+  const validRecords = records.filter(record => hasValidStatForDisplay(record.stats[stat]));
   
   if (validRecords.length === 0) {
     chart.innerHTML = "<p>No data for this stat</p>";
     return;
   }
 
-  const values = validRecords.map((record) => getNumericStat(record.stats[stat]));
+  const values = validRecords.map((record) => getNumericStatValue(record.stats[stat]));
   const average = values.reduce((sum, v) => sum + v, 0) / values.length;
   const max = Math.max(...values, 1);
   
@@ -669,7 +609,7 @@ const renderChart = (records, stat) => {
         <!-- Data line -->
         <polyline points="${linePoints}" fill="none" stroke="url(#lineGradient)" stroke-width="2.5" 
                   stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
-      </svg>
+    </svg>
       
       <!-- HTML points layer -->
       <div class="chart-points">
@@ -766,10 +706,10 @@ const analyzePlayerPerformance = (records, windowSize) => {
 
   // Analyze each stat category
   stats.forEach(stat => {
-    const validRecords = records.filter(r => hasValidStatValue(r.stats[stat]));
+    const validRecords = records.filter(r => window.basketStatData.hasValidStatValue(r.stats[stat]));
     if (validRecords.length < 2) return;
     
-    const values = validRecords.map(r => getNumericStat(r.stats[stat]));
+    const values = validRecords.map(r => getNumericStatValue(r.stats[stat]));
     const recentValues = values.slice(-windowSize);
     const previousValues = values.slice(-windowSize * 2, -windowSize);
     
@@ -1274,10 +1214,10 @@ const buildAiContext = (playerName, records, windowSize) => {
   // Build detailed stats summary
   let statsContext = [];
   stats.forEach(stat => {
-    const validRecords = records.filter(r => hasValidStatValue(r.stats[stat]));
+    const validRecords = records.filter(r => window.basketStatData.hasValidStatValue(r.stats[stat]));
     if (validRecords.length < 2) return;
     
-    const values = validRecords.map(r => getNumericStat(r.stats[stat]));
+    const values = validRecords.map(r => getNumericStatValue(r.stats[stat]));
     const recentValues = values.slice(-windowSize);
     const avg = recentValues.reduce((a, b) => a + b, 0) / recentValues.length;
     const refStat = window.referenceStats?.getStatReference(stat);
@@ -1297,10 +1237,10 @@ const buildAiContext = (playerName, records, windowSize) => {
   const recentGames = records.slice(-windowSize).map(r => ({
     date: r.date,
     opponent: r.opponent,
-    pts: getNumericStat(r.stats.pts),
+    pts: getNumericStatValue(r.stats.pts),
     fg: r.stats.fg ? `${r.stats.fg.made}-${r.stats.fg.attempted}` : '-',
-    asst: getNumericStat(r.stats.asst),
-    to: getNumericStat(r.stats.to)
+    asst: getNumericStatValue(r.stats.asst),
+    to: getNumericStatValue(r.stats.to)
   }));
 
   return {

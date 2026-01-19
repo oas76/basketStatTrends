@@ -226,6 +226,7 @@ const addGame = (gameData) => {
   Object.entries(gameData.performances || {}).forEach(([name, stats]) => {
     performancesWithComputed[name] = {
       ...stats,
+      'reb': computeTotalRebounds(stats),
       'a/to': computeAstToRatio(stats),
       'atk': computeAttackEnergy(stats),
       'def': computeDefenceDomination(stats),
@@ -406,6 +407,22 @@ const computeAstToRatio = (stats) => {
 };
 
 /**
+ * Compute Total Rebounds (REB)
+ * Sum of offensive and defensive rebounds
+ */
+const computeTotalRebounds = (stats) => {
+  const oreb = typeof stats.oreb === 'number' ? stats.oreb : 0;
+  const dreb = typeof stats.dreb === 'number' ? stats.dreb : 0;
+  
+  // If both are 0, return null (no rebounding activity)
+  if (oreb === 0 && dreb === 0) {
+    return null;
+  }
+  
+  return oreb + dreb;
+};
+
+/**
  * Compute Attack Energy (ATK)
  * Higher is better - measures offensive involvement/aggression per minute
  * Formula: (FG Attempts + FT Attempts + Assists + Offensive Rebounds) / Minutes
@@ -526,6 +543,7 @@ const computeShootingStar = (stats) => {
 const addComputedStats = (stats) => {
   return {
     ...stats,
+    'reb': computeTotalRebounds(stats),
     'a/to': computeAstToRatio(stats),
     'atk': computeAttackEnergy(stats),
     'def': computeDefenceDomination(stats),
@@ -543,6 +561,13 @@ const addComputedStatsToAllGames = () => {
   
   data.games.forEach((game) => {
     Object.entries(game.performances || {}).forEach(([name, stats]) => {
+      // Compute Total Rebounds
+      const totalReb = computeTotalRebounds(stats);
+      if (stats['reb'] !== totalReb) {
+        stats['reb'] = totalReb;
+        updated = true;
+      }
+      
       // Compute A/TO ratio
       const atoRatio = computeAstToRatio(stats);
       if (stats['a/to'] !== atoRatio) {
@@ -591,6 +616,7 @@ const forceRecomputeAllStats = () => {
   
   data.games.forEach((game) => {
     Object.entries(game.performances || {}).forEach(([name, stats]) => {
+      stats['reb'] = computeTotalRebounds(stats);
       stats['a/to'] = computeAstToRatio(stats);
       stats['atk'] = computeAttackEnergy(stats);
       stats['def'] = computeDefenceDomination(stats);
@@ -606,6 +632,170 @@ const forceRecomputeAllStats = () => {
 
 // Note: Computed stats are now added in app.js after data is fully loaded
 // This ensures cloud data is processed correctly
+
+/**
+ * Get numeric value from a stat (handles made/attempted objects)
+ */
+const getNumericStat = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'object' && value !== null && 'made' in value) {
+    return value.made;
+  }
+  const num = typeof value === 'number' ? value : Number(value);
+  return isNaN(num) ? null : num;
+};
+
+/**
+ * Check if a stat value is valid for calculations
+ */
+const hasValidStatValue = (value) => {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'object' && 'made' in value) {
+    return typeof value.made === 'number';
+  }
+  return typeof value === 'number' || !isNaN(Number(value));
+};
+
+/**
+ * Calculate windowed statistics for a player's stat
+ * This is the canonical implementation used by both dashboard and team views
+ * 
+ * @param {Array} playerRecords - Array of {date, stats: {...}} or {date, ...stats}
+ * @param {string} stat - The stat key to calculate
+ * @param {number|string} windowSize - Number of games or 'all'
+ * @param {boolean} statsNested - Whether stats are in a nested .stats object (true for dashboard, false for team)
+ * @returns {Object|null} Windowed stats including avg, median, trends, etc.
+ */
+const calculateWindowedStatsShared = (playerRecords, stat, windowSize, statsNested = true) => {
+  // Sort by date ascending (oldest first)
+  const sorted = [...playerRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+  
+  // For made/attempted stats (fg, 3pt, ft), also track totals
+  const madeAttemptedStats = ['fg', '3pt', 'ft'];
+  const isMadeAttempted = madeAttemptedStats.includes(stat.toLowerCase());
+  let madeAttemptedData = [];
+  
+  // Extract values with validation
+  const values = sorted
+    .map((r, idx) => {
+      const statValue = statsNested ? r.stats?.[stat] : r[stat];
+      // Track made/attempted data for totals
+      if (isMadeAttempted && statValue && typeof statValue === 'object') {
+        madeAttemptedData.push({
+          idx,
+          made: statValue.made || 0,
+          attempted: statValue.attempted || 0
+        });
+      }
+      return getNumericStat(statValue);
+    })
+    .filter((v, idx) => {
+      if (v === null) return false;
+      // For minutes, only include games where player actually played (min > 0)
+      if (stat === 'min' && v === 0) return false;
+      return true;
+    });
+  
+  if (values.length === 0) {
+    return null;
+  }
+  
+  // Determine actual window size
+  const actualWindowSize = windowSize === 'all' ? values.length : Math.min(windowSize, values.length);
+  
+  // Current window (last N games - most recent)
+  const currentWindow = values.slice(-actualWindowSize);
+  // Previous window (N games before current window)
+  const prevWindow = values.slice(-actualWindowSize * 2, -actualWindowSize);
+  
+  if (currentWindow.length === 0) {
+    return null;
+  }
+  
+  // Calculate current window stats
+  const currentAvg = currentWindow.reduce((a, b) => a + b, 0) / currentWindow.length;
+  const sortedCurrent = [...currentWindow].sort((a, b) => a - b);
+  const currentMedian = sortedCurrent.length % 2 === 0
+    ? (sortedCurrent[sortedCurrent.length / 2 - 1] + sortedCurrent[sortedCurrent.length / 2]) / 2
+    : sortedCurrent[Math.floor(sortedCurrent.length / 2)];
+  const currentMax = Math.max(...currentWindow);
+  const currentMin = Math.min(...currentWindow);
+  
+  // Calculate previous window stats (if available)
+  let prevAvg = null;
+  let prevMedian = null;
+  let prevMax = null;
+  let prevMin = null;
+  
+  if (prevWindow.length >= 3) {
+    prevAvg = prevWindow.reduce((a, b) => a + b, 0) / prevWindow.length;
+    const sortedPrev = [...prevWindow].sort((a, b) => a - b);
+    prevMedian = sortedPrev.length % 2 === 0
+      ? (sortedPrev[sortedPrev.length / 2 - 1] + sortedPrev[sortedPrev.length / 2]) / 2
+      : sortedPrev[Math.floor(sortedPrev.length / 2)];
+    prevMax = Math.max(...prevWindow);
+    prevMin = Math.min(...prevWindow);
+  }
+  
+  // Calculate trends
+  const avgTrend = prevAvg !== null ? currentAvg - prevAvg : 0;
+  const medianTrend = prevMedian !== null ? currentMedian - prevMedian : 0;
+  const varianceTrend = prevMax !== null && prevMin !== null 
+    ? ((currentMax - currentMin) - (prevMax - prevMin)) 
+    : 0;
+  
+  // Calculate totals for made/attempted stats (for window)
+  let totals = null;
+  if (isMadeAttempted && madeAttemptedData.length > 0) {
+    // Get the last N entries for the current window
+    const windowData = madeAttemptedData.slice(-actualWindowSize);
+    totals = {
+      made: windowData.reduce((sum, d) => sum + d.made, 0),
+      attempted: windowData.reduce((sum, d) => sum + d.attempted, 0)
+    };
+  }
+  
+  return {
+    gamesInWindow: currentWindow.length,
+    totalGames: values.length,
+    average: currentAvg,
+    avg: currentAvg, // Alias for compatibility
+    avgTrend,
+    median: currentMedian,
+    medianTrend,
+    max: currentMax,
+    min: currentMin,
+    varianceTrend,
+    hasPrevWindow: prevWindow.length >= 3,
+    values: currentWindow, // Include values for trend calculations
+    totals // Made/attempted totals for fg, 3pt, ft (null for other stats)
+  };
+};
+
+/**
+ * Get all player stats for a given window
+ * @param {Array} playerRecords - Player's game records
+ * @param {Array} statKeys - Array of stat keys to calculate
+ * @param {number|string} windowSize - Window size
+ * @param {boolean} statsNested - Whether stats are nested
+ * @returns {Object} { games, stats: { statKey: { avg, values, ... } } }
+ */
+const calculateAllPlayerStats = (playerRecords, statKeys, windowSize, statsNested = false) => {
+  const result = {
+    games: 0,
+    stats: {}
+  };
+  
+  statKeys.forEach(stat => {
+    const ws = calculateWindowedStatsShared(playerRecords, stat, windowSize, statsNested);
+    if (ws) {
+      result.stats[stat] = ws;
+      result.games = Math.max(result.games, ws.gamesInWindow);
+    }
+  });
+  
+  return result;
+};
 
 // Export API
 window.basketStatData = {
@@ -623,6 +813,7 @@ window.basketStatData = {
   hasValidStats,
   unique,
   generateGameId,
+  computeTotalRebounds,
   computeAstToRatio,
   computeAttackEnergy,
   computeDefenceDomination,
@@ -631,4 +822,8 @@ window.basketStatData = {
   addComputedStats,
   addComputedStatsToAllGames,
   forceRecomputeAllStats,
+  getNumericStat,
+  hasValidStatValue,
+  calculateWindowedStatsShared,
+  calculateAllPlayerStats,
 };

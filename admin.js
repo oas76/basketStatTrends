@@ -393,7 +393,7 @@ if (importDataInput) {
             existingData.players[name] = info;
           }
         });
-        window.basketStatData.saveData(window.basketStatData.loadData());
+        window.basketStatData.saveData(existingData);
         
         uploadStatus.textContent = "Merged";
         uploadDetails.textContent = `${added} new games added`;
