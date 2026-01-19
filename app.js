@@ -1597,6 +1597,18 @@ const autoLoadFromCloud = async () => {
   return false;
 };
 
+// Hide loading overlay
+const hideLoading = () => {
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    // Remove from DOM after transition
+    setTimeout(() => {
+      overlay.style.display = 'none';
+    }, 300);
+  }
+};
+
 // Initialize the app (with optional cloud load)
 (async () => {
   // Try to auto-load from cloud first
@@ -1608,4 +1620,7 @@ const autoLoadFromCloud = async () => {
   
   // Initialize the app
   init();
+  
+  // Hide loading overlay after init completes
+  hideLoading();
 })();
