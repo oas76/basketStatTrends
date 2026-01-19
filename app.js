@@ -313,7 +313,35 @@ const renderScorecard = (records, player, windowSize) => {
   scorecardGrid.innerHTML = regularStats.map(stat => {
     const ws = calculateWindowedStats(playerRecords, stat, windowSize);
     
-    if (!ws) {
+    // For percentage stats, calculate from base stat totals
+    const percentageToBase = { 'fg%': 'fg', '3pt%': '3pt', 'ft%': 'ft' };
+    const baseStat = percentageToBase[stat.toLowerCase()];
+    const isPercentageStat = !!baseStat;
+    
+    let calculatedPercentage = null;
+    let baseStatTotals = null;
+    if (isPercentageStat) {
+      const baseWs = calculateWindowedStats(playerRecords, baseStat, windowSize);
+      if (baseWs?.totals && baseWs.totals.attempted > 0) {
+        calculatedPercentage = (baseWs.totals.made / baseWs.totals.attempted) * 100;
+        baseStatTotals = baseWs.totals;
+      }
+    }
+    
+    // For percentage stats with no attempts, show no data
+    if (isPercentageStat && calculatedPercentage === null) {
+      return `
+        <div class="stat-scorecard ${stat === selectedStat ? 'active' : ''}" data-stat="${stat}">
+          <div class="stat-scorecard-header">
+            <span class="stat-scorecard-name">${stat}</span>
+            <span class="stat-scorecard-avg" style="color: var(--text-muted);">—</span>
+          </div>
+          <div class="no-data-message" style="padding: 8px 0;">No attempts</div>
+        </div>
+      `;
+    }
+    
+    if (!ws && !isPercentageStat) {
       return `
         <div class="stat-scorecard ${stat === selectedStat ? 'active' : ''}" data-stat="${stat}">
           <div class="stat-scorecard-header">
@@ -325,10 +353,12 @@ const renderScorecard = (records, player, windowSize) => {
       `;
     }
     
-    const perfLevel = window.referenceStats?.getPerformanceLevel(stat, ws.average) || 'average';
-    const avgTrend = getTrendIndicator(ws.avgTrend);
-    const medianTrend = getTrendIndicator(ws.medianTrend);
-    const varianceTrend = getTrendIndicator(ws.varianceTrend, 1);
+    // Use calculated percentage for percentage stats
+    const displayAverage = isPercentageStat ? calculatedPercentage : ws.average;
+    const perfLevel = window.referenceStats?.getPerformanceLevel(stat, displayAverage) || 'average';
+    const avgTrend = ws ? getTrendIndicator(ws.avgTrend) : { icon: '', class: 'neutral' };
+    const medianTrend = ws ? getTrendIndicator(ws.medianTrend) : { icon: '', class: 'neutral' };
+    const varianceTrend = ws ? getTrendIndicator(ws.varianceTrend, 1) : { icon: '', class: 'neutral' };
     
     // Determine trend color based on stat type
     const refStat = window.referenceStats?.getStatReference(stat);
@@ -337,7 +367,7 @@ const renderScorecard = (records, player, windowSize) => {
     
     let avgTrendClass, medTrendClass;
     
-    if (customScale === 'fouls') {
+    if (customScale === 'fouls' && ws) {
       // For fouls, moving toward 3 is good (green), away from 3 is bad (red)
       const currentAvg = ws.avg;
       const movingToward3 = (currentAvg > 3 && ws.avgTrend < 0) || (currentAvg < 3 && ws.avgTrend > 0);
@@ -370,35 +400,62 @@ const renderScorecard = (records, player, windowSize) => {
       medTrendClass = medianTrend.class;
     }
     
+    // For percentage stats, show totals info in details
+    if (isPercentageStat && baseStatTotals) {
+      return `
+        <div class="stat-scorecard ${stat === selectedStat ? 'active' : ''}" data-stat="${stat}">
+          <div class="stat-scorecard-header">
+            <span class="stat-scorecard-name">${stat}</span>
+            <span class="stat-scorecard-avg perf-${perfLevel}">
+              ${displayAverage.toFixed(1)}%
+            </span>
+          </div>
+          <div class="stat-scorecard-details">
+            <div class="stat-detail">
+              <span class="stat-detail-label">Made</span>
+              <span class="stat-detail-value">${baseStatTotals.made}</span>
+            </div>
+            <div class="stat-detail">
+              <span class="stat-detail-label">Attempted</span>
+              <span class="stat-detail-value">${baseStatTotals.attempted}</span>
+            </div>
+          </div>
+          <div style="font-size: 9px; color: var(--text-muted); margin-top: 6px;">
+            ${baseStatTotals.made}-${baseStatTotals.attempted} over window
+          </div>
+        </div>
+      `;
+    }
+    
     return `
       <div class="stat-scorecard ${stat === selectedStat ? 'active' : ''}" data-stat="${stat}">
         <div class="stat-scorecard-header">
           <span class="stat-scorecard-name">${stat}</span>
           <span class="stat-scorecard-avg perf-${perfLevel}">
-            ${ws.average.toFixed(1)}
-            ${ws.hasPrevWindow ? `<span class="stat-scorecard-trend ${avgTrendClass}">${avgTrend.icon}</span>` : ''}
+            ${displayAverage.toFixed(1)}
+            ${ws?.hasPrevWindow ? `<span class="stat-scorecard-trend ${avgTrendClass}">${avgTrend.icon}</span>` : ''}
           </span>
         </div>
         <div class="stat-scorecard-details">
           <div class="stat-detail">
             <span class="stat-detail-label">Median</span>
             <span class="stat-detail-value">
-              ${ws.median.toFixed(1)}
-              ${ws.hasPrevWindow ? `<span class="stat-detail-trend ${medTrendClass}">${medianTrend.icon}</span>` : ''}
+              ${ws?.median?.toFixed(1) || '—'}
+              ${ws?.hasPrevWindow ? `<span class="stat-detail-trend ${medTrendClass}">${medianTrend.icon}</span>` : ''}
             </span>
           </div>
           <div class="stat-detail">
             <span class="stat-detail-label">Range</span>
             <span class="stat-detail-value">
               <span class="variance-range">
-                <span class="low">${ws.min}</span> – <span class="high">${ws.max}</span>
+                <span class="low">${ws?.min ?? '—'}</span> – <span class="high">${ws?.max ?? '—'}</span>
               </span>
-              ${ws.hasPrevWindow ? `<span class="stat-detail-trend ${varianceTrend.class}">${varianceTrend.icon}</span>` : ''}
+              ${ws?.hasPrevWindow ? `<span class="stat-detail-trend ${varianceTrend.class}">${varianceTrend.icon}</span>` : ''}
             </span>
           </div>
         </div>
         <div style="font-size: 9px; color: var(--text-muted); margin-top: 6px;">
-          ${ws.gamesInWindow} of ${ws.totalGames} games
+          ${ws?.gamesInWindow || 0} of ${ws?.totalGames || 0} games
         </div>
       </div>
     `;
