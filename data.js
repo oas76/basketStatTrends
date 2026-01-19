@@ -412,8 +412,9 @@ const computeAstToRatio = (stats) => {
  * This shows offensive intensity normalized by playing time
  */
 const computeAttackEnergy = (stats) => {
-  // Get minutes played
-  const minutes = typeof stats.min === 'number' ? stats.min : 0;
+  // Get minutes played (floor to whole minutes for consistency)
+  const rawMinutes = typeof stats.min === 'number' ? stats.min : 0;
+  const minutes = Math.floor(rawMinutes);
   if (minutes <= 0) return null; // Need minutes to calculate rate
   
   // Get FG attempts (from made-attempted format)
@@ -461,8 +462,9 @@ const getFoulMultiplier = (fouls) => {
  * Formula: ((Blocks + Steals + Defensive Rebounds) * Foul Multiplier) / Minutes
  */
 const computeDefenceDomination = (stats) => {
-  // Get minutes played
-  const minutes = typeof stats.min === 'number' ? stats.min : 0;
+  // Get minutes played (floor to whole minutes for consistency)
+  const rawMinutes = typeof stats.min === 'number' ? stats.min : 0;
+  const minutes = Math.floor(rawMinutes);
   if (minutes <= 0) return null; // Need minutes to calculate rate
   
   const blocks = typeof stats.blk === 'number' ? stats.blk : 0;
