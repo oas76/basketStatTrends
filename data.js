@@ -221,12 +221,15 @@ const addGame = (gameData) => {
     }
   });
   
-  // Add computed stats (A/TO ratio) to each player's performance
+  // Add computed stats to each player's performance
   const performancesWithComputed = {};
   Object.entries(gameData.performances || {}).forEach(([name, stats]) => {
     performancesWithComputed[name] = {
       ...stats,
-      'a/to': computeAstToRatio(stats)
+      'a/to': computeAstToRatio(stats),
+      'atk': computeAttackEnergy(stats),
+      'def': computeDefenceDomination(stats),
+      'shoot': computeShootingStar(stats)
     };
   });
   
@@ -403,13 +406,128 @@ const computeAstToRatio = (stats) => {
 };
 
 /**
- * Add computed stats (like A/TO ratio) to a player's stats object
+ * Compute Attack Energy (ATK)
+ * Higher is better - measures offensive involvement/aggression per minute
+ * Formula: (FG Attempts + FT Attempts + Assists + Offensive Rebounds) / Minutes
+ * This shows offensive intensity normalized by playing time
+ */
+const computeAttackEnergy = (stats) => {
+  // Get minutes played
+  const minutes = typeof stats.min === 'number' ? stats.min : 0;
+  if (minutes <= 0) return null; // Need minutes to calculate rate
+  
+  // Get FG attempts (from made-attempted format)
+  let fga = 0;
+  if (stats.fg && typeof stats.fg === 'object' && 'attempted' in stats.fg) {
+    fga = stats.fg.attempted || 0;
+  }
+  
+  // Get FT attempts (from made-attempted format)
+  let fta = 0;
+  if (stats.ft && typeof stats.ft === 'object' && 'attempted' in stats.ft) {
+    fta = stats.ft.attempted || 0;
+  }
+  
+  // Get assists
+  const assists = typeof stats.asst === 'number' ? stats.asst : 0;
+  
+  // Get offensive rebounds
+  const oreb = typeof stats.oreb === 'number' ? stats.oreb : 0;
+  
+  // If no offensive activity at all, return null
+  const rawTotal = fga + fta + assists + oreb;
+  if (rawTotal === 0) {
+    return null;
+  }
+  
+  // Return per-minute rate, rounded to 2 decimals
+  return Math.round((rawTotal / minutes) * 100) / 100;
+};
+
+/**
+ * Get foul grade multiplier for Defence Domination calculation
+ * Rewards optimal foul count (3) and penalizes passive or excessive fouling
+ */
+const getFoulMultiplier = (fouls) => {
+  if (fouls === 3) return 1.25;  // Excellent - optimal aggression bonus
+  if (fouls === 2) return 1.0;   // Good - full credit
+  if (fouls === 4) return 0.85;  // Average - slight penalty for foul trouble
+  return 0.7;                     // Below (0, 1, 5) - penalty for passive or fouling out
+};
+
+/**
+ * Compute Defence Domination (DEF)
+ * Higher is better - measures defensive impact with foul efficiency per minute
+ * Formula: ((Blocks + Steals + Defensive Rebounds) * Foul Multiplier) / Minutes
+ */
+const computeDefenceDomination = (stats) => {
+  // Get minutes played
+  const minutes = typeof stats.min === 'number' ? stats.min : 0;
+  if (minutes <= 0) return null; // Need minutes to calculate rate
+  
+  const blocks = typeof stats.blk === 'number' ? stats.blk : 0;
+  const steals = typeof stats.stl === 'number' ? stats.stl : 0;
+  const dreb = typeof stats.dreb === 'number' ? stats.dreb : 0;
+  const fouls = typeof stats.foul === 'number' ? stats.foul : 0;
+  
+  const rawDefence = blocks + steals + dreb;
+  
+  // If no defensive activity, return null
+  if (rawDefence === 0) {
+    return null;
+  }
+  
+  const multiplier = getFoulMultiplier(fouls);
+  const adjustedDefence = rawDefence * multiplier;
+  
+  // Return per-minute rate, rounded to 2 decimals
+  return Math.round((adjustedDefence / minutes) * 100) / 100;
+};
+
+/**
+ * Compute Shooting Star (SHOOT)
+ * Higher is better - average of FG%, 3PT%, and FT%
+ * Measures overall shooting efficiency across all shot types
+ */
+const computeShootingStar = (stats) => {
+  const percentages = [];
+  
+  // Get FG% (already parsed as number)
+  if (typeof stats['fg%'] === 'number' && stats['fg%'] > 0) {
+    percentages.push(stats['fg%']);
+  }
+  
+  // Get 3PT% (already parsed as number)
+  if (typeof stats['3pt%'] === 'number' && stats['3pt%'] > 0) {
+    percentages.push(stats['3pt%']);
+  }
+  
+  // Get FT% (already parsed as number)
+  if (typeof stats['ft%'] === 'number' && stats['ft%'] > 0) {
+    percentages.push(stats['ft%']);
+  }
+  
+  // Need at least one valid percentage
+  if (percentages.length === 0) {
+    return null;
+  }
+  
+  // Calculate average of available percentages
+  const avg = percentages.reduce((sum, p) => sum + p, 0) / percentages.length;
+  return Math.round(avg * 10) / 10; // Round to 1 decimal
+};
+
+/**
+ * Add computed stats (like A/TO ratio, Attack Energy, Defence Domination, Shooting Star) to a player's stats object
  * Returns a new object with the computed stats added
  */
 const addComputedStats = (stats) => {
   return {
     ...stats,
-    'a/to': computeAstToRatio(stats)
+    'a/to': computeAstToRatio(stats),
+    'atk': computeAttackEnergy(stats),
+    'def': computeDefenceDomination(stats),
+    'shoot': computeShootingStar(stats)
   };
 };
 
@@ -423,9 +541,31 @@ const addComputedStatsToAllGames = () => {
   
   data.games.forEach((game) => {
     Object.entries(game.performances || {}).forEach(([name, stats]) => {
+      // Compute A/TO ratio
       const atoRatio = computeAstToRatio(stats);
       if (stats['a/to'] !== atoRatio) {
         stats['a/to'] = atoRatio;
+        updated = true;
+      }
+      
+      // Compute Attack Energy
+      const atkEnergy = computeAttackEnergy(stats);
+      if (stats['atk'] !== atkEnergy) {
+        stats['atk'] = atkEnergy;
+        updated = true;
+      }
+      
+      // Compute Defence Domination
+      const defDom = computeDefenceDomination(stats);
+      if (stats['def'] !== defDom) {
+        stats['def'] = defDom;
+        updated = true;
+      }
+      
+      // Compute Shooting Star
+      const shootStar = computeShootingStar(stats);
+      if (stats['shoot'] !== shootStar) {
+        stats['shoot'] = shootStar;
         updated = true;
       }
     });
@@ -440,8 +580,30 @@ const addComputedStatsToAllGames = () => {
 
 const unique = (values) => Array.from(new Set(values));
 
-// On module load, add computed stats to all existing games
-addComputedStatsToAllGames();
+/**
+ * Force recomputation of all computed stats (for debugging/migration)
+ */
+const forceRecomputeAllStats = () => {
+  const data = loadData();
+  let count = 0;
+  
+  data.games.forEach((game) => {
+    Object.entries(game.performances || {}).forEach(([name, stats]) => {
+      stats['a/to'] = computeAstToRatio(stats);
+      stats['atk'] = computeAttackEnergy(stats);
+      stats['def'] = computeDefenceDomination(stats);
+      stats['shoot'] = computeShootingStar(stats);
+      count++;
+    });
+  });
+  
+  saveData(data);
+  console.log(`✅ Recomputed stats for ${count} player-game records`);
+  return count;
+};
+
+// Note: Computed stats are now added in app.js after data is fully loaded
+// This ensures cloud data is processed correctly
 
 // Export API
 window.basketStatData = {
@@ -460,6 +622,11 @@ window.basketStatData = {
   unique,
   generateGameId,
   computeAstToRatio,
+  computeAttackEnergy,
+  computeDefenceDomination,
+  computeShootingStar,
+  getFoulMultiplier,
   addComputedStats,
   addComputedStatsToAllGames,
+  forceRecomputeAllStats,
 };

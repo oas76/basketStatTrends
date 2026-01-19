@@ -191,7 +191,7 @@ const referenceStats = {
       invertedScale: true  // Lower is better
     },
 
-    // Personal Fouls (lower is better - inverted scale)
+    // Personal Fouls (non-linear scale - 3 is optimal)
     foul: {
       name: "Personal Fouls",
       unit: "per game",
@@ -199,8 +199,9 @@ const referenceStats = {
       p50: 3,
       p75: 2,
       p90: 1,
-      description: "Personal fouls committed",
-      invertedScale: true  // Lower is better
+      description: "Personal fouls (3 is optimal - aggressive but smart)",
+      invertedScale: false,  // Not used - custom evaluation
+      customScale: "fouls"   // Use custom foul evaluation logic
     },
 
     // Assist to Turnover Ratio (higher is better)
@@ -212,6 +213,42 @@ const referenceStats = {
       p75: 1.5,
       p90: 2.5,
       description: "Assists per turnover (playmaking efficiency)",
+      invertedScale: false  // Higher is better
+    },
+
+    // Attack Energy - measures offensive involvement per minute
+    "atk": {
+      name: "Attack Energy",
+      unit: "per minute",
+      p25: 0.5,
+      p50: 0.9,
+      p75: 1.3,
+      p90: 1.8,
+      description: "(FGA + FTA + AST + OREB) / Minutes",
+      invertedScale: false  // Higher is better
+    },
+
+    // Defence Domination - measures defensive impact with foul efficiency per minute
+    "def": {
+      name: "Defence Domination",
+      unit: "per minute",
+      p25: 0.15,
+      p50: 0.25,
+      p75: 0.4,
+      p90: 0.6,
+      description: "((BLK + STL + DREB) × Foul) / Minutes",
+      invertedScale: false  // Higher is better
+    },
+
+    // Shooting Star - average shooting efficiency across all shot types
+    "shoot": {
+      name: "Shooting Star",
+      unit: "percentage",
+      p25: 30,
+      p50: 42,
+      p75: 52,
+      p90: 62,
+      description: "Average of FG%, 3PT%, FT% (overall shooting efficiency)",
       invertedScale: false  // Higher is better
     }
   }
@@ -231,7 +268,20 @@ const getPerformanceLevel = (statKey, value) => {
   const numValue = typeof value === 'object' && 'made' in value ? value.made : Number(value);
   if (isNaN(numValue)) return 'average';
   
-  // For inverted scales (turnovers, fouls), lower is better
+  // Special handling for fouls - non-linear scale where 3 is optimal
+  // 3 = excellent (aggressive but smart)
+  // 2 = good (aggressive but conservative)
+  // 4 = average (aggressive but foul trouble)
+  // 1, 0, 5 = below (too passive or fouled out)
+  // Note: 5 fouls = fouled out in youth/FIBA rules
+  if (stat.customScale === 'fouls') {
+    if (numValue === 3) return 'excellent';
+    if (numValue === 2) return 'good';
+    if (numValue === 4) return 'average';
+    return 'below'; // 0, 1, or 5 (too passive or fouled out)
+  }
+  
+  // For inverted scales (turnovers), lower is better
   if (stat.invertedScale) {
     if (numValue <= stat.p90) return 'excellent';
     if (numValue <= stat.p75) return 'good';

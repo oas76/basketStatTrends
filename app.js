@@ -5,9 +5,13 @@ const scorecardGrid = document.getElementById("scorecardGrid");
 const trendingIndexValue = document.getElementById("trendingIndexValue");
 const trendingIndexDetail = document.getElementById("trendingIndexDetail");
 const trendStatIndicator = document.getElementById("trendStatIndicator");
+const aggregateStats = document.getElementById("aggregateStats");
 const chart = document.getElementById("chart");
 const gameTable = document.getElementById("gameTable");
 const statHeader = document.getElementById("statHeader");
+
+// Aggregate stat elements
+const AGGREGATE_STATS = ['atk', 'def', 'shoot'];
 
 const formatDate = (value) => new Date(value).toLocaleDateString();
 
@@ -188,16 +192,29 @@ const calculateTrendingIndex = (records, windowSize) => {
     
     const refStat = window.referenceStats?.getStatReference(stat);
     const isInverted = refStat?.invertedScale || false;
+    const customScale = refStat?.customScale;
     
     // Determine if this trend is improving or declining
-    // For inverted stats (TO, fouls), negative trend = improving
     const trend = ws.avgTrend;
     const threshold = 0.5;
     
     if (Math.abs(trend) < threshold) {
       stable++;
+    } else if (customScale === 'fouls') {
+      // For fouls, 3 is optimal - moving toward 3 is improving
+      const currentAvg = ws.avg;
+      const movingToward3 = (currentAvg > 3 && trend < 0) || (currentAvg < 3 && trend > 0);
+      const at3 = Math.abs(currentAvg - 3) < 0.5;
+      
+      if (at3) {
+        stable++; // Already at optimal
+      } else if (movingToward3) {
+        improving++;
+      } else {
+        declining++;
+      }
     } else if (isInverted) {
-      // Inverted: lower is better
+      // Inverted: lower is better (turnovers)
       if (trend < 0) improving++;
       else declining++;
     } else {
@@ -227,6 +244,73 @@ const calculateTrendingIndex = (records, windowSize) => {
 };
 
 /**
+ * Render aggregate stats (Attack Energy, Defence Domination, Shooting Star)
+ */
+const renderAggregateStats = (playerRecords, windowSize, selectedStat) => {
+  if (!aggregateStats) return;
+  
+  AGGREGATE_STATS.forEach(stat => {
+    const valueEl = document.getElementById(`${stat}Value`);
+    const trendEl = document.getElementById(`${stat}Trend`);
+    const cardEl = aggregateStats.querySelector(`[data-stat="${stat}"]`);
+    
+    if (!valueEl) return;
+    
+    const ws = calculateWindowedStats(playerRecords, stat, windowSize);
+    
+    if (!ws || ws.average === null || ws.average === undefined) {
+      valueEl.textContent = '—';
+      valueEl.className = 'aggregate-value';
+      if (trendEl) trendEl.innerHTML = '';
+      if (cardEl) cardEl.classList.remove('active');
+      return;
+    }
+    
+    // Display value with unit
+    const unit = stat === 'shoot' ? '%' : '';
+    valueEl.textContent = ws.average.toFixed(1) + unit;
+    
+    // Get performance level color
+    const perfLevel = window.referenceStats?.getPerformanceLevel(stat, ws.average) || 'average';
+    valueEl.className = `aggregate-value perf-${perfLevel}`;
+    
+    // Render trend
+    if (trendEl && ws.hasPrevWindow) {
+      const trend = ws.avgTrend;
+      if (Math.abs(trend) < 0.5) {
+        trendEl.innerHTML = `<span class="trend-neutral">→</span>`;
+      } else if (trend > 0) {
+        trendEl.innerHTML = `<span class="trend-up">↑ +${trend.toFixed(1)}</span>`;
+      } else {
+        trendEl.innerHTML = `<span class="trend-down">↓ ${trend.toFixed(1)}</span>`;
+      }
+    } else if (trendEl) {
+      trendEl.innerHTML = '';
+    }
+    
+    // Set active state
+    if (cardEl) {
+      cardEl.classList.toggle('active', stat === selectedStat);
+    }
+  });
+  
+  // Add click handlers for aggregate stats
+  aggregateStats.querySelectorAll('.aggregate-stat').forEach(card => {
+    card.onclick = () => {
+      const stat = card.dataset.stat;
+      statSelect.value = stat;
+      
+      // Update active states
+      aggregateStats.querySelectorAll('.aggregate-stat').forEach(c => c.classList.remove('active'));
+      scorecardGrid.querySelectorAll('.stat-scorecard').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      
+      updateChartAndTable();
+    };
+  });
+};
+
+/**
  * Render the player scorecard
  */
 const renderScorecard = (records, player, windowSize) => {
@@ -241,6 +325,17 @@ const renderScorecard = (records, player, windowSize) => {
       trendingIndexValue.className = 'trending-index-value';
     }
     if (trendingIndexDetail) trendingIndexDetail.textContent = '';
+    
+    // Clear aggregate stats
+    AGGREGATE_STATS.forEach(stat => {
+      const valueEl = document.getElementById(`${stat}Value`);
+      const trendEl = document.getElementById(`${stat}Trend`);
+      if (valueEl) {
+        valueEl.textContent = '—';
+        valueEl.className = 'aggregate-value';
+      }
+      if (trendEl) trendEl.innerHTML = '';
+    });
     return;
   }
   
@@ -269,7 +364,13 @@ const renderScorecard = (records, player, windowSize) => {
     }
   }
   
-  scorecardGrid.innerHTML = stats.map(stat => {
+  // Render aggregate stats (Attack Energy, Defence Domination, Shooting Star)
+  renderAggregateStats(playerRecords, windowSize, selectedStat);
+  
+  // Filter out aggregate stats from the regular scorecard grid
+  const regularStats = stats.filter(s => !AGGREGATE_STATS.includes(s));
+  
+  scorecardGrid.innerHTML = regularStats.map(stat => {
     const ws = calculateWindowedStats(playerRecords, stat, windowSize);
     
     if (!ws) {
@@ -289,11 +390,45 @@ const renderScorecard = (records, player, windowSize) => {
     const medianTrend = getTrendIndicator(ws.medianTrend);
     const varianceTrend = getTrendIndicator(ws.varianceTrend, 1);
     
-    // For inverted stats (TO, foul), flip the trend colors
+    // Determine trend color based on stat type
     const refStat = window.referenceStats?.getStatReference(stat);
     const isInverted = refStat?.invertedScale;
-    const avgTrendClass = isInverted ? (avgTrend.class === 'up' ? 'down' : avgTrend.class === 'down' ? 'up' : 'neutral') : avgTrend.class;
-    const medTrendClass = isInverted ? (medianTrend.class === 'up' ? 'down' : medianTrend.class === 'down' ? 'up' : 'neutral') : medianTrend.class;
+    const customScale = refStat?.customScale;
+    
+    let avgTrendClass, medTrendClass;
+    
+    if (customScale === 'fouls') {
+      // For fouls, moving toward 3 is good (green), away from 3 is bad (red)
+      const currentAvg = ws.avg;
+      const movingToward3 = (currentAvg > 3 && ws.avgTrend < 0) || (currentAvg < 3 && ws.avgTrend > 0);
+      const at3 = Math.abs(currentAvg - 3) < 0.5;
+      
+      if (Math.abs(ws.avgTrend) < 0.5) {
+        avgTrendClass = 'neutral';
+      } else if (at3 || movingToward3) {
+        avgTrendClass = 'up'; // Green - good trend
+      } else {
+        avgTrendClass = 'down'; // Red - bad trend
+      }
+      
+      // Same logic for median
+      const movingToward3Med = (ws.median > 3 && ws.medianTrend < 0) || (ws.median < 3 && ws.medianTrend > 0);
+      if (Math.abs(ws.medianTrend) < 0.5) {
+        medTrendClass = 'neutral';
+      } else if (Math.abs(ws.median - 3) < 0.5 || movingToward3Med) {
+        medTrendClass = 'up';
+      } else {
+        medTrendClass = 'down';
+      }
+    } else if (isInverted) {
+      // For inverted stats (TO), lower is better - flip colors
+      avgTrendClass = avgTrend.class === 'up' ? 'down' : avgTrend.class === 'down' ? 'up' : 'neutral';
+      medTrendClass = medianTrend.class === 'up' ? 'down' : medianTrend.class === 'down' ? 'up' : 'neutral';
+    } else {
+      // Normal stats - higher is better
+      avgTrendClass = avgTrend.class;
+      medTrendClass = medianTrend.class;
+    }
     
     return `
       <div class="stat-scorecard ${stat === selectedStat ? 'active' : ''}" data-stat="${stat}">
@@ -334,7 +469,13 @@ const renderScorecard = (records, player, windowSize) => {
     card.addEventListener('click', () => {
       const stat = card.dataset.stat;
       statSelect.value = stat;
+      
+      // Clear all active states
       scorecardGrid.querySelectorAll('.stat-scorecard').forEach(c => c.classList.remove('active'));
+      if (aggregateStats) {
+        aggregateStats.querySelectorAll('.aggregate-stat').forEach(c => c.classList.remove('active'));
+      }
+      
       card.classList.add('active');
       updateChartAndTable();
     });
@@ -964,6 +1105,15 @@ const populateBenchmarksGrid = () => {
 const init = () => {
   // Populate benchmarks grid
   populateBenchmarksGrid();
+  
+  // Ensure computed stats are calculated for all games
+  // This runs after data is loaded (including cloud data)
+  if (window.basketStatData?.forceRecomputeAllStats) {
+    const count = window.basketStatData.forceRecomputeAllStats();
+    if (count > 0) {
+      console.log(`📊 Computed ${count} player-game stat records`);
+    }
+  }
   
   const data = buildData();
   if (data.length === 0) {

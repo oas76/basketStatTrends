@@ -46,6 +46,37 @@
           <div class="trending-index-detail" id="trendingIndexDetail"></div>
         </div>
         
+        <!-- Aggregate Performance Stats -->
+        <div class="aggregate-stats" id="aggregateStats">
+          <div class="aggregate-stat" data-stat="atk" title="Attack Energy = (FG Attempts + FT Attempts + Assists + Offensive Rebounds) / Minutes. Measures offensive intensity per minute played.">
+            <div class="aggregate-icon">⚡</div>
+            <div class="aggregate-content">
+              <div class="aggregate-label">Attack Energy</div>
+              <div class="aggregate-value" id="atkValue">—</div>
+              <div class="aggregate-formula">(FGA + FTA + AST + OREB) / MIN</div>
+            </div>
+            <div class="aggregate-trend" id="atkTrend"></div>
+          </div>
+          <div class="aggregate-stat" data-stat="def" title="Defence Domination = ((Blocks + Steals + Defensive Rebounds) × Foul Multiplier) / Minutes. Rewards aggressive defense with smart fouling, normalized by playing time.">
+            <div class="aggregate-icon">🛡️</div>
+            <div class="aggregate-content">
+              <div class="aggregate-label">Defence Domination</div>
+              <div class="aggregate-value" id="defValue">—</div>
+              <div class="aggregate-formula">((BLK + STL + DREB) × Foul) / MIN</div>
+            </div>
+            <div class="aggregate-trend" id="defTrend"></div>
+          </div>
+          <div class="aggregate-stat" data-stat="shoot" title="Shooting Star = Average of FG%, 3PT%, and FT%. Measures overall shooting efficiency across all shot types.">
+            <div class="aggregate-icon">🎯</div>
+            <div class="aggregate-content">
+              <div class="aggregate-label">Shooting Star</div>
+              <div class="aggregate-value" id="shootValue">—</div>
+              <div class="aggregate-formula">Avg(FG%, 3PT%, FT%)</div>
+            </div>
+            <div class="aggregate-trend" id="shootTrend"></div>
+          </div>
+        </div>
+        
         <div class="scorecard-grid" id="scorecardGrid">
           <!-- Populated by JavaScript -->
         </div>

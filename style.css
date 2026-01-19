@@ -669,6 +669,102 @@ button.secondary:hover {
   color: #ef4444;
 }
 
+/* ===== AGGREGATE STATS ===== */
+.aggregate-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.aggregate-stat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, var(--surface-raised) 0%, var(--surface) 100%);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.aggregate-stat:hover {
+  border-color: var(--accent);
+  transform: translateX(4px);
+}
+
+.aggregate-stat.active {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, var(--accent-dim) 0%, var(--surface-raised) 100%);
+}
+
+.aggregate-icon {
+  font-size: 24px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.aggregate-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.aggregate-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.aggregate-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.aggregate-formula {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 2px;
+  opacity: 0.7;
+}
+
+.aggregate-value.perf-excellent { color: #22c55e; }
+.aggregate-value.perf-good { color: #84cc16; }
+.aggregate-value.perf-average { color: #eab308; }
+.aggregate-value.perf-below { color: #f97316; }
+.aggregate-value.perf-poor { color: #ef4444; }
+
+.aggregate-trend {
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 50px;
+  text-align: right;
+}
+
+.aggregate-trend .trend-up {
+  color: #22c55e;
+}
+
+.aggregate-trend .trend-down {
+  color: #ef4444;
+}
+
+.aggregate-trend .trend-neutral {
+  color: var(--text-muted);
+}
+
 /* ===== SECTION HEADER WITH CONTEXT ===== */
 .section-header-with-context {
   display: flex;
