@@ -56,6 +56,23 @@ const upload = multer({
 // Serve static files
 app.use(express.static(__dirname));
 
+// Explicit routes for main pages (ensures they work on Vercel)
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/index.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/admin.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
+app.get('/team.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'team.html'));
+});
+
 /**
  * Validate that a filename is safe and resolves within the csv directory.
  * Prevents path traversal attacks (e.g., ../../etc/passwd)
