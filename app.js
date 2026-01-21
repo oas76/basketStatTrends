@@ -1229,28 +1229,32 @@ const closeProfileModal = () => {
 };
 
 /**
- * Sync data to cloud (if configured)
+ * Sync data to cloud via server proxy (keeps API key hidden)
  */
 const syncToCloud = async () => {
-  const config = window.CLOUD_CONFIG;
-  if (!config || !config.apiKey || !config.binId) {
-    return false;
-  }
-  
   try {
+    // Check if cloud is configured via proxy
+    const statusResponse = await fetch('/api/cloud/status');
+    const status = await statusResponse.json();
+    
+    if (!status.configured) {
+      console.log("Cloud not configured");
+      return false;
+    }
+    
     const localData = window.basketStatData.loadData();
     
-    const response = await fetch(`https://api.jsonbin.io/v3/b/${config.binId}`, {
+    const response = await fetch('/api/cloud/data', {
       method: "PUT",
       headers: {
-        "Content-Type": "application/json",
-        "X-Master-Key": config.apiKey
+        "Content-Type": "application/json"
       },
       body: JSON.stringify(localData)
     });
     
     if (!response.ok) {
-      console.warn("Cloud sync failed:", response.status);
+      const error = await response.json().catch(() => ({}));
+      console.warn("Cloud sync failed:", error.message || response.status);
       return false;
     }
     
@@ -1752,25 +1756,26 @@ if (aiApiKeyInput) {
 // ========================================
 
 const autoLoadFromCloud = async () => {
-  const config = window.CLOUD_CONFIG;
-  
-  // Check if auto-load is enabled and configured
-  if (!config || !config.autoLoadOnStart || !config.apiKey || !config.binId) {
-    return false;
-  }
-  
   try {
+    // Check cloud configuration via server proxy
+    const statusResponse = await fetch('/api/cloud/status');
+    const status = await statusResponse.json();
+    
+    // Check if auto-load is enabled and cloud is configured
+    const config = window.CLOUD_CONFIG || {};
+    if (!config.autoLoadOnStart || !status.configured) {
+      return false;
+    }
+    
     console.log("Auto-loading data from cloud...");
     
-    const response = await fetch(`https://api.jsonbin.io/v3/b/${config.binId}/latest`, {
-      method: "GET",
-      headers: {
-        "X-Master-Key": config.apiKey
-      }
+    const response = await fetch('/api/cloud/data', {
+      method: "GET"
     });
     
     if (!response.ok) {
-      console.warn("Cloud load failed:", response.status);
+      const error = await response.json().catch(() => ({}));
+      console.warn("Cloud load failed:", error.message || response.status);
       return false;
     }
     

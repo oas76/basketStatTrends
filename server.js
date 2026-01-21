@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -5,6 +6,11 @@ const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Environment variables (secrets hidden from client)
+const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
+const JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID;
+const APP_PASSWORD = process.env.APP_PASSWORD;
 
 // Ensure csv directory exists
 const csvDir = path.join(__dirname, 'csv');
@@ -190,8 +196,148 @@ app.post('/api/data', (req, res) => {
   }
 });
 
+// ========================================
+// CLOUD PROXY API (Protects API keys)
+// ========================================
+// These endpoints proxy requests to JSONbin.io, keeping the API key server-side
+
+const JSONBIN_API_URL = 'https://api.jsonbin.io/v3/b';
+
+// Check if cloud is configured
+const isCloudConfigured = () => {
+  return JSONBIN_API_KEY && JSONBIN_BIN_ID;
+};
+
+// API: Get cloud config status (without exposing secrets)
+app.get('/api/cloud/status', (req, res) => {
+  res.json({
+    configured: isCloudConfigured(),
+    hasBin: !!JSONBIN_BIN_ID,
+    binIdPrefix: JSONBIN_BIN_ID ? JSONBIN_BIN_ID.slice(0, 8) + '...' : null
+  });
+});
+
+// API: Verify password (for protected pages)
+app.post('/api/auth/verify', (req, res) => {
+  const { password } = req.body;
+  
+  if (!APP_PASSWORD) {
+    // No password configured = allow access
+    return res.json({ valid: true });
+  }
+  
+  if (password === APP_PASSWORD) {
+    return res.json({ valid: true });
+  }
+  
+  res.status(401).json({ valid: false, error: 'Invalid password' });
+});
+
+// API: Load data from cloud (proxy to JSONbin GET)
+app.get('/api/cloud/data', async (req, res) => {
+  if (!isCloudConfigured()) {
+    return res.status(400).json({ error: 'Cloud not configured' });
+  }
+  
+  try {
+    const response = await fetch(`${JSONBIN_API_URL}/${JSONBIN_BIN_ID}/latest`, {
+      method: 'GET',
+      headers: {
+        'X-Master-Key': JSONBIN_API_KEY
+      }
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      return res.status(response.status).json({ 
+        error: error.message || `Cloud fetch failed: ${response.status}` 
+      });
+    }
+    
+    const result = await response.json();
+    res.json(result);
+  } catch (error) {
+    console.error('Cloud proxy GET error:', error);
+    res.status(500).json({ error: 'Failed to fetch from cloud' });
+  }
+});
+
+// API: Save data to cloud (proxy to JSONbin PUT)
+app.put('/api/cloud/data', async (req, res) => {
+  if (!isCloudConfigured()) {
+    return res.status(400).json({ error: 'Cloud not configured' });
+  }
+  
+  try {
+    const response = await fetch(`${JSONBIN_API_URL}/${JSONBIN_BIN_ID}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_API_KEY
+      },
+      body: JSON.stringify(req.body)
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      return res.status(response.status).json({ 
+        error: error.message || `Cloud save failed: ${response.status}` 
+      });
+    }
+    
+    const result = await response.json();
+    console.log('Data synced to cloud');
+    res.json(result);
+  } catch (error) {
+    console.error('Cloud proxy PUT error:', error);
+    res.status(500).json({ error: 'Failed to save to cloud' });
+  }
+});
+
+// API: Create new bin (proxy to JSONbin POST) - for initial setup
+app.post('/api/cloud/create', async (req, res) => {
+  if (!JSONBIN_API_KEY) {
+    return res.status(400).json({ error: 'API key not configured' });
+  }
+  
+  try {
+    const response = await fetch(JSONBIN_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_API_KEY,
+        'X-Bin-Name': 'BasketStat Data'
+      },
+      body: JSON.stringify(req.body)
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      return res.status(response.status).json({ 
+        error: error.message || `Cloud create failed: ${response.status}` 
+      });
+    }
+    
+    const result = await response.json();
+    const newBinId = result.metadata?.id;
+    
+    console.log(`New bin created: ${newBinId}`);
+    console.log('⚠️  Update JSONBIN_BIN_ID in .env to:', newBinId);
+    
+    res.json({ 
+      success: true, 
+      binId: newBinId,
+      message: `Bin created! Update JSONBIN_BIN_ID in .env to: ${newBinId}`
+    });
+  } catch (error) {
+    console.error('Cloud proxy POST error:', error);
+    res.status(500).json({ error: 'Failed to create cloud bin' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`BasketStat server running at http://localhost:${PORT}`);
   console.log(`CSV files stored in: ${csvDir}`);
   console.log(`Data file: ${dataFilePath}`);
+  console.log(`Cloud sync: ${isCloudConfigured() ? 'Configured' : 'Not configured (set JSONBIN_API_KEY and JSONBIN_BIN_ID in .env)'}`);
 });

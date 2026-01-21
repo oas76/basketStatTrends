@@ -412,40 +412,49 @@ if (importDataInput) {
 }
 
 // ========================================
-// JSONBIN.IO CLOUD SYNC (Shared Storage)
+// CLOUD SYNC VIA SERVER PROXY
 // ========================================
-// Configuration is in config.js - shared by all users
-
-const JSONBIN_API_URL = "https://api.jsonbin.io/v3/b";
+// API keys are now stored server-side in .env
+// Client calls server proxy endpoints instead of JSONbin directly
 
 // Cloud sync DOM elements
 const cloudStatusText = document.getElementById("cloudStatusText");
 const cloudSyncUpBtn = document.getElementById("cloudSyncUp");
 const cloudSyncDownBtn = document.getElementById("cloudSyncDown");
 
-// Get config from global CLOUD_CONFIG (set in config.js)
-const getCloudConfig = () => {
-  return window.CLOUD_CONFIG || { apiKey: "", binId: "" };
+// Cloud status cache
+let cloudStatus = { configured: false, hasBin: false, binIdPrefix: null };
+
+// Fetch cloud status from server
+const fetchCloudStatus = async () => {
+  try {
+    const response = await fetch('/api/cloud/status');
+    cloudStatus = await response.json();
+    return cloudStatus;
+  } catch (error) {
+    console.warn('Failed to fetch cloud status:', error);
+    return { configured: false, hasBin: false, binIdPrefix: null };
+  }
 };
 
-// Update cloud sync UI based on config
-const updateCloudSyncUI = () => {
-  const config = getCloudConfig();
+// Update cloud sync UI based on server config
+const updateCloudSyncUI = async () => {
+  await fetchCloudStatus();
   
-  if (config.apiKey) {
+  if (cloudStatus.configured) {
     if (cloudStatusText) {
-      cloudStatusText.textContent = config.binId 
-        ? `Connected (${config.binId.slice(0, 8)}...)`
+      cloudStatusText.textContent = cloudStatus.hasBin 
+        ? `Connected (${cloudStatus.binIdPrefix})`
         : "Ready - upload to create bin";
     }
     if (cloudBadge) {
-      cloudBadge.textContent = config.binId ? "Connected" : "Ready";
+      cloudBadge.textContent = cloudStatus.hasBin ? "Connected" : "Ready";
       cloudBadge.className = "badge connected";
     }
     if (cloudSyncUpBtn) cloudSyncUpBtn.disabled = false;
-    if (cloudSyncDownBtn) cloudSyncDownBtn.disabled = !config.binId;
+    if (cloudSyncDownBtn) cloudSyncDownBtn.disabled = !cloudStatus.hasBin;
   } else {
-    if (cloudStatusText) cloudStatusText.textContent = "Not configured";
+    if (cloudStatusText) cloudStatusText.textContent = "Not configured (set .env)";
     if (cloudBadge) {
       cloudBadge.textContent = "Not configured";
       cloudBadge.className = "badge";
@@ -455,14 +464,12 @@ const updateCloudSyncUI = () => {
   }
 };
 
-// Create a new bin on JSONbin.io
-const createBin = async (apiKey, data) => {
-  const response = await fetch(JSONBIN_API_URL, {
+// Create a new bin via server proxy
+const createBin = async (data) => {
+  const response = await fetch('/api/cloud/create', {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "X-Master-Key": apiKey,
-      "X-Bin-Name": "BasketStat Data"
+      "Content-Type": "application/json"
     },
     body: JSON.stringify(data)
   });
@@ -473,16 +480,15 @@ const createBin = async (apiKey, data) => {
   }
   
   const result = await response.json();
-  return result.metadata.id;
+  return result.binId;
 };
 
-// Update existing bin on JSONbin.io
-const updateBin = async (apiKey, binId, data) => {
-  const response = await fetch(`${JSONBIN_API_URL}/${binId}`, {
+// Update existing bin via server proxy
+const updateBin = async (data) => {
+  const response = await fetch('/api/cloud/data', {
     method: "PUT",
     headers: {
-      "Content-Type": "application/json",
-      "X-Master-Key": apiKey
+      "Content-Type": "application/json"
     },
     body: JSON.stringify(data)
   });
@@ -495,13 +501,10 @@ const updateBin = async (apiKey, binId, data) => {
   return await response.json();
 };
 
-// Read bin from JSONbin.io
-const readBin = async (apiKey, binId) => {
-  const response = await fetch(`${JSONBIN_API_URL}/${binId}/latest`, {
-    method: "GET",
-    headers: {
-      "X-Master-Key": apiKey
-    }
+// Read bin via server proxy
+const readBin = async () => {
+  const response = await fetch('/api/cloud/data', {
+    method: "GET"
   });
   
   if (!response.ok) {
@@ -516,10 +519,11 @@ const readBin = async (apiKey, binId) => {
 // Upload to cloud
 if (cloudSyncUpBtn) {
   cloudSyncUpBtn.addEventListener("click", async () => {
-    const config = getCloudConfig();
-    if (!config.apiKey) {
+    await fetchCloudStatus();
+    
+    if (!cloudStatus.configured) {
       uploadStatus.textContent = "Error";
-      uploadDetails.textContent = "Add apiKey to config.js";
+      uploadDetails.textContent = "Cloud not configured. Set JSONBIN_API_KEY in .env";
       return;
     }
     
@@ -535,29 +539,27 @@ if (cloudSyncUpBtn) {
         return;
       }
       
-      let binId = config.binId;
-      
-      if (!binId) {
+      if (!cloudStatus.hasBin) {
         // Create new bin
-        binId = await createBin(config.apiKey, localData);
+        const binId = await createBin(localData);
         console.log("=== NEW BIN CREATED ===");
-        console.log("Add this to config.js:");
-        console.log(`binId: "${binId}"`);
+        console.log("Update JSONBIN_BIN_ID in .env to:");
+        console.log(binId);
         console.log("=======================");
         
         uploadStatus.textContent = "Uploaded!";
-        uploadDetails.textContent = `New bin created. Copy bin ID from console to config.js: ${binId}`;
+        uploadDetails.textContent = `New bin created. Update .env with bin ID: ${binId}`;
         
         // Also show in alert for easy copying
-        alert(`New bin created!\n\nBin ID: ${binId}\n\nCopy this to config.js and redeploy.`);
+        alert(`New bin created!\n\nBin ID: ${binId}\n\nUpdate JSONBIN_BIN_ID in .env and restart server.`);
       } else {
         // Update existing bin
-        await updateBin(config.apiKey, binId, localData);
+        await updateBin(localData);
         uploadStatus.textContent = "Uploaded";
         uploadDetails.textContent = `${localData.games.length} games synced to cloud`;
       }
       
-      updateCloudSyncUI();
+      await updateCloudSyncUI();
     } catch (error) {
       uploadStatus.textContent = "Upload failed";
       uploadDetails.textContent = error.message;
@@ -574,10 +576,13 @@ if (cloudSyncUpBtn) {
 // Download from cloud
 if (cloudSyncDownBtn) {
   cloudSyncDownBtn.addEventListener("click", async () => {
-    const config = getCloudConfig();
-    if (!config.apiKey || !config.binId) {
+    await fetchCloudStatus();
+    
+    if (!cloudStatus.configured || !cloudStatus.hasBin) {
       uploadStatus.textContent = "Error";
-      uploadDetails.textContent = !config.apiKey ? "Add apiKey to config.js" : "Add binId to config.js (upload first)";
+      uploadDetails.textContent = !cloudStatus.configured 
+        ? "Cloud not configured. Set JSONBIN_API_KEY in .env" 
+        : "No bin configured. Upload data first or set JSONBIN_BIN_ID in .env";
       return;
     }
     
@@ -585,7 +590,7 @@ if (cloudSyncDownBtn) {
       cloudSyncDownBtn.disabled = true;
       cloudSyncDownBtn.textContent = "Downloading...";
       
-      const cloudData = await readBin(config.apiKey, config.binId);
+      const cloudData = await readBin();
       
       // Validate data structure
       if (!cloudData || !cloudData.games || !Array.isArray(cloudData.games)) {

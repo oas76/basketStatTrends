@@ -537,8 +537,7 @@
   <script src="reference-stats.js"></script>
   <script src="data.js"></script>
   <script>
-    // Password Protection - run immediately
-    const CORRECT_PASSWORD = 'Basket2011';
+    // Password Protection - uses server-side verification (password in .env)
     const SESSION_KEY = 'basketstat_team_auth';
     
     const checkPassword = () => {
@@ -555,6 +554,22 @@
       modal.style.display = 'flex';
       if (mainContent) mainContent.style.display = 'none';
       return false;
+    };
+    
+    // Verify password via server API
+    const verifyPassword = async (password) => {
+      try {
+        const response = await fetch('/api/auth/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        const result = await response.json();
+        return result.valid === true;
+      } catch (error) {
+        console.error('Auth error:', error);
+        return false;
+      }
     };
     
     // Check immediately on page load
@@ -1173,11 +1188,17 @@
       render();
     };
     
-    document.getElementById('passwordSubmit').addEventListener('click', () => {
+    document.getElementById('passwordSubmit').addEventListener('click', async () => {
       const input = document.getElementById('passwordInput');
       const error = document.getElementById('passwordError');
+      const btn = document.getElementById('passwordSubmit');
       
-      if (input.value === CORRECT_PASSWORD) {
+      btn.disabled = true;
+      btn.textContent = 'Verifying...';
+      
+      const isValid = await verifyPassword(input.value);
+      
+      if (isValid) {
         sessionStorage.setItem(SESSION_KEY, 'true');
         checkPassword();
         init();
@@ -1186,6 +1207,9 @@
         input.value = '';
         input.focus();
       }
+      
+      btn.disabled = false;
+      btn.textContent = 'Enter';
     });
     
     document.getElementById('passwordInput').addEventListener('keypress', (e) => {
