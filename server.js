@@ -4,17 +4,28 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// Polyfill fetch for Node.js < 18 (Vercel compatibility)
+let fetch;
+if (typeof globalThis.fetch === 'function') {
+  fetch = globalThis.fetch;
+} else {
+  fetch = require('node-fetch');
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Detect if running on Vercel (read-only filesystem)
+const IS_VERCEL = process.env.VERCEL === '1';
 
 // Environment variables (secrets hidden from client)
 const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
 const JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID;
 const APP_PASSWORD = process.env.APP_PASSWORD;
 
-// Ensure csv directory exists
+// Ensure csv directory exists (skip on Vercel - read-only)
 const csvDir = path.join(__dirname, 'csv');
-if (!fs.existsSync(csvDir)) {
+if (!IS_VERCEL && !fs.existsSync(csvDir)) {
   fs.mkdirSync(csvDir, { recursive: true });
 }
 
@@ -68,8 +79,15 @@ function getSafeFilePath(filename) {
   return filePath;
 }
 
-// API: Upload CSV file
+// API: Upload CSV file (disabled on Vercel - use cloud storage)
 app.post('/api/upload-csv', upload.single('csvFile'), (req, res) => {
+  if (IS_VERCEL) {
+    return res.status(400).json({ 
+      error: 'File uploads disabled on Vercel. Use cloud sync instead.',
+      hint: 'Import CSV data locally, then sync to cloud'
+    });
+  }
+  
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -84,6 +102,12 @@ app.post('/api/upload-csv', upload.single('csvFile'), (req, res) => {
 
 // API: List CSV files
 app.get('/api/csv-files', (req, res) => {
+  if (IS_VERCEL) {
+    // On Vercel, CSV files are bundled at build time (if any exist)
+    // Return empty array - use cloud sync instead
+    return res.json([]);
+  }
+  
   fs.readdir(csvDir, (err, files) => {
     if (err) {
       return res.status(500).json({ error: 'Failed to read csv directory' });
@@ -134,16 +158,25 @@ app.use('/csv', express.static(csvDir));
 const dataFilePath = path.join(__dirname, 'data', 'basketstat-data.json');
 const dataDir = path.dirname(dataFilePath);
 
-// Ensure data directory exists
-if (!fs.existsSync(dataDir)) {
+// Ensure data directory exists (skip on Vercel - read-only)
+if (!IS_VERCEL && !fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
 // Parse JSON body
 app.use(express.json({ limit: '10mb' }));
 
-// API: Get stored data
+// API: Get stored data (server-side file, not available on Vercel)
 app.get('/api/data', (req, res) => {
+  if (IS_VERCEL) {
+    // On Vercel, redirect to cloud storage
+    return res.json({ 
+      players: {}, 
+      games: [],
+      _note: 'Server-side storage disabled on Vercel. Use cloud sync.'
+    });
+  }
+  
   if (!fs.existsSync(dataFilePath)) {
     return res.json({ players: {}, games: [] });
   }
@@ -157,8 +190,16 @@ app.get('/api/data', (req, res) => {
   }
 });
 
-// API: Save data
+// API: Save data (server-side file, not available on Vercel)
 app.post('/api/data', (req, res) => {
+  if (IS_VERCEL) {
+    // On Vercel, just acknowledge - data should be saved to cloud
+    return res.json({ 
+      success: true, 
+      _note: 'Server-side storage disabled on Vercel. Use cloud sync.'
+    });
+  }
+  
   try {
     const data = req.body;
     
@@ -335,9 +376,15 @@ app.post('/api/cloud/create', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`BasketStat server running at http://localhost:${PORT}`);
-  console.log(`CSV files stored in: ${csvDir}`);
-  console.log(`Data file: ${dataFilePath}`);
-  console.log(`Cloud sync: ${isCloudConfigured() ? 'Configured' : 'Not configured (set JSONBIN_API_KEY and JSONBIN_BIN_ID in .env)'}`);
-});
+// Only start server if running directly (not imported by Vercel)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`BasketStat server running at http://localhost:${PORT}`);
+    console.log(`CSV files stored in: ${csvDir}`);
+    console.log(`Data file: ${dataFilePath}`);
+    console.log(`Cloud sync: ${isCloudConfigured() ? 'Configured' : 'Not configured (set JSONBIN_API_KEY and JSONBIN_BIN_ID in .env)'}`);
+  });
+}
+
+// Export for Vercel serverless
+module.exports = app;

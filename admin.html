@@ -91,7 +91,7 @@
             <span class="badge" id="cloudBadge">Not configured</span>
           </div>
           <p class="settings-description">
-            Sync data across all users via JSONbin.io. Configure in <code>config.js</code>.
+            Sync data across all users via JSONbin.io. API keys are stored securely server-side.
           </p>
           <div class="button-row">
             <button id="cloudSyncUp" class="secondary" disabled>
@@ -108,8 +108,12 @@
             <ol>
               <li>Create account at <a href="https://jsonbin.io" target="_blank">jsonbin.io</a></li>
               <li>Copy your X-Master-Key from <a href="https://jsonbin.io/app/api-keys" target="_blank">API Keys</a></li>
-              <li>Add to <code>config.js</code>: <code>apiKey: "your-key"</code></li>
-              <li>Upload once → copy Bin ID to config → deploy</li>
+              <li><strong>Local dev:</strong> Add to <code>.env</code> file:<br>
+                <code style="display:block;margin:4px 0;">JSONBIN_API_KEY=your-key</code>
+                <code style="display:block;margin:4px 0;">JSONBIN_BIN_ID=your-bin-id</code>
+              </li>
+              <li><strong>Vercel:</strong> Add in Dashboard → Settings → Environment Variables</li>
+              <li>First upload creates a bin → update <code>JSONBIN_BIN_ID</code> → redeploy</li>
             </ol>
           </details>
         </section>
