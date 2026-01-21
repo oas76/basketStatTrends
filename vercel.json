@@ -1,31 +1,5 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "server.js",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": [
-          "index.html",
-          "admin.html",
-          "team.html",
-          "bulk-import.html",
-          "style.css",
-          "app.js",
-          "admin.js",
-          "data.js",
-          "config.js",
-          "reference-stats.js",
-          "validate-data.js",
-          "csv/**"
-        ]
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/server.js"
-    }
-  ]
+  "buildCommand": "",
+  "outputDirectory": ".",
+  "cleanUrls": true
 }
