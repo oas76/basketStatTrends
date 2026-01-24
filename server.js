@@ -3,6 +3,8 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const cookieParser = require('cookie-parser');
 
 // Polyfill fetch for Node.js < 18 (Vercel compatibility)
 let fetch;
@@ -22,6 +24,192 @@ const IS_VERCEL = process.env.VERCEL === '1';
 const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
 const JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID;
 const APP_PASSWORD = process.env.APP_PASSWORD;
+
+// Session configuration
+const SESSION_SECRET = process.env.SESSION_SECRET || APP_PASSWORD || 'basketstat-default-secret';
+const SESSION_COOKIE_NAME = 'basketstat_session';
+const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// ========================================
+// SESSION UTILITIES (Signed Cookie Approach)
+// ========================================
+
+/**
+ * Create a signed session token
+ * Token format: timestamp.signature
+ */
+function createSessionToken() {
+  const timestamp = Date.now();
+  const data = `${timestamp}`;
+  const signature = crypto
+    .createHmac('sha256', SESSION_SECRET)
+    .update(data)
+    .digest('hex');
+  return `${timestamp}.${signature}`;
+}
+
+/**
+ * Verify a session token
+ * Returns true if valid and not expired
+ */
+function verifySessionToken(token) {
+  if (!token || typeof token !== 'string') return false;
+  
+  const parts = token.split('.');
+  if (parts.length !== 2) return false;
+  
+  const [timestamp, signature] = parts;
+  const timestampNum = parseInt(timestamp, 10);
+  
+  if (isNaN(timestampNum)) return false;
+  
+  // Check if expired
+  if (Date.now() - timestampNum > SESSION_DURATION_MS) {
+    return false;
+  }
+  
+  // Verify signature
+  const expectedSignature = crypto
+    .createHmac('sha256', SESSION_SECRET)
+    .update(timestamp)
+    .digest('hex');
+  
+  // Timing-safe comparison
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(signature, 'hex'),
+      Buffer.from(expectedSignature, 'hex')
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if request is authenticated
+ */
+function isAuthenticated(req) {
+  // If no password is configured, allow access
+  if (!APP_PASSWORD) return true;
+  
+  const token = req.cookies?.[SESSION_COOKIE_NAME];
+  return verifySessionToken(token);
+}
+
+// Cookie parser middleware
+app.use(cookieParser());
+
+// Parse JSON body (needed for login endpoint)
+app.use(express.json({ limit: '10mb' }));
+
+// ========================================
+// AUTHENTICATION ROUTES (Must be before auth middleware)
+// ========================================
+
+// Serve login page (public)
+app.get('/login.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'login.html'));
+});
+
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'login.html'));
+});
+
+// API: Login endpoint
+app.post('/api/auth/login', (req, res) => {
+  const { password } = req.body;
+  
+  // If no password configured, auto-succeed
+  if (!APP_PASSWORD) {
+    const token = createSessionToken();
+    res.cookie(SESSION_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production' || IS_VERCEL,
+      sameSite: 'lax',
+      maxAge: SESSION_DURATION_MS
+    });
+    return res.json({ success: true });
+  }
+  
+  if (password === APP_PASSWORD) {
+    const token = createSessionToken();
+    res.cookie(SESSION_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production' || IS_VERCEL,
+      sameSite: 'lax',
+      maxAge: SESSION_DURATION_MS
+    });
+    return res.json({ success: true });
+  }
+  
+  res.status(401).json({ success: false, error: 'Invalid password' });
+});
+
+// API: Check if authenticated
+app.get('/api/auth/check', (req, res) => {
+  res.json({ authenticated: isAuthenticated(req) });
+});
+
+// API: Logout endpoint
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie(SESSION_COOKIE_NAME);
+  res.json({ success: true });
+});
+
+// Serve static assets (CSS, JS, images) - always public
+app.use('/style.css', express.static(path.join(__dirname, 'style.css')));
+app.use('/config.js', express.static(path.join(__dirname, 'config.js')));
+app.use('/data.js', express.static(path.join(__dirname, 'data.js')));
+app.use('/app.js', express.static(path.join(__dirname, 'app.js')));
+app.use('/admin.js', express.static(path.join(__dirname, 'admin.js')));
+app.use('/reference-stats.js', express.static(path.join(__dirname, 'reference-stats.js')));
+
+// ========================================
+// AUTHENTICATION MIDDLEWARE
+// ========================================
+
+// Protect all routes except public ones
+const authMiddleware = (req, res, next) => {
+  // Public paths that don't require authentication
+  const publicPaths = [
+    '/login',
+    '/login.html',
+    '/api/auth/login',
+    '/api/auth/check',
+    '/api/auth/logout',
+    '/style.css',
+    '/config.js',
+    '/data.js',
+    '/app.js',
+    '/admin.js',
+    '/reference-stats.js'
+  ];
+  
+  // Check if path is public
+  const isPublicPath = publicPaths.some(p => 
+    req.path === p || req.path.startsWith(p + '/')
+  );
+  
+  if (isPublicPath) {
+    return next();
+  }
+  
+  // Check if authenticated
+  if (isAuthenticated(req)) {
+    return next();
+  }
+  
+  // For API requests, return 401
+  if (req.path.startsWith('/api/')) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  
+  // For page requests, redirect to login with return URL
+  const returnUrl = encodeURIComponent(req.originalUrl);
+  res.redirect(`/login.html?redirect=${returnUrl}`);
+};
+
+app.use(authMiddleware);
 
 // Ensure csv directory exists (skip on Vercel - read-only)
 const csvDir = path.join(__dirname, 'csv');
@@ -71,6 +259,14 @@ app.get('/admin.html', (req, res) => {
 
 app.get('/team.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'team.html'));
+});
+
+app.get('/bulk-import.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'bulk-import.html'));
+});
+
+app.get('/reference-admin.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'reference-admin.html'));
 });
 
 /**
@@ -180,9 +376,6 @@ if (!IS_VERCEL && !fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-// Parse JSON body
-app.use(express.json({ limit: '10mb' }));
-
 // API: Get stored data (server-side file, not available on Vercel)
 app.get('/api/data', (req, res) => {
   if (IS_VERCEL) {
@@ -275,20 +468,14 @@ app.get('/api/cloud/status', (req, res) => {
   });
 });
 
-// API: Verify password (for protected pages)
+// API: Verify password (legacy endpoint - kept for compatibility)
+// New auth flow uses session cookies via /api/auth/login
 app.post('/api/auth/verify', (req, res) => {
-  const { password } = req.body;
-  
-  if (!APP_PASSWORD) {
-    // No password configured = allow access
+  // Just check if user has valid session
+  if (isAuthenticated(req)) {
     return res.json({ valid: true });
   }
-  
-  if (password === APP_PASSWORD) {
-    return res.json({ valid: true });
-  }
-  
-  res.status(401).json({ valid: false, error: 'Invalid password' });
+  res.status(401).json({ valid: false, error: 'Not authenticated' });
 });
 
 // API: Load data from cloud (proxy to JSONbin GET)

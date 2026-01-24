@@ -437,17 +437,6 @@
   </style>
 </head>
 <body>
-  <!-- Password Protection Modal -->
-  <div id="passwordModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 9999; align-items: center; justify-content: center;">
-    <div style="background: var(--surface); padding: 32px; border-radius: 12px; max-width: 360px; width: 90%; text-align: center;">
-      <h2 style="margin-bottom: 8px; font-size: 20px;">🔒 Protected Area</h2>
-      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px;">Enter password to access Team Overview</p>
-      <input type="password" id="passwordInput" placeholder="Password" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 14px; margin-bottom: 12px; box-sizing: border-box;">
-      <p id="passwordError" style="color: #ef4444; font-size: 12px; margin-bottom: 12px; display: none;">Incorrect password</p>
-      <button id="passwordSubmit" style="width: 100%; padding: 12px; background: var(--accent); color: var(--bg); border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">Enter</button>
-    </div>
-  </div>
-
   <header class="app-header">
     <div>
       <h1>👥 Team Overview</h1>
@@ -462,6 +451,9 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Settings
       </a>
+      <button onclick="logout()" title="Sign Out" style="background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-muted); transition: color 0.2s;" onmouseover="this.style.color='var(--negative)'" onmouseout="this.style.color='var(--text-muted)'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+      </button>
     </nav>
   </header>
 
@@ -536,45 +528,6 @@
   <script src="config.js"></script>
   <script src="reference-stats.js"></script>
   <script src="data.js"></script>
-  <script>
-    // Password Protection - uses server-side verification (password in .env)
-    const SESSION_KEY = 'basketstat_team_auth';
-    
-    const checkPassword = () => {
-      const isAuthenticated = sessionStorage.getItem(SESSION_KEY) === 'true';
-      const modal = document.getElementById('passwordModal');
-      const mainContent = document.querySelector('main');
-      
-      if (isAuthenticated) {
-        modal.style.display = 'none';
-        if (mainContent) mainContent.style.display = '';
-        return true;
-      }
-      
-      modal.style.display = 'flex';
-      if (mainContent) mainContent.style.display = 'none';
-      return false;
-    };
-    
-    // Verify password via server API
-    const verifyPassword = async (password) => {
-      try {
-        const response = await fetch('/api/auth/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password })
-        });
-        const result = await response.json();
-        return result.valid === true;
-      } catch (error) {
-        console.error('Auth error:', error);
-        return false;
-      }
-    };
-    
-    // Check immediately on page load
-    checkPassword();
-  </script>
   <script>
     // Stat categories for filtering
     const STAT_CATEGORIES = {
@@ -1177,8 +1130,6 @@
     
     // Initialize - just use local data (cloud sync handled by dashboard)
     const init = () => {
-      if (!checkPassword()) return;
-      
       // Data is already in localStorage (loaded/synced by dashboard)
       // Just ensure computed stats are up to date
       if (window.basketStatData && window.basketStatData.forceRecomputeAllStats) {
@@ -1187,36 +1138,6 @@
       
       render();
     };
-    
-    document.getElementById('passwordSubmit').addEventListener('click', async () => {
-      const input = document.getElementById('passwordInput');
-      const error = document.getElementById('passwordError');
-      const btn = document.getElementById('passwordSubmit');
-      
-      btn.disabled = true;
-      btn.textContent = 'Verifying...';
-      
-      const isValid = await verifyPassword(input.value);
-      
-      if (isValid) {
-        sessionStorage.setItem(SESSION_KEY, 'true');
-        checkPassword();
-        init();
-      } else {
-        error.style.display = 'block';
-        input.value = '';
-        input.focus();
-      }
-      
-      btn.disabled = false;
-      btn.textContent = 'Enter';
-    });
-    
-    document.getElementById('passwordInput').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        document.getElementById('passwordSubmit').click();
-      }
-    });
     
     // Start initialization
     init();

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login | BasketStat Trends</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
+    <style>
+      .login-page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: linear-gradient(135deg, var(--bg) 0%, #0d1117 100%);
+      }
+      
+      .login-container {
+        width: 100%;
+        max-width: 400px;
+      }
+      
+      .login-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 40px;
+        text-align: center;
+      }
+      
+      .login-logo {
+        font-size: 48px;
+        margin-bottom: 16px;
+      }
+      
+      .login-title {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 8px;
+        color: var(--text);
+      }
+      
+      .login-subtitle {
+        font-size: 14px;
+        color: var(--text-muted);
+        margin-bottom: 32px;
+      }
+      
+      .login-form {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      
+      .login-input {
+        width: 100%;
+        padding: 14px 16px;
+        font-size: 15px;
+        font-family: inherit;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--text);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+      
+      .login-input:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-dim);
+      }
+      
+      .login-input::placeholder {
+        color: var(--text-muted);
+      }
+      
+      .login-btn {
+        width: 100%;
+        padding: 14px 24px;
+        font-size: 15px;
+        font-weight: 600;
+        font-family: inherit;
+        background: var(--accent);
+        color: var(--bg);
+        border: none;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      
+      .login-btn:hover:not(:disabled) {
+        filter: brightness(1.1);
+        transform: translateY(-1px);
+      }
+      
+      .login-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      
+      .login-error {
+        background: rgba(248, 113, 113, 0.1);
+        border: 1px solid rgba(248, 113, 113, 0.3);
+        color: #f87171;
+        padding: 12px 16px;
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        display: none;
+      }
+      
+      .login-error.visible {
+        display: block;
+      }
+      
+      .login-footer {
+        margin-top: 24px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-page">
+      <div class="login-container">
+        <div class="login-card">
+          <div class="login-logo">🏀</div>
+          <h1 class="login-title">BasketStat Trends</h1>
+          <p class="login-subtitle">Enter your password to continue</p>
+          
+          <form class="login-form" id="loginForm">
+            <input 
+              type="password" 
+              class="login-input" 
+              id="passwordInput" 
+              placeholder="Password" 
+              autocomplete="current-password"
+              required
+            />
+            <div class="login-error" id="loginError">
+              Incorrect password. Please try again.
+            </div>
+            <button type="submit" class="login-btn" id="loginBtn">
+              Sign In
+            </button>
+          </form>
+          
+          <div class="login-footer">
+            Player performance tracking & analytics
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const form = document.getElementById('loginForm');
+      const passwordInput = document.getElementById('passwordInput');
+      const loginBtn = document.getElementById('loginBtn');
+      const loginError = document.getElementById('loginError');
+      
+      // Check if already authenticated (redirect to dashboard)
+      fetch('/api/auth/check')
+        .then(res => res.json())
+        .then(data => {
+          if (data.authenticated) {
+            window.location.href = '/';
+          }
+        })
+        .catch(() => {});
+      
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Signing in...';
+        loginError.classList.remove('visible');
+        
+        try {
+          const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: passwordInput.value })
+          });
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            // Redirect to requested page or dashboard
+            const urlParams = new URLSearchParams(window.location.search);
+            const redirect = urlParams.get('redirect') || '/';
+            window.location.href = redirect;
+          } else {
+            loginError.classList.add('visible');
+            passwordInput.value = '';
+            passwordInput.focus();
+          }
+        } catch (error) {
+          console.error('Login error:', error);
+          loginError.textContent = 'Connection error. Please try again.';
+          loginError.classList.add('visible');
+        }
+        
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Sign In';
+      });
+      
+      // Focus password input on load
+      passwordInput.focus();
+    </script>
+  </body>
+</html>

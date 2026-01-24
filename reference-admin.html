@@ -163,9 +163,12 @@
         <h1>Reference Stats Editor</h1>
         <p>Edit benchmark statistics for U14-U16 players</p>
       </div>
-      <nav>
+      <nav style="display: flex; gap: 16px; align-items: center;">
         <a href="index.html">← Dashboard</a>
         <a href="admin.html">Upload Data</a>
+        <button onclick="logout()" title="Sign Out" style="background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-muted); transition: color 0.2s;" onmouseover="this.style.color='var(--negative)'" onmouseout="this.style.color='var(--text-muted)'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+        </button>
       </nav>
     </header>
 
@@ -198,6 +201,7 @@
       <span>Reference stats help compare player performance to age-appropriate benchmarks</span>
     </footer>
 
+    <script src="config.js"></script>
     <script src="reference-stats.js"></script>
     <script>
       // Default benchmark values (used for reset)
