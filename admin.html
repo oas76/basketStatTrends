@@ -176,6 +176,33 @@
             <!-- Populated by JS -->
           </div>
         </section>
+
+        <section class="settings-card">
+          <div class="settings-card-header">
+            <h2>📋 Audit Log</h2>
+            <button id="refreshAuditLog" class="secondary" style="font-size: 12px; padding: 6px 12px;">Refresh</button>
+          </div>
+          <p class="settings-description">
+            Login activity and security events
+          </p>
+          <div class="data-table" style="max-height: 400px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Action</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>IP</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="auditLogTable">
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </main>
 

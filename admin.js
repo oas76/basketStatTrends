@@ -666,3 +666,87 @@ window.rebuildData = () => {
   console.log(`Rebuild complete. Removed ${removed} invalid entries.`);
   return reportPlayerCounts();
 };
+
+// ========================================
+// AUDIT LOG
+// ========================================
+
+const auditLogTable = document.getElementById('auditLogTable');
+const refreshAuditLog = document.getElementById('refreshAuditLog');
+
+// Format timestamp for display
+const formatTimestamp = (isoString) => {
+  const date = new Date(isoString);
+  return date.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+// Truncate user agent for display
+const formatUserAgent = (ua) => {
+  if (!ua || ua === 'unknown') return '—';
+  // Extract browser name
+  if (ua.includes('Chrome')) return 'Chrome';
+  if (ua.includes('Firefox')) return 'Firefox';
+  if (ua.includes('Safari')) return 'Safari';
+  if (ua.includes('Edge')) return 'Edge';
+  return ua.slice(0, 20) + '...';
+};
+
+// Load and render audit log
+const loadAuditLog = async () => {
+  if (!auditLogTable) return;
+  
+  auditLogTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>';
+  
+  try {
+    const response = await fetch('/api/audit-log?limit=100');
+    
+    if (!response.ok) {
+      if (response.status === 403) {
+        auditLogTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Admin access required</td></tr>';
+        return;
+      }
+      throw new Error('Failed to load audit log');
+    }
+    
+    const data = await response.json();
+    
+    if (data.entries.length === 0) {
+      auditLogTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No audit entries yet</td></tr>';
+      return;
+    }
+    
+    auditLogTable.innerHTML = data.entries.map(entry => {
+      const statusClass = entry.success ? 'color: var(--positive)' : 'color: var(--negative)';
+      const statusText = entry.success ? '✓ Success' : '✗ Failed';
+      const email = entry.email || entry.emailHash || '—';
+      
+      return `
+        <tr>
+          <td style="white-space: nowrap; font-size: 12px;">${formatTimestamp(entry.timestamp)}</td>
+          <td><code style="font-size: 11px; background: var(--surface-raised); padding: 2px 6px; border-radius: 4px;">${entry.action}</code></td>
+          <td style="font-size: 12px;">${email}</td>
+          <td style="font-size: 12px;">${entry.role || '—'}</td>
+          <td style="font-size: 11px; color: var(--text-muted);">${entry.ip || '—'}</td>
+          <td style="${statusClass}; font-size: 12px;">${statusText}</td>
+        </tr>
+      `;
+    }).join('');
+    
+  } catch (error) {
+    console.error('Failed to load audit log:', error);
+    auditLogTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--negative);">Failed to load audit log</td></tr>';
+  }
+};
+
+// Refresh button
+if (refreshAuditLog) {
+  refreshAuditLog.addEventListener('click', loadAuditLog);
+}
+
+// Load audit log on page load
+loadAuditLog();

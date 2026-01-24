@@ -24,11 +24,59 @@ const IS_VERCEL = process.env.VERCEL === '1';
 const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
 const JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID;
 const APP_PASSWORD = process.env.APP_PASSWORD;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'BasketAdmin';
 
 // Session configuration
 const SESSION_SECRET = process.env.SESSION_SECRET || APP_PASSWORD || 'basketstat-default-secret';
 const SESSION_COOKIE_NAME = 'basketstat_session';
 const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Audit log storage (in-memory + file for local, cloud for Vercel)
+const auditLogPath = path.join(__dirname, 'data', 'audit-log.json');
+let auditLog = [];
+
+// Load existing audit log on startup (local only)
+if (!IS_VERCEL && fs.existsSync(auditLogPath)) {
+  try {
+    auditLog = JSON.parse(fs.readFileSync(auditLogPath, 'utf-8'));
+  } catch (e) {
+    console.error('Failed to load audit log:', e);
+    auditLog = [];
+  }
+}
+
+/**
+ * Add entry to audit log
+ */
+function logAudit(entry) {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    ...entry
+  };
+  
+  auditLog.push(logEntry);
+  
+  // Keep only last 1000 entries in memory
+  if (auditLog.length > 1000) {
+    auditLog = auditLog.slice(-1000);
+  }
+  
+  // Save to file (local only)
+  if (!IS_VERCEL) {
+    try {
+      // Ensure directory exists
+      const dir = path.dirname(auditLogPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(auditLogPath, JSON.stringify(auditLog, null, 2), 'utf-8');
+    } catch (e) {
+      console.error('Failed to save audit log:', e);
+    }
+  }
+  
+  console.log(`[AUDIT] ${logEntry.timestamp} | ${entry.action} | ${entry.email || 'unknown'} | ${entry.success ? 'SUCCESS' : 'FAILED'}`);
+}
 
 // ========================================
 // SESSION UTILITIES (Signed Cookie Approach)
@@ -36,64 +84,98 @@ const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
  * Create a signed session token
- * Token format: timestamp.signature
+ * Token format: timestamp.role.emailHash.signature
+ * Role: 'user' or 'admin'
+ * emailHash: first 8 chars of email hash (for identification without exposing full email)
  */
-function createSessionToken() {
+function createSessionToken(role = 'user', email = '') {
   const timestamp = Date.now();
-  const data = `${timestamp}`;
+  const emailHash = crypto.createHash('md5').update(email.toLowerCase()).digest('hex').slice(0, 8);
+  const data = `${timestamp}.${role}.${emailHash}`;
   const signature = crypto
     .createHmac('sha256', SESSION_SECRET)
     .update(data)
     .digest('hex');
-  return `${timestamp}.${signature}`;
+  return `${timestamp}.${role}.${emailHash}.${signature}`;
 }
 
 /**
- * Verify a session token
- * Returns true if valid and not expired
+ * Verify a session token and extract role/email hash
+ * Returns { valid: boolean, role: string | null, emailHash: string | null }
  */
 function verifySessionToken(token) {
-  if (!token || typeof token !== 'string') return false;
+  if (!token || typeof token !== 'string') {
+    return { valid: false, role: null, emailHash: null };
+  }
   
   const parts = token.split('.');
-  if (parts.length !== 2) return false;
+  if (parts.length !== 4) {
+    return { valid: false, role: null, emailHash: null };
+  }
   
-  const [timestamp, signature] = parts;
+  const [timestamp, role, emailHash, signature] = parts;
   const timestampNum = parseInt(timestamp, 10);
   
-  if (isNaN(timestampNum)) return false;
+  if (isNaN(timestampNum)) {
+    return { valid: false, role: null, emailHash: null };
+  }
   
   // Check if expired
   if (Date.now() - timestampNum > SESSION_DURATION_MS) {
-    return false;
+    return { valid: false, role: null, emailHash: null };
   }
   
   // Verify signature
+  const data = `${timestamp}.${role}.${emailHash}`;
   const expectedSignature = crypto
     .createHmac('sha256', SESSION_SECRET)
-    .update(timestamp)
+    .update(data)
     .digest('hex');
   
   // Timing-safe comparison
   try {
-    return crypto.timingSafeEqual(
+    const isValid = crypto.timingSafeEqual(
       Buffer.from(signature, 'hex'),
       Buffer.from(expectedSignature, 'hex')
     );
+    return { 
+      valid: isValid, 
+      role: isValid ? role : null,
+      emailHash: isValid ? emailHash : null
+    };
   } catch {
-    return false;
+    return { valid: false, role: null, emailHash: null };
   }
 }
 
 /**
  * Check if request is authenticated
+ * Returns { authenticated: boolean, role: string | null }
  */
-function isAuthenticated(req) {
-  // If no password is configured, allow access
-  if (!APP_PASSWORD) return true;
+function getAuthStatus(req) {
+  // If no password is configured, allow access as admin
+  if (!APP_PASSWORD) {
+    return { authenticated: true, role: 'admin' };
+  }
   
   const token = req.cookies?.[SESSION_COOKIE_NAME];
-  return verifySessionToken(token);
+  const { valid, role } = verifySessionToken(token);
+  return { authenticated: valid, role };
+}
+
+/**
+ * Check if request is authenticated (backward compatible)
+ */
+function isAuthenticated(req) {
+  return getAuthStatus(req).authenticated;
+}
+
+/**
+ * Check if request has admin access
+ */
+function isAdmin(req) {
+  const { authenticated, role } = getAuthStatus(req);
+  return authenticated && role === 'admin';
 }
 
 // Cookie parser middleware
@@ -117,43 +199,139 @@ app.get('/login', (req, res) => {
 
 // API: Login endpoint
 app.post('/api/auth/login', (req, res) => {
-  const { password } = req.body;
+  const { email, password } = req.body;
+  const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+  const userAgent = req.headers['user-agent'] || 'unknown';
   
-  // If no password configured, auto-succeed
+  // Validate email
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    logAudit({
+      action: 'LOGIN_ATTEMPT',
+      email: email || 'missing',
+      ip: clientIp,
+      userAgent,
+      success: false,
+      reason: 'Invalid email'
+    });
+    return res.status(400).json({ success: false, error: 'Valid email address is required' });
+  }
+  
+  const normalizedEmail = email.toLowerCase().trim();
+  
+  // If no password configured, auto-succeed as admin
   if (!APP_PASSWORD) {
-    const token = createSessionToken();
+    const token = createSessionToken('admin', normalizedEmail);
     res.cookie(SESSION_COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production' || IS_VERCEL,
       sameSite: 'lax',
       maxAge: SESSION_DURATION_MS
     });
-    return res.json({ success: true });
+    logAudit({
+      action: 'LOGIN_SUCCESS',
+      email: normalizedEmail,
+      ip: clientIp,
+      userAgent,
+      success: true,
+      role: 'admin',
+      reason: 'No password configured'
+    });
+    return res.json({ success: true, role: 'admin' });
   }
   
-  if (password === APP_PASSWORD) {
-    const token = createSessionToken();
+  // Check admin password first
+  if (password === ADMIN_PASSWORD) {
+    const token = createSessionToken('admin', normalizedEmail);
     res.cookie(SESSION_COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production' || IS_VERCEL,
       sameSite: 'lax',
       maxAge: SESSION_DURATION_MS
     });
-    return res.json({ success: true });
+    logAudit({
+      action: 'LOGIN_SUCCESS',
+      email: normalizedEmail,
+      ip: clientIp,
+      userAgent,
+      success: true,
+      role: 'admin'
+    });
+    return res.json({ success: true, role: 'admin' });
   }
+  
+  // Check regular user password
+  if (password === APP_PASSWORD) {
+    const token = createSessionToken('user', normalizedEmail);
+    res.cookie(SESSION_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production' || IS_VERCEL,
+      sameSite: 'lax',
+      maxAge: SESSION_DURATION_MS
+    });
+    logAudit({
+      action: 'LOGIN_SUCCESS',
+      email: normalizedEmail,
+      ip: clientIp,
+      userAgent,
+      success: true,
+      role: 'user'
+    });
+    return res.json({ success: true, role: 'user' });
+  }
+  
+  // Failed login
+  logAudit({
+    action: 'LOGIN_FAILED',
+    email: normalizedEmail,
+    ip: clientIp,
+    userAgent,
+    success: false,
+    reason: 'Invalid password'
+  });
   
   res.status(401).json({ success: false, error: 'Invalid password' });
 });
 
 // API: Check if authenticated
 app.get('/api/auth/check', (req, res) => {
-  res.json({ authenticated: isAuthenticated(req) });
+  const { authenticated, role } = getAuthStatus(req);
+  res.json({ authenticated, role });
 });
 
 // API: Logout endpoint
 app.post('/api/auth/logout', (req, res) => {
+  const { role, emailHash } = verifySessionToken(req.cookies?.[SESSION_COOKIE_NAME]);
+  const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+  
+  if (role) {
+    logAudit({
+      action: 'LOGOUT',
+      emailHash: emailHash || 'unknown',
+      ip: clientIp,
+      success: true,
+      role
+    });
+  }
+  
   res.clearCookie(SESSION_COOKIE_NAME);
   res.json({ success: true });
+});
+
+// API: Get audit log (admin only)
+app.get('/api/audit-log', (req, res) => {
+  if (!isAdmin(req)) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  
+  // Return last 100 entries by default, or specified limit
+  const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
+  const entries = auditLog.slice(-limit).reverse(); // Most recent first
+  
+  res.json({
+    total: auditLog.length,
+    returned: entries.length,
+    entries
+  });
 });
 
 // Serve static assets (CSS, JS, images) - always public
@@ -185,6 +363,16 @@ const authMiddleware = (req, res, next) => {
     '/reference-stats.js'
   ];
   
+  // Admin-only paths (require admin role)
+  const adminPaths = [
+    '/admin.html',
+    '/admin',
+    '/bulk-import.html',
+    '/bulk-import',
+    '/reference-admin.html',
+    '/reference-admin'
+  ];
+  
   // Check if path is public
   const isPublicPath = publicPaths.some(p => 
     req.path === p || req.path.startsWith(p + '/')
@@ -194,8 +382,38 @@ const authMiddleware = (req, res, next) => {
     return next();
   }
   
-  // Check if authenticated
-  if (isAuthenticated(req)) {
+  // Get authentication status
+  const { authenticated, role } = getAuthStatus(req);
+  
+  // Check if path requires admin access
+  const requiresAdmin = adminPaths.some(p => 
+    req.path === p || req.path.startsWith(p + '/')
+  );
+  
+  if (requiresAdmin) {
+    if (!authenticated) {
+      // Not logged in at all - redirect to login
+      if (req.path.startsWith('/api/')) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      const returnUrl = encodeURIComponent(req.originalUrl);
+      return res.redirect(`/login.html?redirect=${returnUrl}`);
+    }
+    
+    if (role !== 'admin') {
+      // Logged in but not admin - show access denied
+      if (req.path.startsWith('/api/')) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      return res.redirect(`/login.html?redirect=${encodeURIComponent(req.originalUrl)}&error=admin_required`);
+    }
+    
+    // Admin authenticated - allow access
+    return next();
+  }
+  
+  // Regular protected path - just needs authentication
+  if (authenticated) {
     return next();
   }
   

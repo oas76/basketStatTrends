@@ -132,6 +132,14 @@
           
           <form class="login-form" id="loginForm">
             <input 
+              type="email" 
+              class="login-input" 
+              id="emailInput" 
+              placeholder="Email address" 
+              autocomplete="email"
+              required
+            />
+            <input 
               type="password" 
               class="login-input" 
               id="passwordInput" 
@@ -141,6 +149,9 @@
             />
             <div class="login-error" id="loginError">
               Incorrect password. Please try again.
+            </div>
+            <div class="login-error" id="adminError" style="display: none;">
+              Admin access required. Please sign in with admin password.
             </div>
             <button type="submit" class="login-btn" id="loginBtn">
               Sign In
@@ -156,16 +167,37 @@
 
     <script>
       const form = document.getElementById('loginForm');
+      const emailInput = document.getElementById('emailInput');
       const passwordInput = document.getElementById('passwordInput');
       const loginBtn = document.getElementById('loginBtn');
       const loginError = document.getElementById('loginError');
+      const adminError = document.getElementById('adminError');
       
-      // Check if already authenticated (redirect to dashboard)
+      const urlParams = new URLSearchParams(window.location.search);
+      const redirectUrl = urlParams.get('redirect') || '/';
+      const requiresAdmin = urlParams.get('error') === 'admin_required';
+      
+      // Show admin error if redirected due to insufficient permissions
+      if (requiresAdmin) {
+        adminError.style.display = 'block';
+      }
+      
+      // Load saved email from localStorage
+      const savedEmail = localStorage.getItem('basketstat_email');
+      if (savedEmail) {
+        emailInput.value = savedEmail;
+      }
+      
+      // Check if already authenticated
       fetch('/api/auth/check')
         .then(res => res.json())
         .then(data => {
           if (data.authenticated) {
-            window.location.href = '/';
+            // If admin is required but user is not admin, stay on login
+            if (requiresAdmin && data.role !== 'admin') {
+              return;
+            }
+            window.location.href = redirectUrl;
           }
         })
         .catch(() => {});
@@ -173,25 +205,48 @@
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+        
+        if (!email) {
+          loginError.textContent = 'Email address is required.';
+          loginError.classList.add('visible');
+          emailInput.focus();
+          return;
+        }
+        
         loginBtn.disabled = true;
         loginBtn.textContent = 'Signing in...';
         loginError.classList.remove('visible');
+        adminError.style.display = 'none';
         
         try {
           const response = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password: passwordInput.value })
+            body: JSON.stringify({ email, password })
           });
           
           const result = await response.json();
           
           if (result.success) {
+            // Save email for convenience
+            localStorage.setItem('basketstat_email', email);
+            
+            // Check if admin access is required but user is not admin
+            if (requiresAdmin && result.role !== 'admin') {
+              adminError.style.display = 'block';
+              passwordInput.value = '';
+              passwordInput.focus();
+              loginBtn.disabled = false;
+              loginBtn.textContent = 'Sign In';
+              return;
+            }
+            
             // Redirect to requested page or dashboard
-            const urlParams = new URLSearchParams(window.location.search);
-            const redirect = urlParams.get('redirect') || '/';
-            window.location.href = redirect;
+            window.location.href = redirectUrl;
           } else {
+            loginError.textContent = result.error || 'Incorrect password. Please try again.';
             loginError.classList.add('visible');
             passwordInput.value = '';
             passwordInput.focus();
@@ -206,8 +261,12 @@
         loginBtn.textContent = 'Sign In';
       });
       
-      // Focus password input on load
-      passwordInput.focus();
+      // Focus email input if empty, otherwise password
+      if (emailInput.value) {
+        passwordInput.focus();
+      } else {
+        emailInput.focus();
+      }
     </script>
   </body>
 </html>
