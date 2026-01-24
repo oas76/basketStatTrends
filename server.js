@@ -31,40 +31,95 @@ const SESSION_SECRET = process.env.SESSION_SECRET || APP_PASSWORD || 'basketstat
 const SESSION_COOKIE_NAME = 'basketstat_session';
 const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-// Audit log storage (in-memory + file for local, cloud for Vercel)
+// Audit log storage (in-memory + file for local, Vercel Blob for production)
 const auditLogPath = path.join(__dirname, 'data', 'audit-log.json');
+const AUDIT_BLOB_NAME = 'audit/basketstat-audit-log.json';
 let auditLog = [];
+let auditLogInitialized = false;
 
-// Load existing audit log on startup (local only)
-if (!IS_VERCEL && fs.existsSync(auditLogPath)) {
+// Vercel Blob functions (loaded dynamically for ES module compatibility)
+let blobPut, blobList;
+
+/**
+ * Load Vercel Blob module (ES module via dynamic import)
+ */
+async function loadBlobModule() {
+  if (!IS_VERCEL) return false;
+  if (blobPut && blobList) return true;
+  
   try {
-    auditLog = JSON.parse(fs.readFileSync(auditLogPath, 'utf-8'));
+    const blobModule = await import('@vercel/blob');
+    blobPut = blobModule.put;
+    blobList = blobModule.list;
+    return true;
   } catch (e) {
-    console.error('Failed to load audit log:', e);
-    auditLog = [];
+    console.error('Failed to load @vercel/blob:', e);
+    return false;
   }
 }
 
 /**
- * Add entry to audit log
+ * Initialize audit log from storage
  */
-function logAudit(entry) {
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    ...entry
-  };
+async function initAuditLog() {
+  if (auditLogInitialized) return;
   
-  auditLog.push(logEntry);
-  
-  // Keep only last 1000 entries in memory
-  if (auditLog.length > 1000) {
-    auditLog = auditLog.slice(-1000);
+  if (IS_VERCEL) {
+    // Load from Vercel Blob
+    try {
+      const blobLoaded = await loadBlobModule();
+      if (blobLoaded && blobList) {
+        const { blobs } = await blobList({ prefix: 'audit/' });
+        const auditBlob = blobs.find(b => b.pathname === AUDIT_BLOB_NAME);
+        if (auditBlob) {
+          const response = await fetch(auditBlob.url);
+          if (response.ok) {
+            auditLog = await response.json();
+            console.log(`Loaded ${auditLog.length} audit entries from Vercel Blob`);
+          }
+        } else {
+          console.log('No existing audit log in Vercel Blob, starting fresh');
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load audit log from Vercel Blob:', e);
+    }
+  } else if (fs.existsSync(auditLogPath)) {
+    // Load from local file
+    try {
+      auditLog = JSON.parse(fs.readFileSync(auditLogPath, 'utf-8'));
+      console.log(`Loaded ${auditLog.length} audit entries from local file`);
+    } catch (e) {
+      console.error('Failed to load audit log:', e);
+      auditLog = [];
+    }
   }
   
-  // Save to file (local only)
-  if (!IS_VERCEL) {
+  auditLogInitialized = true;
+}
+
+/**
+ * Save audit log to storage
+ */
+async function saveAuditLog() {
+  if (IS_VERCEL) {
+    // Save to Vercel Blob
     try {
-      // Ensure directory exists
+      const blobLoaded = await loadBlobModule();
+      if (blobLoaded && blobPut) {
+        await blobPut(AUDIT_BLOB_NAME, JSON.stringify(auditLog, null, 2), {
+          access: 'public',
+          contentType: 'application/json',
+          addRandomSuffix: false
+        });
+        console.log('Audit log saved to Vercel Blob');
+      }
+    } catch (e) {
+      console.error('Failed to save audit log to Vercel Blob:', e);
+    }
+  } else {
+    // Save to local file
+    try {
       const dir = path.dirname(auditLogPath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -74,9 +129,37 @@ function logAudit(entry) {
       console.error('Failed to save audit log:', e);
     }
   }
+}
+
+/**
+ * Add entry to audit log
+ */
+async function logAudit(entry) {
+  // Ensure log is initialized
+  if (!auditLogInitialized) {
+    await initAuditLog();
+  }
+  
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    ...entry
+  };
+  
+  auditLog.push(logEntry);
+  
+  // Keep only last 1000 entries
+  if (auditLog.length > 1000) {
+    auditLog = auditLog.slice(-1000);
+  }
+  
+  // Save to storage (async, don't block)
+  saveAuditLog().catch(e => console.error('Failed to save audit log:', e));
   
   console.log(`[AUDIT] ${logEntry.timestamp} | ${entry.action} | ${entry.email || 'unknown'} | ${entry.success ? 'SUCCESS' : 'FAILED'}`);
 }
+
+// Initialize audit log on startup
+initAuditLog().catch(e => console.error('Failed to initialize audit log:', e));
 
 // ========================================
 // SESSION UTILITIES (Signed Cookie Approach)
@@ -318,9 +401,14 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // API: Get audit log (admin only)
-app.get('/api/audit-log', (req, res) => {
+app.get('/api/audit-log', async (req, res) => {
   if (!isAdmin(req)) {
     return res.status(403).json({ error: 'Admin access required' });
+  }
+  
+  // Ensure log is initialized
+  if (!auditLogInitialized) {
+    await initAuditLog();
   }
   
   // Return last 100 entries by default, or specified limit
@@ -330,6 +418,7 @@ app.get('/api/audit-log', (req, res) => {
   res.json({
     total: auditLog.length,
     returned: entries.length,
+    storage: IS_VERCEL ? 'vercel-blob' : 'local-file',
     entries
   });
 });
