@@ -35,6 +35,39 @@ const formatStatValue = (value) => {
   return String(value);
 };
 
+/**
+ * Sync data to cloud after a change (upload, delete, etc.)
+ */
+async function syncToCloudAfterChange() {
+  try {
+    const statusResponse = await fetch('/api/cloud/status');
+    const status = await statusResponse.json();
+    
+    if (!status.configured) {
+      console.log('Cloud not configured, skipping sync');
+      return;
+    }
+    
+    const data = window.basketStatData.loadData();
+    const response = await fetch('/api/cloud/data', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    
+    if (response.ok) {
+      console.log('Data synced to cloud');
+      if (uploadDetails) {
+        uploadDetails.textContent += ' (synced to cloud)';
+      }
+    } else {
+      console.warn('Cloud sync failed:', await response.text());
+    }
+  } catch (error) {
+    console.warn('Cloud sync error:', error);
+  }
+}
+
 // Render games table
 const renderGames = () => {
   const { games } = window.basketStatData.loadData();
@@ -178,7 +211,7 @@ window.editGame = (gameId) => {
 };
 
 // Delete game
-window.deleteGame = (gameId) => {
+window.deleteGame = async (gameId) => {
   const { games } = window.basketStatData.loadData();
   const game = games.find((g) => g.id === gameId);
   
@@ -191,6 +224,9 @@ window.deleteGame = (gameId) => {
     renderPlayers();
     uploadStatus.textContent = "Deleted";
     uploadDetails.textContent = `Removed game vs ${game.opponent}`;
+    
+    // Sync deletion to cloud
+    await syncToCloudAfterChange();
   }
 };
 
@@ -219,7 +255,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 // Edit game form submit
-editGameForm.addEventListener("submit", (e) => {
+editGameForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   
   const gameId = document.getElementById("editGameId").value;
@@ -236,6 +272,9 @@ editGameForm.addEventListener("submit", (e) => {
     renderGames();
     uploadStatus.textContent = "✓ Updated";
     uploadDetails.textContent = `Game vs ${updates.opponent} updated`;
+    
+    // Sync edit to cloud
+    await syncToCloudAfterChange();
   } catch (error) {
     uploadStatus.textContent = "✗ Error";
     uploadDetails.textContent = error.message;
@@ -297,6 +336,9 @@ uploadForm.addEventListener("submit", async (event) => {
     uploadForm.reset();
     renderGames();
     renderPlayers();
+    
+    // Sync to cloud after upload
+    syncToCloudAfterChange();
   } catch (error) {
     uploadStatus.textContent = "Error";
     uploadDetails.textContent = error.message;
@@ -304,13 +346,16 @@ uploadForm.addEventListener("submit", async (event) => {
 });
 
 // Clear all data
-clearData.addEventListener("click", () => {
+clearData.addEventListener("click", async () => {
   if (confirm("Clear all stored games and player data? This cannot be undone.")) {
     window.basketStatData.saveData({ players: {}, games: [] });
     renderGames();
     renderPlayers();
     uploadStatus.textContent = "Cleared";
     uploadDetails.textContent = "All data has been removed";
+    
+    // Sync the clear to cloud
+    await syncToCloudAfterChange();
   }
 });
 
@@ -401,6 +446,9 @@ if (importDataInput) {
       
       renderGames();
       renderPlayers();
+      
+      // Sync import to cloud
+      await syncToCloudAfterChange();
     } catch (error) {
       uploadStatus.textContent = "Error";
       uploadDetails.textContent = `Import failed: ${error.message}`;
