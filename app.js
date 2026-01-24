@@ -1383,34 +1383,78 @@ const aiInsightText = document.getElementById('aiInsightText');
  * Get current provider
  */
 const getProvider = () => {
-  return sessionStorage.getItem(AI_PROVIDER_KEY) || 'groq';
+  // Check localStorage first (persisted), then sessionStorage
+  return localStorage.getItem(AI_PROVIDER_KEY) || sessionStorage.getItem(AI_PROVIDER_KEY) || 'groq';
 };
 
 /**
  * Set provider
  */
 const setProvider = (provider) => {
+  // Always save provider to sessionStorage
   sessionStorage.setItem(AI_PROVIDER_KEY, provider);
+  // If "remember" is checked, also save to localStorage
+  const rememberCheckbox = document.getElementById('rememberApiKey');
+  if (rememberCheckbox?.checked || localStorage.getItem(`${AI_STORAGE_KEY}-remembered`)) {
+    localStorage.setItem(AI_PROVIDER_KEY, provider);
+  }
 };
 
 /**
- * Load API key from session storage
+ * Check if API key is remembered (stored in localStorage)
+ */
+const isApiKeyRemembered = () => {
+  const provider = getProvider();
+  return !!localStorage.getItem(`${AI_STORAGE_KEY}-${provider}`);
+};
+
+/**
+ * Load API key from storage (checks localStorage first, then sessionStorage)
  */
 const loadApiKey = () => {
   const provider = getProvider();
-  return sessionStorage.getItem(`${AI_STORAGE_KEY}-${provider}`) || '';
+  // Check localStorage first (remembered), then sessionStorage (current session)
+  return localStorage.getItem(`${AI_STORAGE_KEY}-${provider}`) || 
+         sessionStorage.getItem(`${AI_STORAGE_KEY}-${provider}`) || '';
 };
 
 /**
- * Save API key to session storage
+ * Save API key to storage
+ * @param {string} key - The API key to save
+ * @param {boolean} remember - Whether to persist in localStorage
  */
-const saveApiKeyToStorage = (key) => {
+const saveApiKeyToStorage = (key, remember = false) => {
   const provider = getProvider();
+  
   if (key) {
-    sessionStorage.setItem(`${AI_STORAGE_KEY}-${provider}`, key);
+    if (remember) {
+      // Save to localStorage (persists across sessions)
+      localStorage.setItem(`${AI_STORAGE_KEY}-${provider}`, key);
+      localStorage.setItem(`${AI_STORAGE_KEY}-remembered`, 'true');
+      localStorage.setItem(AI_PROVIDER_KEY, provider);
+      // Clear from sessionStorage to avoid duplication
+      sessionStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
+    } else {
+      // Save to sessionStorage only (cleared on tab close)
+      sessionStorage.setItem(`${AI_STORAGE_KEY}-${provider}`, key);
+      // Clear from localStorage if previously remembered
+      localStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
+    }
   } else {
+    // Clear from both storages
     sessionStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
+    localStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
   }
+};
+
+/**
+ * Clear remembered API key from localStorage
+ */
+const forgetApiKey = () => {
+  const provider = getProvider();
+  localStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
+  localStorage.removeItem(`${AI_STORAGE_KEY}-remembered`);
+  localStorage.removeItem(AI_PROVIDER_KEY);
 };
 
 /**
@@ -1731,7 +1775,10 @@ if (aiProviderSelect) {
 if (saveApiKeyBtn) {
   saveApiKeyBtn.addEventListener('click', () => {
     const key = aiApiKeyInput.value.trim();
-    saveApiKeyToStorage(key);
+    const rememberCheckbox = document.getElementById('rememberApiKey');
+    const remember = rememberCheckbox?.checked || false;
+    
+    saveApiKeyToStorage(key, remember);
     aiApiKeyInput.value = '';
     aiSettings.style.display = 'none';
     updateAiStatus();
@@ -1748,6 +1795,13 @@ if (aiApiKeyInput) {
   if (savedKey) {
     aiApiKeyInput.placeholder = '••••••••••••••••';
   }
+  
+  // Set "remember" checkbox state if key is already in localStorage
+  const rememberCheckbox = document.getElementById('rememberApiKey');
+  if (rememberCheckbox) {
+    rememberCheckbox.checked = isApiKeyRemembered();
+  }
+  
   updateAiStatus();
 }
 
