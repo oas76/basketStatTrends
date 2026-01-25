@@ -1613,18 +1613,23 @@ const callOpenAiCompatibleApi = async (prompt, apiKey, config) => {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    const errorMsg = error.error?.message || '';
+    const errorMsg = error.error?.message || error.message || '';
+    
+    console.error(`[AI] ${config.name} error:`, response.status, errorMsg);
     
     if (response.status === 401) {
-      throw new Error(`Invalid API key. Please check your ${config.name} API key.`);
+      throw new Error(`[${config.name}] Invalid API key. Please check your API key.`);
     }
     if (response.status === 429) {
-      throw new Error('Rate limit exceeded. Please wait a moment and try again.');
+      throw new Error(`[${config.name}] Rate limit exceeded. Please wait a moment and try again.`);
     }
     if (response.status === 402 || errorMsg.includes('billing') || errorMsg.includes('quota')) {
-      throw new Error('Billing/quota issue. Check your account balance or try Groq (free tier).');
+      throw new Error(`[${config.name}] Billing/quota issue. Check your account balance or try Groq (free tier).`);
     }
-    throw new Error(errorMsg || `API error: ${response.status}`);
+    if (errorMsg.toLowerCase().includes('token')) {
+      throw new Error(`[${config.name}] Token error: ${errorMsg}`);
+    }
+    throw new Error(`[${config.name}] ${errorMsg || `API error: ${response.status}`}`);
   }
 
   const data = await response.json();
@@ -1653,21 +1658,29 @@ const callGeminiApi = async (prompt, apiKey, config) => {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    const errorMsg = error.error?.message || '';
+    const errorMsg = error.error?.message || error.message || '';
+    
+    console.error('[AI] Gemini error:', response.status, errorMsg);
     
     if (response.status === 400) {
-      throw new Error('Invalid API key. Please check your Gemini API key.');
+      if (errorMsg.toLowerCase().includes('api key')) {
+        throw new Error('[Gemini] Invalid API key. Please check your API key.');
+      }
+      throw new Error(`[Gemini] Request error: ${errorMsg || 'Bad request'}`);
     }
     if (response.status === 404 || errorMsg.includes('not found')) {
-      throw new Error('Model not available. Google may have updated their API.');
+      throw new Error('[Gemini] Model not available. Google may have updated their API.');
     }
     if (response.status === 403) {
-      throw new Error('Access denied. Your API key may not have access to this model.');
+      throw new Error('[Gemini] Access denied. Your API key may not have access to this model.');
     }
     if (response.status === 429) {
-      throw new Error('Rate limit exceeded. Try Groq instead (more generous free tier).');
+      throw new Error('[Gemini] Rate limit exceeded. Try Groq instead (more generous free tier).');
     }
-    throw new Error(errorMsg || `API error: ${response.status}`);
+    if (errorMsg.toLowerCase().includes('token')) {
+      throw new Error(`[Gemini] Token error: ${errorMsg}`);
+    }
+    throw new Error(`[Gemini] ${errorMsg || `API error: ${response.status}`}`);
   }
 
   const data = await response.json();
@@ -1679,12 +1692,19 @@ const callGeminiApi = async (prompt, apiKey, config) => {
  */
 const callAiApi = async (prompt) => {
   const apiKey = loadApiKey();
-  if (!apiKey) {
-    throw new Error('No API key configured');
-  }
-
   const providerKey = getProvider();
   const config = AI_PROVIDERS[providerKey];
+  
+  if (!apiKey) {
+    throw new Error(`[${config.name}] No API key configured. Click the gear icon to add your key.`);
+  }
+  
+  // Basic key validation
+  if (apiKey.length < 10) {
+    throw new Error(`[${config.name}] Invalid API key format. Please re-enter your API key.`);
+  }
+
+  console.log(`[AI] Calling ${config.name} API...`);
 
   // Route based on API type
   if (config.type === 'openai') {
