@@ -1428,6 +1428,68 @@
     
     const AI_STORAGE_KEY = 'basketstat-ai-key';
     const AI_PROVIDER_KEY = 'basketstat-ai-provider';
+    const AI_CACHE_KEY = 'basketstat-ai-cache';
+    const AI_CACHE_TTL = 30 * 60 * 1000; // 30 minutes cache TTL
+    
+    // Rate limiting protection
+    let isTeamGenerating = false;
+    let lastTeamRequestTime = 0;
+    const MIN_REQUEST_INTERVAL = 3000; // 3 seconds between requests
+    
+    /**
+     * Simple hash function for cache keys
+     */
+    const hashString = (str) => {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+      }
+      return hash.toString(36);
+    };
+    
+    /**
+     * Get cached AI response
+     */
+    const getCachedResponse = (cacheKey) => {
+      try {
+        const cache = JSON.parse(sessionStorage.getItem(AI_CACHE_KEY) || '{}');
+        const entry = cache[cacheKey];
+        if (entry && Date.now() - entry.timestamp < AI_CACHE_TTL) {
+          console.log('[AI] Using cached response');
+          return entry.response;
+        }
+      } catch (e) {
+        console.warn('Cache read error:', e);
+      }
+      return null;
+    };
+    
+    /**
+     * Save AI response to cache
+     */
+    const setCachedResponse = (cacheKey, response) => {
+      try {
+        const cache = JSON.parse(sessionStorage.getItem(AI_CACHE_KEY) || '{}');
+        // Clean old entries
+        const now = Date.now();
+        Object.keys(cache).forEach(key => {
+          if (now - cache[key].timestamp > AI_CACHE_TTL) {
+            delete cache[key];
+          }
+        });
+        cache[cacheKey] = { response, timestamp: now };
+        sessionStorage.setItem(AI_CACHE_KEY, JSON.stringify(cache));
+      } catch (e) {
+        console.warn('Cache write error:', e);
+      }
+    };
+    
+    /**
+     * Sleep utility for retry backoff
+     */
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
     
     // Provider configurations (same as app.js)
     const AI_PROVIDERS = {
@@ -1785,64 +1847,107 @@ Keep the tone professional but encouraging. This is for coaches, so be tactical 
     };
     
     /**
-     * Call OpenAI-compatible API
+     * Call OpenAI-compatible API with retry logic
      */
-    const callOpenAiCompatibleApi = async (prompt, apiKey, config) => {
-      const response = await fetch(config.url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: config.model,
-          messages: [
-            { role: 'system', content: 'You are an experienced youth basketball head coach providing strategic team analysis and development recommendations. Be professional, tactical, and specific.' },
-            { role: 'user', content: prompt }
-          ],
-          temperature: 0.7,
-          max_tokens: 1500
-        })
-      });
+    const callOpenAiCompatibleApi = async (prompt, apiKey, config, retryCount = 0) => {
+      const MAX_RETRIES = 3;
+      const BASE_DELAY = 2000;
+      
+      try {
+        const response = await fetch(config.url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: config.model,
+            messages: [
+              { role: 'system', content: 'You are an experienced youth basketball head coach providing strategic team analysis and development recommendations. Be professional, tactical, and specific.' },
+              { role: 'user', content: prompt }
+            ],
+            temperature: 0.7,
+            max_tokens: 1500
+          })
+        });
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        const errorMsg = error.error?.message || error.message || '';
-        
-        if (response.status === 401) throw new Error(`[${config.name}] Invalid API key.`);
-        if (response.status === 429) throw new Error(`[${config.name}] Rate limit exceeded. Please wait.`);
-        if (response.status === 402) throw new Error(`[${config.name}] Billing issue. Try Groq (free tier).`);
-        throw new Error(`[${config.name}] ${errorMsg || `API error: ${response.status}`}`);
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          const errorMsg = error.error?.message || error.message || '';
+          
+          // Rate limit - retry with exponential backoff
+          if (response.status === 429 && retryCount < MAX_RETRIES) {
+            const retryAfter = parseInt(response.headers.get('retry-after') || '0') * 1000;
+            const delay = Math.max(retryAfter, BASE_DELAY * Math.pow(2, retryCount));
+            console.log(`[AI] Rate limited. Retrying in ${delay/1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+            await sleep(delay);
+            return callOpenAiCompatibleApi(prompt, apiKey, config, retryCount + 1);
+          }
+          
+          if (response.status === 401) throw new Error(`[${config.name}] Invalid API key.`);
+          if (response.status === 429) throw new Error(`[${config.name}] Rate limit exceeded. Wait 1-2 min or switch to Groq.`);
+          if (response.status === 402) throw new Error(`[${config.name}] Billing issue. Try Groq (free tier).`);
+          throw new Error(`[${config.name}] ${errorMsg || `API error: ${response.status}`}`);
+        }
+
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content || 'No response generated';
+      } catch (error) {
+        if (error.name === 'TypeError' && retryCount < MAX_RETRIES) {
+          const delay = BASE_DELAY * Math.pow(2, retryCount);
+          console.log(`[AI] Network error. Retrying in ${delay/1000}s...`);
+          await sleep(delay);
+          return callOpenAiCompatibleApi(prompt, apiKey, config, retryCount + 1);
+        }
+        throw error;
       }
-
-      const data = await response.json();
-      return data.choices?.[0]?.message?.content || 'No response generated';
     };
     
     /**
-     * Call Gemini API
+     * Call Gemini API with retry logic
      */
-    const callGeminiApi = async (prompt, apiKey, config) => {
-      const response = await fetch(`${config.url}?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 1500 }
-        })
-      });
+    const callGeminiApi = async (prompt, apiKey, config, retryCount = 0) => {
+      const MAX_RETRIES = 3;
+      const BASE_DELAY = 2000;
+      
+      try {
+        const response = await fetch(`${config.url}?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 1500 }
+          })
+        });
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        const errorMsg = error.error?.message || '';
-        
-        if (response.status === 400) throw new Error(`[Gemini] ${errorMsg || 'Bad request'}`);
-        if (response.status === 429) throw new Error('[Gemini] Rate limit. Try Groq instead.');
-        throw new Error(`[Gemini] ${errorMsg || `API error: ${response.status}`}`);
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          const errorMsg = error.error?.message || '';
+          
+          // Rate limit - retry with exponential backoff
+          if (response.status === 429 && retryCount < MAX_RETRIES) {
+            const delay = BASE_DELAY * Math.pow(2, retryCount);
+            console.log(`[AI] Rate limited. Retrying in ${delay/1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+            await sleep(delay);
+            return callGeminiApi(prompt, apiKey, config, retryCount + 1);
+          }
+          
+          if (response.status === 400) throw new Error(`[Gemini] ${errorMsg || 'Bad request'}`);
+          if (response.status === 429) throw new Error('[Gemini] Rate limit. Wait 1-2 min or switch to Groq.');
+          throw new Error(`[Gemini] ${errorMsg || `API error: ${response.status}`}`);
+        }
+
+        const data = await response.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
+      } catch (error) {
+        if (error.name === 'TypeError' && retryCount < MAX_RETRIES) {
+          const delay = BASE_DELAY * Math.pow(2, retryCount);
+          console.log(`[AI] Network error. Retrying in ${delay/1000}s...`);
+          await sleep(delay);
+          return callGeminiApi(prompt, apiKey, config, retryCount + 1);
+        }
+        throw error;
       }
-
-      const data = await response.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
     };
     
     /**
@@ -1865,9 +1970,23 @@ Keep the tone professional but encouraging. This is for coaches, so be tactical 
     };
     
     /**
-     * Generate team AI insight
+     * Generate team AI insight with caching and debouncing
      */
     const generateTeamAiInsight = async () => {
+      // Debounce: prevent rapid consecutive requests
+      if (isTeamGenerating) {
+        console.log('[AI] Request already in progress, ignoring');
+        return;
+      }
+      
+      const now = Date.now();
+      if (now - lastTeamRequestTime < MIN_REQUEST_INTERVAL) {
+        const waitTime = Math.ceil((MIN_REQUEST_INTERVAL - (now - lastTeamRequestTime)) / 1000);
+        teamAiInsightText.innerHTML = `<p style="color: var(--text-muted);">Please wait ${waitTime}s before requesting again...</p>`;
+        teamAiInsightText.classList.add('visible');
+        return;
+      }
+      
       const data = window.basketStatData.loadData();
       
       if (!data.games || data.games.length < 2) {
@@ -1891,7 +2010,39 @@ Keep the tone professional but encouraging. This is for coaches, so be tactical 
         return;
       }
       
+      // Generate cache key based on team data
+      const provider = getProvider();
+      const playerNames = Object.keys(playerData).sort().join(',');
+      const gameCount = data.games.length;
+      const dataHash = hashString(`${playerNames}_${gameCount}_${currentWindow}`);
+      const cacheKey = `team_${provider}_${dataHash}`;
+      
+      // Check cache first
+      const cachedResponse = getCachedResponse(cacheKey);
+      if (cachedResponse) {
+        const formattedResponse = cachedResponse
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/###\s*(.*)/g, '<h4>$1</h4>')
+          .replace(/##\s*(.*)/g, '<h4>$1</h4>')
+          .split('\n\n')
+          .filter(p => p.trim())
+          .map(p => {
+            if (p.startsWith('<h4>')) return p;
+            if (p.startsWith('- ') || p.startsWith('* ')) {
+              const items = p.split('\n').map(line => `<li>${line.replace(/^[-*]\s*/, '')}</li>`).join('');
+              return `<ul>${items}</ul>`;
+            }
+            return `<p>${p}</p>`;
+          })
+          .join('');
+        teamAiInsightText.innerHTML = `<div class="cache-indicator" style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">📋 Cached response (${Math.round(AI_CACHE_TTL/60000)}min)</div>${formattedResponse}`;
+        teamAiInsightText.classList.add('visible');
+        return;
+      }
+      
       // Show loading state
+      isTeamGenerating = true;
+      lastTeamRequestTime = now;
       generateTeamAiBtn.classList.add('loading');
       generateTeamAiBtn.disabled = true;
       teamAiInsightText.innerHTML = '';
@@ -1901,6 +2052,9 @@ Keep the tone professional but encouraging. This is for coaches, so be tactical 
         const context = buildTeamAiContext(playerData);
         const prompt = buildTeamCoachingPrompt(context);
         const response = await callTeamAiApi(prompt);
+        
+        // Cache the response
+        setCachedResponse(cacheKey, response);
         
         // Format the response
         const formattedResponse = response
@@ -1931,6 +2085,7 @@ Keep the tone professional but encouraging. This is for coaches, so be tactical 
           teamAiStatusText.textContent = '✗ Invalid API key';
         }
       } finally {
+        isTeamGenerating = false;
         generateTeamAiBtn.classList.remove('loading');
         generateTeamAiBtn.disabled = false;
       }

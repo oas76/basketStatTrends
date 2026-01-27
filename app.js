@@ -1338,6 +1338,68 @@ if (profileModal) {
 
 const AI_STORAGE_KEY = 'basketstat-ai-key';
 const AI_PROVIDER_KEY = 'basketstat-ai-provider';
+const AI_CACHE_KEY = 'basketstat-ai-cache';
+const AI_CACHE_TTL = 30 * 60 * 1000; // 30 minutes cache TTL
+
+// Rate limiting protection
+let isGenerating = false;
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL = 3000; // 3 seconds between requests
+
+/**
+ * Simple hash function for cache keys
+ */
+const hashString = (str) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString(36);
+};
+
+/**
+ * Get cached AI response
+ */
+const getCachedResponse = (cacheKey) => {
+  try {
+    const cache = JSON.parse(sessionStorage.getItem(AI_CACHE_KEY) || '{}');
+    const entry = cache[cacheKey];
+    if (entry && Date.now() - entry.timestamp < AI_CACHE_TTL) {
+      console.log('[AI] Using cached response');
+      return entry.response;
+    }
+  } catch (e) {
+    console.warn('Cache read error:', e);
+  }
+  return null;
+};
+
+/**
+ * Save AI response to cache
+ */
+const setCachedResponse = (cacheKey, response) => {
+  try {
+    const cache = JSON.parse(sessionStorage.getItem(AI_CACHE_KEY) || '{}');
+    // Clean old entries
+    const now = Date.now();
+    Object.keys(cache).forEach(key => {
+      if (now - cache[key].timestamp > AI_CACHE_TTL) {
+        delete cache[key];
+      }
+    });
+    cache[cacheKey] = { response, timestamp: now };
+    sessionStorage.setItem(AI_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    console.warn('Cache write error:', e);
+  }
+};
+
+/**
+ * Sleep utility for retry backoff
+ */
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Provider configurations
 const AI_PROVIDERS = {
@@ -1591,100 +1653,145 @@ Keep the tone positive and age-appropriate. Be specific to the data provided.`;
 };
 
 /**
- * Call OpenAI-compatible API (works for OpenAI, Groq, and other compatible providers)
+ * Call OpenAI-compatible API with retry logic
  */
-const callOpenAiCompatibleApi = async (prompt, apiKey, config) => {
-  const response = await fetch(config.url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: 'system', content: 'You are a helpful youth basketball coach providing analysis and advice for junior players (ages 14-16). Be encouraging, specific, and age-appropriate.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.7,
-      max_tokens: 1024
-    })
-  });
+const callOpenAiCompatibleApi = async (prompt, apiKey, config, retryCount = 0) => {
+  const MAX_RETRIES = 3;
+  const BASE_DELAY = 2000; // 2 seconds
+  
+  try {
+    const response = await fetch(config.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: 'system', content: 'You are a helpful youth basketball coach providing analysis and advice for junior players (ages 14-16). Be encouraging, specific, and age-appropriate.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 1024
+      })
+    });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    const errorMsg = error.error?.message || error.message || '';
-    
-    console.error(`[AI] ${config.name} error:`, response.status, errorMsg);
-    
-    if (response.status === 401) {
-      throw new Error(`[${config.name}] Invalid API key. Please check your API key.`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      const errorMsg = error.error?.message || error.message || '';
+      
+      console.error(`[AI] ${config.name} error:`, response.status, errorMsg);
+      
+      // Rate limit - retry with exponential backoff
+      if (response.status === 429 && retryCount < MAX_RETRIES) {
+        const retryAfter = parseInt(response.headers.get('retry-after') || '0') * 1000;
+        const delay = Math.max(retryAfter, BASE_DELAY * Math.pow(2, retryCount));
+        console.log(`[AI] Rate limited. Retrying in ${delay/1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+        await sleep(delay);
+        return callOpenAiCompatibleApi(prompt, apiKey, config, retryCount + 1);
+      }
+      
+      if (response.status === 401) {
+        throw new Error(`[${config.name}] Invalid API key. Please check your API key.`);
+      }
+      if (response.status === 429) {
+        throw new Error(`[${config.name}] Rate limit exceeded. Please wait 1-2 minutes or switch to Groq (more generous limits).`);
+      }
+      if (response.status === 402 || errorMsg.includes('billing') || errorMsg.includes('quota')) {
+        throw new Error(`[${config.name}] Billing/quota issue. Check your account balance or try Groq (free tier).`);
+      }
+      if (errorMsg.toLowerCase().includes('token')) {
+        throw new Error(`[${config.name}] Token error: ${errorMsg}`);
+      }
+      throw new Error(`[${config.name}] ${errorMsg || `API error: ${response.status}`}`);
     }
-    if (response.status === 429) {
-      throw new Error(`[${config.name}] Rate limit exceeded. Please wait a moment and try again.`);
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || 'No response generated';
+  } catch (error) {
+    // Network errors - retry
+    if (error.name === 'TypeError' && retryCount < MAX_RETRIES) {
+      const delay = BASE_DELAY * Math.pow(2, retryCount);
+      console.log(`[AI] Network error. Retrying in ${delay/1000}s...`);
+      await sleep(delay);
+      return callOpenAiCompatibleApi(prompt, apiKey, config, retryCount + 1);
     }
-    if (response.status === 402 || errorMsg.includes('billing') || errorMsg.includes('quota')) {
-      throw new Error(`[${config.name}] Billing/quota issue. Check your account balance or try Groq (free tier).`);
-    }
-    if (errorMsg.toLowerCase().includes('token')) {
-      throw new Error(`[${config.name}] Token error: ${errorMsg}`);
-    }
-    throw new Error(`[${config.name}] ${errorMsg || `API error: ${response.status}`}`);
+    throw error;
   }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || 'No response generated';
 };
 
 /**
- * Call Gemini API
+ * Call Gemini API with retry logic
  */
-const callGeminiApi = async (prompt, apiKey, config) => {
-  const response = await fetch(`${config.url}?key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [{
-        parts: [{ text: prompt }]
-      }],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 1024,
-      }
-    })
-  });
+const callGeminiApi = async (prompt, apiKey, config, retryCount = 0) => {
+  const MAX_RETRIES = 3;
+  const BASE_DELAY = 2000;
+  
+  try {
+    const response = await fetch(`${config.url}?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+        }
+      })
+    });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    const errorMsg = error.error?.message || error.message || '';
-    
-    console.error('[AI] Gemini error:', response.status, errorMsg);
-    
-    if (response.status === 400) {
-      if (errorMsg.toLowerCase().includes('api key')) {
-        throw new Error('[Gemini] Invalid API key. Please check your API key.');
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      const errorMsg = error.error?.message || error.message || '';
+      
+      console.error('[AI] Gemini error:', response.status, errorMsg);
+      
+      // Rate limit - retry with exponential backoff
+      if (response.status === 429 && retryCount < MAX_RETRIES) {
+        const delay = BASE_DELAY * Math.pow(2, retryCount);
+        console.log(`[AI] Rate limited. Retrying in ${delay/1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+        await sleep(delay);
+        return callGeminiApi(prompt, apiKey, config, retryCount + 1);
       }
-      throw new Error(`[Gemini] Request error: ${errorMsg || 'Bad request'}`);
+      
+      if (response.status === 400) {
+        if (errorMsg.toLowerCase().includes('api key')) {
+          throw new Error('[Gemini] Invalid API key. Please check your API key.');
+        }
+        throw new Error(`[Gemini] Request error: ${errorMsg || 'Bad request'}`);
+      }
+      if (response.status === 404 || errorMsg.includes('not found')) {
+        throw new Error('[Gemini] Model not available. Google may have updated their API.');
+      }
+      if (response.status === 403) {
+        throw new Error('[Gemini] Access denied. Your API key may not have access to this model.');
+      }
+      if (response.status === 429) {
+        throw new Error('[Gemini] Rate limit exceeded. Please wait 1-2 minutes or switch to Groq (more generous limits).');
+      }
+      if (errorMsg.toLowerCase().includes('token')) {
+        throw new Error(`[Gemini] Token error: ${errorMsg}`);
+      }
+      throw new Error(`[Gemini] ${errorMsg || `API error: ${response.status}`}`);
     }
-    if (response.status === 404 || errorMsg.includes('not found')) {
-      throw new Error('[Gemini] Model not available. Google may have updated their API.');
+
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
+  } catch (error) {
+    // Network errors - retry
+    if (error.name === 'TypeError' && retryCount < MAX_RETRIES) {
+      const delay = BASE_DELAY * Math.pow(2, retryCount);
+      console.log(`[AI] Network error. Retrying in ${delay/1000}s...`);
+      await sleep(delay);
+      return callGeminiApi(prompt, apiKey, config, retryCount + 1);
     }
-    if (response.status === 403) {
-      throw new Error('[Gemini] Access denied. Your API key may not have access to this model.');
-    }
-    if (response.status === 429) {
-      throw new Error('[Gemini] Rate limit exceeded. Try Groq instead (more generous free tier).');
-    }
-    if (errorMsg.toLowerCase().includes('token')) {
-      throw new Error(`[Gemini] Token error: ${errorMsg}`);
-    }
-    throw new Error(`[Gemini] ${errorMsg || `API error: ${response.status}`}`);
+    throw error;
   }
-
-  const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
 };
 
 /**
@@ -1717,9 +1824,23 @@ const callAiApi = async (prompt) => {
 };
 
 /**
- * Generate AI insight
+ * Generate AI insight with caching and debouncing
  */
 const generateAiInsight = async () => {
+  // Debounce: prevent rapid consecutive requests
+  if (isGenerating) {
+    console.log('[AI] Request already in progress, ignoring');
+    return;
+  }
+  
+  const now = Date.now();
+  if (now - lastRequestTime < MIN_REQUEST_INTERVAL) {
+    const waitTime = Math.ceil((MIN_REQUEST_INTERVAL - (now - lastRequestTime)) / 1000);
+    aiInsightText.innerHTML = `<p style="color: var(--text-muted);">Please wait ${waitTime}s before requesting again...</p>`;
+    aiInsightText.classList.add('visible');
+    return;
+  }
+  
   const playerName = playerSelect.value;
   const windowSize = parseInt(windowSizeSelect?.value || '5', 10);
   const data = buildData();
@@ -1731,7 +1852,27 @@ const generateAiInsight = async () => {
     return;
   }
 
+  // Generate cache key based on player, window, and data hash
+  const provider = getProvider();
+  const dataHash = hashString(JSON.stringify(records.slice(-windowSize).map(r => r.stats)));
+  const cacheKey = `player_${playerName}_${windowSize}_${provider}_${dataHash}`;
+  
+  // Check cache first
+  const cachedResponse = getCachedResponse(cacheKey);
+  if (cachedResponse) {
+    const formattedResponse = cachedResponse
+      .split('\n\n')
+      .filter(p => p.trim())
+      .map(p => `<p>${p.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</p>`)
+      .join('');
+    aiInsightText.innerHTML = `<div class="cache-indicator" style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">📋 Cached response (${Math.round(AI_CACHE_TTL/60000)}min)</div>${formattedResponse}`;
+    aiInsightText.classList.add('visible');
+    return;
+  }
+
   // Show loading state
+  isGenerating = true;
+  lastRequestTime = now;
   generateAiBtn.classList.add('loading');
   generateAiBtn.disabled = true;
   aiInsightText.innerHTML = '';
@@ -1741,6 +1882,9 @@ const generateAiInsight = async () => {
     const context = buildAiContext(playerName, records, windowSize);
     const prompt = buildGeminiPrompt(context);
     const response = await callAiApi(prompt);
+    
+    // Cache the response
+    setCachedResponse(cacheKey, response);
     
     // Format the response
     const formattedResponse = response
@@ -1761,6 +1905,7 @@ const generateAiInsight = async () => {
       aiStatusText.textContent = '✗ Invalid API key';
     }
   } finally {
+    isGenerating = false;
     generateAiBtn.classList.remove('loading');
     generateAiBtn.disabled = false;
   }
