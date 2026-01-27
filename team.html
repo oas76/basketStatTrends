@@ -434,6 +434,238 @@
       max-height: 600px;
       overflow-y: auto;
     }
+    
+    /* Team AI Coach Section */
+    .team-ai-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-top: 24px;
+    }
+    
+    .team-ai-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+      gap: 16px;
+    }
+    
+    .team-ai-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    
+    .team-ai-title h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    .team-ai-icon {
+      font-size: 24px;
+    }
+    
+    .team-ai-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      width: 100%;
+      margin-top: 4px;
+    }
+    
+    .team-ai-settings {
+      background: var(--surface-raised);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    
+    .team-ai-settings .field {
+      margin-bottom: 12px;
+    }
+    
+    .team-ai-settings .field:last-of-type {
+      margin-bottom: 16px;
+    }
+    
+    .team-ai-settings label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    
+    .team-ai-settings select,
+    .team-ai-settings input[type="password"] {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 13px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+    }
+    
+    .team-ai-settings small {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      display: block;
+    }
+    
+    .team-ai-settings small a {
+      color: var(--accent);
+    }
+    
+    .team-ai-settings button {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .team-ai-settings button:hover {
+      background: var(--accent-hover);
+    }
+    
+    .team-ai-content {
+      text-align: center;
+    }
+    
+    .team-ai-status {
+      padding: 12px;
+      background: var(--surface-raised);
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    
+    .team-ai-status.connected {
+      color: #22c55e;
+      background: rgba(34, 197, 94, 0.1);
+    }
+    
+    .team-ai-status.error {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+    }
+    
+    .team-ai-generate-btn {
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+    
+    .team-ai-generate-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+    }
+    
+    .team-ai-generate-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    
+    .team-ai-generate-btn.loading {
+      position: relative;
+      pointer-events: none;
+    }
+    
+    .team-ai-generate-btn.loading::after {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border: 2px solid transparent;
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    
+    @keyframes spin {
+      to { transform: translateY(-50%) rotate(360deg); }
+    }
+    
+    .team-ai-insight-text {
+      margin-top: 20px;
+      padding: 20px;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      text-align: left;
+      font-size: 14px;
+      line-height: 1.7;
+      display: none;
+    }
+    
+    .team-ai-insight-text.visible {
+      display: block;
+    }
+    
+    .team-ai-insight-text p {
+      margin: 0 0 16px 0;
+    }
+    
+    .team-ai-insight-text p:last-child {
+      margin-bottom: 0;
+    }
+    
+    .team-ai-insight-text h4 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 20px 0 10px 0;
+    }
+    
+    .team-ai-insight-text h4:first-child {
+      margin-top: 0;
+    }
+    
+    .team-ai-insight-text ul {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+    
+    .team-ai-insight-text li {
+      margin-bottom: 8px;
+    }
+    
+    .btn-icon {
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.2s;
+    }
+    
+    .btn-icon:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
   </style>
 </head>
 <body>
@@ -522,6 +754,53 @@
             <!-- Populated by JS -->
           </tbody>
         </table>
+      </div>
+    </div>
+    
+    <!-- AI Team Coach Section -->
+    <div class="team-ai-section" id="teamAiSection">
+      <div class="team-ai-header">
+        <div class="team-ai-title">
+          <span class="team-ai-icon">🧠</span>
+          <h2>AI Team Coach</h2>
+          <span class="team-ai-subtitle">Team development analysis & recommendations</span>
+        </div>
+        <button type="button" id="teamAiSettingsToggle" class="btn-icon" title="Configure AI">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+        </button>
+      </div>
+      
+      <div id="teamAiSettings" class="team-ai-settings" style="display: none;">
+        <div class="field">
+          <label for="teamAiProvider">AI Provider</label>
+          <select id="teamAiProvider">
+            <option value="groq">Groq (Recommended - generous free tier)</option>
+            <option value="openai">OpenAI / ChatGPT</option>
+            <option value="gemini">Google Gemini</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="teamAiApiKey">API Key</label>
+          <input type="password" id="teamAiApiKey" placeholder="Enter your API key">
+          <small id="teamApiKeyHelp">
+            Get free key at <a href="https://console.groq.com/keys" target="_blank">console.groq.com</a>
+          </small>
+        </div>
+        <div class="field" style="flex-direction: row; align-items: center; gap: 8px;">
+          <input type="checkbox" id="teamRememberApiKey" style="width: auto; margin: 0;">
+          <label for="teamRememberApiKey" style="font-size: 12px; color: var(--text-muted); cursor: pointer;">Remember key in this browser</label>
+        </div>
+        <button type="button" id="teamSaveApiKey">Save Key</button>
+      </div>
+      
+      <div class="team-ai-content">
+        <div id="teamAiStatus" class="team-ai-status">
+          <span id="teamAiStatusText">Configure API key to enable AI team coaching</span>
+        </div>
+        <button type="button" id="generateTeamAiInsight" class="team-ai-generate-btn" disabled>
+          🏀 Generate Team Analysis
+        </button>
+        <div id="teamAiInsightText" class="team-ai-insight-text"></div>
       </div>
     </div>
   </main>
@@ -1142,6 +1421,575 @@
     
     // Start initialization
     init();
+    
+    // ========================================
+    // TEAM AI COACH INTEGRATION
+    // ========================================
+    
+    const AI_STORAGE_KEY = 'basketstat-ai-key';
+    const AI_PROVIDER_KEY = 'basketstat-ai-provider';
+    
+    // Provider configurations (same as app.js)
+    const AI_PROVIDERS = {
+      groq: {
+        name: 'Groq',
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        model: 'llama-3.3-70b-versatile',
+        helpUrl: 'https://console.groq.com/keys',
+        helpText: 'Get free key at console.groq.com',
+        type: 'openai'
+      },
+      openai: {
+        name: 'OpenAI',
+        url: 'https://api.openai.com/v1/chat/completions',
+        model: 'gpt-4o-mini',
+        helpUrl: 'https://platform.openai.com/api-keys',
+        helpText: 'Get key at platform.openai.com',
+        type: 'openai'
+      },
+      gemini: {
+        name: 'Google Gemini',
+        url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+        model: 'gemini-2.0-flash',
+        helpUrl: 'https://aistudio.google.com/app/apikey',
+        helpText: 'Get free key at aistudio.google.com',
+        type: 'gemini'
+      }
+    };
+    
+    // AI DOM elements
+    const teamAiSettingsToggle = document.getElementById('teamAiSettingsToggle');
+    const teamAiSettings = document.getElementById('teamAiSettings');
+    const teamAiProviderSelect = document.getElementById('teamAiProvider');
+    const teamAiApiKeyInput = document.getElementById('teamAiApiKey');
+    const teamApiKeyHelp = document.getElementById('teamApiKeyHelp');
+    const teamSaveApiKeyBtn = document.getElementById('teamSaveApiKey');
+    const generateTeamAiBtn = document.getElementById('generateTeamAiInsight');
+    const teamAiStatusText = document.getElementById('teamAiStatusText');
+    const teamAiStatus = document.getElementById('teamAiStatus');
+    const teamAiInsightText = document.getElementById('teamAiInsightText');
+    
+    /**
+     * Get current provider
+     */
+    const getProvider = () => {
+      return localStorage.getItem(AI_PROVIDER_KEY) || sessionStorage.getItem(AI_PROVIDER_KEY) || 'groq';
+    };
+    
+    /**
+     * Set provider
+     */
+    const setProvider = (provider) => {
+      sessionStorage.setItem(AI_PROVIDER_KEY, provider);
+      const rememberCheckbox = document.getElementById('teamRememberApiKey');
+      if (rememberCheckbox?.checked || localStorage.getItem(`${AI_STORAGE_KEY}-remembered`)) {
+        localStorage.setItem(AI_PROVIDER_KEY, provider);
+      }
+    };
+    
+    /**
+     * Check if API key is remembered
+     */
+    const isApiKeyRemembered = () => {
+      const provider = getProvider();
+      return !!localStorage.getItem(`${AI_STORAGE_KEY}-${provider}`);
+    };
+    
+    /**
+     * Load API key from storage
+     */
+    const loadApiKey = () => {
+      const provider = getProvider();
+      return localStorage.getItem(`${AI_STORAGE_KEY}-${provider}`) || 
+             sessionStorage.getItem(`${AI_STORAGE_KEY}-${provider}`) || '';
+    };
+    
+    /**
+     * Save API key to storage
+     */
+    const saveApiKeyToStorage = (key, remember = false) => {
+      const provider = getProvider();
+      
+      if (key) {
+        if (remember) {
+          localStorage.setItem(`${AI_STORAGE_KEY}-${provider}`, key);
+          localStorage.setItem(`${AI_STORAGE_KEY}-remembered`, 'true');
+          localStorage.setItem(AI_PROVIDER_KEY, provider);
+          sessionStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
+        } else {
+          sessionStorage.setItem(`${AI_STORAGE_KEY}-${provider}`, key);
+          localStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
+        }
+      } else {
+        sessionStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
+        localStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
+      }
+    };
+    
+    /**
+     * Update provider help text
+     */
+    const updateProviderHelp = () => {
+      if (!teamApiKeyHelp || !teamAiProviderSelect) return;
+      const provider = AI_PROVIDERS[teamAiProviderSelect.value];
+      teamApiKeyHelp.innerHTML = `Get free key at <a href="${provider.helpUrl}" target="_blank">${provider.helpUrl.replace('https://', '')}</a>`;
+    };
+    
+    /**
+     * Update AI status UI
+     */
+    const updateTeamAiStatus = () => {
+      const hasKey = !!loadApiKey();
+      const provider = AI_PROVIDERS[getProvider()];
+      
+      if (hasKey) {
+        teamAiStatusText.textContent = `✓ ${provider.name} configured`;
+        teamAiStatus.className = 'team-ai-status connected';
+        generateTeamAiBtn.disabled = false;
+      } else {
+        teamAiStatusText.textContent = 'Configure API key to enable AI team coaching';
+        teamAiStatus.className = 'team-ai-status';
+        generateTeamAiBtn.disabled = true;
+      }
+    };
+    
+    /**
+     * Build team context for AI analysis
+     */
+    const buildTeamAiContext = (playerData) => {
+      const players = Object.keys(playerData);
+      const totalGames = new Set(
+        Object.values(playerData).flatMap(p => p.records.map(r => r.date))
+      ).size;
+      
+      // Calculate team-wide stats
+      const teamStats = {
+        scoring: { total: 0, count: 0, players: [] },
+        shooting: { total: 0, count: 0, players: [] },
+        rebounding: { total: 0, count: 0, players: [] },
+        playmaking: { total: 0, count: 0, players: [] },
+        defense: { total: 0, count: 0, players: [] },
+        turnovers: { total: 0, count: 0, players: [] }
+      };
+      
+      // Identify strengths and weaknesses per player
+      const playerAnalysis = [];
+      
+      players.forEach(name => {
+        const stats = calculatePlayerStats(playerData[name].records, currentWindow);
+        if (!stats || stats.games < 2) return;
+        
+        const playerInfo = {
+          name,
+          games: stats.games,
+          strengths: [],
+          weaknesses: [],
+          stats: {}
+        };
+        
+        // Scoring
+        if (stats.stats.pts?.avg) {
+          const pts = stats.stats.pts.avg;
+          playerInfo.stats.pts = pts;
+          teamStats.scoring.total += pts;
+          teamStats.scoring.count++;
+          teamStats.scoring.players.push({ name, value: pts });
+          
+          const level = window.referenceStats?.getPerformanceLevel('pts', pts);
+          if (level === 'excellent' || level === 'good') playerInfo.strengths.push('scoring');
+          if (level === 'poor' || level === 'below') playerInfo.weaknesses.push('scoring');
+        }
+        
+        // Shooting efficiency
+        if (stats.stats['fg%']?.avg || stats.stats.shoot?.avg) {
+          const shoot = stats.stats.shoot?.avg || stats.stats['fg%']?.avg;
+          playerInfo.stats.shoot = shoot;
+          teamStats.shooting.total += shoot;
+          teamStats.shooting.count++;
+          teamStats.shooting.players.push({ name, value: shoot });
+          
+          const level = window.referenceStats?.getPerformanceLevel('shoot', shoot) || 
+                        window.referenceStats?.getPerformanceLevel('fg%', shoot);
+          if (level === 'excellent' || level === 'good') playerInfo.strengths.push('shooting');
+          if (level === 'poor' || level === 'below') playerInfo.weaknesses.push('shooting');
+        }
+        
+        // Rebounding
+        if (stats.stats.reb?.avg || (stats.stats.oreb?.avg && stats.stats.dreb?.avg)) {
+          const reb = stats.stats.reb?.avg || ((stats.stats.oreb?.avg || 0) + (stats.stats.dreb?.avg || 0));
+          playerInfo.stats.reb = reb;
+          teamStats.rebounding.total += reb;
+          teamStats.rebounding.count++;
+          teamStats.rebounding.players.push({ name, value: reb });
+          
+          const level = window.referenceStats?.getPerformanceLevel('reb', reb);
+          if (level === 'excellent' || level === 'good') playerInfo.strengths.push('rebounding');
+          if (level === 'poor' || level === 'below') playerInfo.weaknesses.push('rebounding');
+        }
+        
+        // Playmaking
+        if (stats.stats.asst?.avg) {
+          const asst = stats.stats.asst.avg;
+          playerInfo.stats.asst = asst;
+          teamStats.playmaking.total += asst;
+          teamStats.playmaking.count++;
+          teamStats.playmaking.players.push({ name, value: asst });
+          
+          const level = window.referenceStats?.getPerformanceLevel('asst', asst);
+          if (level === 'excellent' || level === 'good') playerInfo.strengths.push('playmaking');
+          if (level === 'poor' || level === 'below') playerInfo.weaknesses.push('playmaking');
+        }
+        
+        // Defense
+        if (stats.stats.def?.avg || stats.stats.stl?.avg || stats.stats.blk?.avg) {
+          const def = stats.stats.def?.avg || ((stats.stats.stl?.avg || 0) + (stats.stats.blk?.avg || 0));
+          playerInfo.stats.def = def;
+          teamStats.defense.total += def;
+          teamStats.defense.count++;
+          teamStats.defense.players.push({ name, value: def });
+          
+          const level = window.referenceStats?.getPerformanceLevel('def', def);
+          if (level === 'excellent' || level === 'good') playerInfo.strengths.push('defense');
+          if (level === 'poor' || level === 'below') playerInfo.weaknesses.push('defense');
+        }
+        
+        // Turnovers (inverted - lower is better)
+        if (stats.stats.to?.avg !== undefined) {
+          const to = stats.stats.to.avg;
+          playerInfo.stats.to = to;
+          teamStats.turnovers.total += to;
+          teamStats.turnovers.count++;
+          teamStats.turnovers.players.push({ name, value: to });
+          
+          const level = window.referenceStats?.getPerformanceLevel('to', to);
+          if (level === 'excellent' || level === 'good') playerInfo.strengths.push('ball security');
+          if (level === 'poor' || level === 'below') playerInfo.weaknesses.push('ball security');
+        }
+        
+        playerAnalysis.push(playerInfo);
+      });
+      
+      // Calculate team averages
+      const teamAverages = {
+        scoring: teamStats.scoring.count > 0 ? teamStats.scoring.total / teamStats.scoring.count : 0,
+        shooting: teamStats.shooting.count > 0 ? teamStats.shooting.total / teamStats.shooting.count : 0,
+        rebounding: teamStats.rebounding.count > 0 ? teamStats.rebounding.total / teamStats.rebounding.count : 0,
+        playmaking: teamStats.playmaking.count > 0 ? teamStats.playmaking.total / teamStats.playmaking.count : 0,
+        defense: teamStats.defense.count > 0 ? teamStats.defense.total / teamStats.defense.count : 0,
+        turnovers: teamStats.turnovers.count > 0 ? teamStats.turnovers.total / teamStats.turnovers.count : 0
+      };
+      
+      // Identify top performers per category
+      const topPerformers = {
+        scoring: teamStats.scoring.players.sort((a, b) => b.value - a.value).slice(0, 3),
+        shooting: teamStats.shooting.players.sort((a, b) => b.value - a.value).slice(0, 3),
+        rebounding: teamStats.rebounding.players.sort((a, b) => b.value - a.value).slice(0, 3),
+        playmaking: teamStats.playmaking.players.sort((a, b) => b.value - a.value).slice(0, 3),
+        defense: teamStats.defense.players.sort((a, b) => b.value - a.value).slice(0, 3),
+        ballSecurity: teamStats.turnovers.players.sort((a, b) => a.value - b.value).slice(0, 3)
+      };
+      
+      // Count team-wide patterns
+      const strengthPatterns = {};
+      const weaknessPatterns = {};
+      
+      playerAnalysis.forEach(p => {
+        p.strengths.forEach(s => { strengthPatterns[s] = (strengthPatterns[s] || 0) + 1; });
+        p.weaknesses.forEach(w => { weaknessPatterns[w] = (weaknessPatterns[w] || 0) + 1; });
+      });
+      
+      return {
+        teamName: 'Team',
+        ageGroup: 'U14-U16 (14-16 years old)',
+        league: 'Norwegian junior basketball (1. divisjon)',
+        playerCount: players.length,
+        totalGames,
+        windowSize: currentWindow,
+        teamAverages,
+        topPerformers,
+        playerAnalysis,
+        teamStrengths: Object.entries(strengthPatterns)
+          .sort((a, b) => b[1] - a[1])
+          .map(([area, count]) => ({ area, count, percent: Math.round(count / playerAnalysis.length * 100) })),
+        teamWeaknesses: Object.entries(weaknessPatterns)
+          .sort((a, b) => b[1] - a[1])
+          .map(([area, count]) => ({ area, count, percent: Math.round(count / playerAnalysis.length * 100) }))
+      };
+    };
+    
+    /**
+     * Build team coaching prompt
+     */
+    const buildTeamCoachingPrompt = (context) => {
+      // Format player analysis
+      const playerSummaries = context.playerAnalysis
+        .map(p => `- ${p.name} (${p.games} games): ${p.strengths.length > 0 ? 'Strengths: ' + p.strengths.join(', ') : 'Developing'} ${p.weaknesses.length > 0 ? '| Needs work: ' + p.weaknesses.join(', ') : ''}`)
+        .join('\n');
+      
+      // Format top performers
+      const formatTopPerformers = (list, unit = '') => 
+        list.map((p, i) => `${i + 1}. ${p.name}: ${p.value.toFixed(1)}${unit}`).join(', ');
+      
+      return `You are an experienced youth basketball head coach providing strategic team development analysis. Focus on team-wide patterns, practice recommendations, and strategic adjustments. Be constructive and specific.
+
+TEAM OVERVIEW
+=============
+Age Group: ${context.ageGroup}
+League: ${context.league}
+Roster Size: ${context.playerCount} players
+Games Analyzed: ${context.totalGames} total (window: last ${context.windowSize} games)
+
+TEAM PERFORMANCE AVERAGES (per player)
+======================================
+Scoring: ${context.teamAverages.scoring.toFixed(1)} pts/game
+Shooting Efficiency: ${context.teamAverages.shooting.toFixed(1)}%
+Rebounding: ${context.teamAverages.rebounding.toFixed(1)} reb/game
+Assists: ${context.teamAverages.playmaking.toFixed(1)} ast/game
+Defense Rating: ${context.teamAverages.defense.toFixed(2)}/min
+Turnovers: ${context.teamAverages.turnovers.toFixed(1)} TO/game
+
+TOP PERFORMERS BY CATEGORY
+==========================
+Scoring Leaders: ${formatTopPerformers(context.topPerformers.scoring, ' pts')}
+Best Shooters: ${formatTopPerformers(context.topPerformers.shooting, '%')}
+Top Rebounders: ${formatTopPerformers(context.topPerformers.rebounding, ' reb')}
+Playmakers: ${formatTopPerformers(context.topPerformers.playmaking, ' ast')}
+Defensive Standouts: ${formatTopPerformers(context.topPerformers.defense)}
+Ball Security: ${formatTopPerformers(context.topPerformers.ballSecurity, ' TO')}
+
+TEAM-WIDE PATTERNS
+==================
+Collective Strengths: ${context.teamStrengths.length > 0 ? context.teamStrengths.map(s => `${s.area} (${s.percent}% of players)`).join(', ') : 'No consistent strengths identified'}
+Areas for Team Development: ${context.teamWeaknesses.length > 0 ? context.teamWeaknesses.map(w => `${w.area} (${w.percent}% of players)`).join(', ') : 'No major weaknesses identified'}
+
+INDIVIDUAL PLAYER PROFILES
+==========================
+${playerSummaries}
+
+Please provide a comprehensive TEAM COACHING ANALYSIS (4-5 paragraphs) that includes:
+
+1. **Team Identity Assessment**: What type of team is this based on the data? (scoring team, defensive team, balanced, etc.) What is the team's playing style?
+
+2. **Collective Strengths**: What does this team do well together? How can these strengths be leveraged in game situations?
+
+3. **Priority Development Areas**: What are the 2-3 most important areas for the TEAM to develop (not individual players)? What team-wide drills or focus areas would address these?
+
+4. **Strategic Recommendations**: Based on the player profiles, suggest:
+   - Lineup considerations (who plays well together based on complementary skills)
+   - Offensive/defensive adjustments to maximize strengths
+   - Practice priorities for the coming weeks
+
+5. **Action Plan**: Give 3-4 specific, actionable items the coaching staff should focus on in the next practice sessions. Include at least one team drill recommendation.
+
+Keep the tone professional but encouraging. This is for coaches, so be tactical and specific. Reference actual player data where relevant.`;
+    };
+    
+    /**
+     * Call OpenAI-compatible API
+     */
+    const callOpenAiCompatibleApi = async (prompt, apiKey, config) => {
+      const response = await fetch(config.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages: [
+            { role: 'system', content: 'You are an experienced youth basketball head coach providing strategic team analysis and development recommendations. Be professional, tactical, and specific.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 1500
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        const errorMsg = error.error?.message || error.message || '';
+        
+        if (response.status === 401) throw new Error(`[${config.name}] Invalid API key.`);
+        if (response.status === 429) throw new Error(`[${config.name}] Rate limit exceeded. Please wait.`);
+        if (response.status === 402) throw new Error(`[${config.name}] Billing issue. Try Groq (free tier).`);
+        throw new Error(`[${config.name}] ${errorMsg || `API error: ${response.status}`}`);
+      }
+
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || 'No response generated';
+    };
+    
+    /**
+     * Call Gemini API
+     */
+    const callGeminiApi = async (prompt, apiKey, config) => {
+      const response = await fetch(`${config.url}?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 1500 }
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        const errorMsg = error.error?.message || '';
+        
+        if (response.status === 400) throw new Error(`[Gemini] ${errorMsg || 'Bad request'}`);
+        if (response.status === 429) throw new Error('[Gemini] Rate limit. Try Groq instead.');
+        throw new Error(`[Gemini] ${errorMsg || `API error: ${response.status}`}`);
+      }
+
+      const data = await response.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
+    };
+    
+    /**
+     * Call AI API
+     */
+    const callTeamAiApi = async (prompt) => {
+      const apiKey = loadApiKey();
+      const providerKey = getProvider();
+      const config = AI_PROVIDERS[providerKey];
+      
+      if (!apiKey) throw new Error(`No API key configured.`);
+      if (apiKey.length < 10) throw new Error(`Invalid API key format.`);
+
+      if (config.type === 'openai') {
+        return callOpenAiCompatibleApi(prompt, apiKey, config);
+      } else if (config.type === 'gemini') {
+        return callGeminiApi(prompt, apiKey, config);
+      }
+      throw new Error(`Unknown provider type: ${config.type}`);
+    };
+    
+    /**
+     * Generate team AI insight
+     */
+    const generateTeamAiInsight = async () => {
+      const data = window.basketStatData.loadData();
+      
+      if (!data.games || data.games.length < 2) {
+        teamAiInsightText.innerHTML = '<p>Need at least 2 games for team analysis.</p>';
+        teamAiInsightText.classList.add('visible');
+        return;
+      }
+      
+      // Build player data map
+      const playerData = {};
+      data.games.forEach(game => {
+        Object.entries(game.performances || {}).forEach(([name, stats]) => {
+          if (!playerData[name]) playerData[name] = { records: [] };
+          playerData[name].records.push({ date: game.date, ...stats });
+        });
+      });
+      
+      if (Object.keys(playerData).length < 2) {
+        teamAiInsightText.innerHTML = '<p>Need at least 2 players for team analysis.</p>';
+        teamAiInsightText.classList.add('visible');
+        return;
+      }
+      
+      // Show loading state
+      generateTeamAiBtn.classList.add('loading');
+      generateTeamAiBtn.disabled = true;
+      teamAiInsightText.innerHTML = '';
+      teamAiInsightText.classList.remove('visible');
+
+      try {
+        const context = buildTeamAiContext(playerData);
+        const prompt = buildTeamCoachingPrompt(context);
+        const response = await callTeamAiApi(prompt);
+        
+        // Format the response
+        const formattedResponse = response
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/###\s*(.*)/g, '<h4>$1</h4>')
+          .replace(/##\s*(.*)/g, '<h4>$1</h4>')
+          .split('\n\n')
+          .filter(p => p.trim())
+          .map(p => {
+            if (p.startsWith('<h4>')) return p;
+            if (p.startsWith('- ') || p.startsWith('* ')) {
+              const items = p.split('\n').map(line => `<li>${line.replace(/^[-*]\s*/, '')}</li>`).join('');
+              return `<ul>${items}</ul>`;
+            }
+            return `<p>${p}</p>`;
+          })
+          .join('');
+        
+        teamAiInsightText.innerHTML = formattedResponse;
+        teamAiInsightText.classList.add('visible');
+      } catch (error) {
+        console.error('Team AI generation error:', error);
+        teamAiInsightText.innerHTML = `<p style="color: var(--negative);">Error: ${error.message}</p>`;
+        teamAiInsightText.classList.add('visible');
+        
+        if (error.message.includes('API key')) {
+          teamAiStatus.className = 'team-ai-status error';
+          teamAiStatusText.textContent = '✗ Invalid API key';
+        }
+      } finally {
+        generateTeamAiBtn.classList.remove('loading');
+        generateTeamAiBtn.disabled = false;
+      }
+    };
+    
+    // AI event listeners
+    if (teamAiSettingsToggle) {
+      teamAiSettingsToggle.addEventListener('click', () => {
+        teamAiSettings.style.display = teamAiSettings.style.display === 'none' ? 'block' : 'none';
+      });
+    }
+    
+    if (teamAiProviderSelect) {
+      const savedProvider = getProvider();
+      teamAiProviderSelect.value = savedProvider;
+      updateProviderHelp();
+      
+      teamAiProviderSelect.addEventListener('change', () => {
+        setProvider(teamAiProviderSelect.value);
+        updateProviderHelp();
+        updateTeamAiStatus();
+        if (teamAiApiKeyInput) {
+          const hasKey = loadApiKey();
+          teamAiApiKeyInput.placeholder = hasKey ? '••••••••••••••••' : 'Enter your API key';
+        }
+      });
+    }
+    
+    if (teamSaveApiKeyBtn) {
+      teamSaveApiKeyBtn.addEventListener('click', () => {
+        const key = teamAiApiKeyInput.value.trim();
+        const rememberCheckbox = document.getElementById('teamRememberApiKey');
+        const remember = rememberCheckbox?.checked || false;
+        
+        saveApiKeyToStorage(key, remember);
+        teamAiApiKeyInput.value = '';
+        teamAiSettings.style.display = 'none';
+        updateTeamAiStatus();
+      });
+    }
+    
+    if (generateTeamAiBtn) {
+      generateTeamAiBtn.addEventListener('click', generateTeamAiInsight);
+    }
+    
+    // Load saved API key on page load
+    if (teamAiApiKeyInput) {
+      const savedKey = loadApiKey();
+      if (savedKey) {
+        teamAiApiKeyInput.placeholder = '••••••••••••••••';
+      }
+      
+      const rememberCheckbox = document.getElementById('teamRememberApiKey');
+      if (rememberCheckbox) {
+        rememberCheckbox.checked = isApiKeyRemembered();
+      }
+      
+      updateTeamAiStatus();
+    }
   </script>
 </body>
 </html>
