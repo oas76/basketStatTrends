@@ -89,22 +89,23 @@ const renderGames = () => {
       const playerNames = Object.keys(game.performances || {});
       const numPlayers = playerNames.length;
       const locationLabel = game.homeAway === "home" ? "H" : "A";
+      const safeId = game.id.replace(/"/g, '&quot;');
       
       return `
-        <tr data-game-id="${game.id}">
+        <tr data-game-id="${safeId}">
           <td>${formatDate(game.date)}</td>
           <td>${game.opponent}</td>
           <td>${game.league || "—"}</td>
           <td>${locationLabel}</td>
           <td>${numPlayers}</td>
           <td class="actions">
-            <button class="btn-icon" onclick="viewGameStats('${game.id}')" title="View Stats">
+            <button class="btn-icon" data-action="view" title="View Stats">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
-            <button class="btn-icon" onclick="editGame('${game.id}')" title="Edit">
+            <button class="btn-icon" data-action="edit" title="Edit">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
             </button>
-            <button class="btn-icon danger" onclick="deleteGame('${game.id}')" title="Delete">
+            <button class="btn-icon danger" data-action="delete" title="Delete">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
             </button>
           </td>
@@ -155,80 +156,80 @@ const renderPlayers = () => {
     .join("");
 };
 
-// View game stats
-window.viewGameStats = (gameId) => {
-  const { games } = window.basketStatData.loadData();
-  const game = games.find((g) => g.id === gameId);
-  
-  if (!game) return;
+// Event delegation for game action buttons (view/edit/delete)
+gamesTable.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-action]");
+  if (!btn) return;
 
-  const locationLabel = game.homeAway === "home" ? "vs" : "@";
-  statsModalTitle.textContent = `${formatDate(game.date)} ${locationLabel} ${game.opponent}`;
-
-  // Get all stat keys
-  const allStats = new Set();
-  Object.values(game.performances || {}).forEach((stats) => {
-    Object.keys(stats).forEach((key) => allStats.add(key));
-  });
-  const statKeys = Array.from(allStats);
-
-  // Build header
-  statsTableHead.innerHTML = `
-    <tr>
-      <th>Player</th>
-      ${statKeys.map((key) => `<th>${key}</th>`).join("")}
-    </tr>
-  `;
-
-  // Build body
-  const players = Object.entries(game.performances || {}).sort(([a], [b]) => a.localeCompare(b));
-  statsTableBody.innerHTML = players
-    .map(([name, stats]) => `
-      <tr>
-        <td><strong>${name}</strong></td>
-        ${statKeys.map((key) => `<td>${formatStatValue(stats[key])}</td>`).join("")}
-      </tr>
-    `)
-    .join("");
-
-  statsModal.classList.add("active");
-};
-
-// Edit game
-window.editGame = (gameId) => {
-  const { games } = window.basketStatData.loadData();
-  const game = games.find((g) => g.id === gameId);
-  
-  if (!game) return;
-
-  document.getElementById("editGameId").value = game.id;
-  document.getElementById("editGameDate").value = game.date;
-  document.getElementById("editOpponent").value = game.opponent;
-  document.getElementById("editLeague").value = game.league || "";
-  document.getElementById("editHomeAway").value = game.homeAway || "home";
-
-  editGameModal.classList.add("active");
-};
-
-// Delete game
-window.deleteGame = async (gameId) => {
-  const { games } = window.basketStatData.loadData();
-  const game = games.find((g) => g.id === gameId);
-  
-  if (!game) return;
-
-  const locationLabel = game.homeAway === "home" ? "vs" : "@";
-  if (confirm(`Delete game: ${formatDate(game.date)} ${locationLabel} ${game.opponent}?`)) {
-    window.basketStatData.deleteGame(gameId);
-    renderGames();
-    renderPlayers();
-    uploadStatus.textContent = "Deleted";
-    uploadDetails.textContent = `Removed game vs ${game.opponent}`;
-    
-    // Sync deletion to cloud
-    await syncToCloudAfterChange();
+  const row = btn.closest("tr[data-game-id]");
+  if (!row) {
+    console.error("Action button clicked but no parent row with data-game-id found");
+    return;
   }
-};
+
+  const gameId = row.dataset.gameId;
+  const action = btn.dataset.action;
+  const { games } = window.basketStatData.loadData();
+  const game = games.find((g) => String(g.id) === String(gameId));
+
+  if (!game) {
+    console.error(`Game not found for id "${gameId}" (type: ${typeof gameId}). Stored ids:`, games.map(g => g.id));
+    return;
+  }
+
+  if (action === "view") {
+    const locationLabel = game.homeAway === "home" ? "vs" : "@";
+    statsModalTitle.textContent = `${formatDate(game.date)} ${locationLabel} ${game.opponent}`;
+
+    const allStats = new Set();
+    Object.values(game.performances || {}).forEach((stats) => {
+      Object.keys(stats).forEach((key) => allStats.add(key));
+    });
+    const statKeys = Array.from(allStats);
+
+    statsTableHead.innerHTML = `
+      <tr>
+        <th>Player</th>
+        ${statKeys.map((key) => `<th>${key}</th>`).join("")}
+      </tr>
+    `;
+
+    const players = Object.entries(game.performances || {}).sort(([a], [b]) => a.localeCompare(b));
+    statsTableBody.innerHTML = players
+      .map(([name, stats]) => `
+        <tr>
+          <td><strong>${name}</strong></td>
+          ${statKeys.map((key) => `<td>${formatStatValue(stats[key])}</td>`).join("")}
+        </tr>
+      `)
+      .join("");
+
+    statsModal.classList.add("active");
+  }
+
+  if (action === "edit") {
+    document.getElementById("editGameId").value = game.id;
+    document.getElementById("editGameDate").value = game.date;
+    document.getElementById("editOpponent").value = game.opponent;
+    document.getElementById("editLeague").value = game.league || "";
+    document.getElementById("editHomeAway").value = game.homeAway || "home";
+
+    editGameModal.classList.add("active");
+  }
+
+  if (action === "delete") {
+    const locationLabel = game.homeAway === "home" ? "vs" : "@";
+    if (confirm(`Delete game: ${formatDate(game.date)} ${locationLabel} ${game.opponent}?`)) {
+      window.basketStatData.deleteGame(gameId);
+      renderGames();
+      renderPlayers();
+      uploadStatus.textContent = "Deleted";
+      uploadDetails.textContent = `Removed game vs ${game.opponent}`;
+
+      await syncToCloudAfterChange();
+    }
+  }
+});
 
 // Close modals
 const closeAllModals = () => {

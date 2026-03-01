@@ -24,7 +24,21 @@ const loadData = () => {
     if (data.games && data.games.length > 0 && data.games[0].entries) {
       return migrateOldFormat(data);
     }
-    return { players: data.players || {}, games: data.games || [] };
+    const result = { players: data.players || {}, games: data.games || [] };
+
+    // Ensure every game has a valid string ID
+    let repaired = false;
+    result.games.forEach((game, index) => {
+      if (!game.id || typeof game.id !== 'string') {
+        game.id = generateGameId() + '_r' + index;
+        repaired = true;
+      }
+    });
+    if (repaired) {
+      saveData(result);
+    }
+
+    return result;
   } catch (error) {
     console.warn("Failed to parse stored data", error);
     return { players: {}, games: [] };
@@ -167,14 +181,32 @@ const hasValidStats = (stats) => {
 };
 
 /**
+ * Detect CSV delimiter by counting occurrences of common delimiters in the header.
+ */
+const detectDelimiter = (headerLine) => {
+  const candidates = [',', ';', '\t'];
+  let best = ',';
+  let bestCount = 0;
+  for (const d of candidates) {
+    const count = headerLine.split(d).length;
+    if (count > bestCount) {
+      bestCount = count;
+      best = d;
+    }
+  }
+  return best;
+};
+
+/**
  * Parse CSV file and return game data
  */
 const parseCsv = async (file) => {
   const text = await file.text();
   const [headerLine, ...rows] = text.trim().split(/\r?\n/);
-  const headers = headerLine.split(",").map(cleanCsvValue);
+  const delimiter = detectDelimiter(headerLine);
+  const headers = headerLine.split(delimiter).map(cleanCsvValue);
   
-  console.log("CSV Headers (cleaned):", headers);
+  console.log("CSV Headers (cleaned):", headers, "| delimiter:", JSON.stringify(delimiter));
   
   const playerIndex = headers.findIndex((header) => header.toLowerCase() === "player");
 
@@ -187,7 +219,7 @@ const parseCsv = async (file) => {
   const performances = {};
 
   rows
-    .map((row) => row.split(",").map(cleanCsvValue))
+    .map((row) => row.split(delimiter).map(cleanCsvValue))
     .filter((row) => row.length === headers.length)
     .filter((columns) => columns[playerIndex].startsWith("#"))
     .forEach((columns) => {
@@ -262,7 +294,7 @@ const addGame = (gameData) => {
  */
 const updateGame = (gameId, updates) => {
   const data = loadData();
-  const gameIndex = data.games.findIndex((g) => g.id === gameId);
+  const gameIndex = data.games.findIndex((g) => String(g.id) === String(gameId));
   
   if (gameIndex === -1) {
     throw new Error("Game not found");
@@ -280,7 +312,7 @@ const updateGame = (gameId, updates) => {
  */
 const deleteGame = (gameId) => {
   const data = loadData();
-  data.games = data.games.filter((g) => g.id !== gameId);
+  data.games = data.games.filter((g) => String(g.id) !== String(gameId));
   saveData(data);
 };
 
@@ -289,7 +321,7 @@ const deleteGame = (gameId) => {
  */
 const updatePlayerStats = (gameId, playerName, stats) => {
   const data = loadData();
-  const game = data.games.find((g) => g.id === gameId);
+  const game = data.games.find((g) => String(g.id) === String(gameId));
   
   if (!game) {
     throw new Error("Game not found");
@@ -853,6 +885,7 @@ window.basketStatData = {
   hasValidStats,
   unique,
   generateGameId,
+  detectDelimiter,
   computeTotalRebounds,
   computeAstToRatio,
   computeAttackEnergy,
