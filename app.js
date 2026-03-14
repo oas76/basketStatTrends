@@ -1,6 +1,7 @@
 const playerSelect = document.getElementById("playerSelect");
 const statSelect = document.getElementById("statSelect");
 const windowSizeSelect = document.getElementById("windowSize");
+const leagueFilterSelect = document.getElementById("leagueFilter");
 const scorecardGrid = document.getElementById("scorecardGrid");
 const trendingIndexValue = document.getElementById("trendingIndexValue");
 const trendingIndexDetail = document.getElementById("trendingIndexDetail");
@@ -50,9 +51,58 @@ const getNumericStatValue = (value) => {
   return Number(value) || 0;
 };
 
+/**
+ * Returns the selected league values from the filter.
+ * Empty array means "Any" (no filter).
+ */
+const getSelectedLeagues = () => {
+  if (!leagueFilterSelect) return [];
+  const selected = Array.from(leagueFilterSelect.selectedOptions).map(o => o.value);
+  // If "Any" (empty string) is among selections, treat as no filter
+  if (selected.includes('')) return [];
+  return selected;
+};
+
+/**
+ * Populate the league filter with unique leagues from the data.
+ * Preserves existing selections where possible.
+ */
+const populateLeagueFilter = (games) => {
+  if (!leagueFilterSelect) return;
+
+  const leagues = [...new Set(
+    games.map(g => (g.league || '').trim()).filter(Boolean)
+  )].sort();
+
+  // Remember current selection
+  const prevSelected = getSelectedLeagues();
+
+  // Rebuild options
+  leagueFilterSelect.innerHTML = '<option value="">Any</option>';
+  leagues.forEach(league => {
+    const opt = document.createElement('option');
+    opt.value = league;
+    opt.textContent = league;
+    if (prevSelected.includes(league)) opt.selected = true;
+    leagueFilterSelect.appendChild(opt);
+  });
+
+  // Collapse to 1 row when only "Any" exists, otherwise show up to 4 options
+  leagueFilterSelect.size = Math.min(leagues.length + 1, 4);
+
+  // If nothing was previously selected, select "Any"
+  if (prevSelected.length === 0) {
+    leagueFilterSelect.options[0].selected = true;
+  }
+};
+
 const buildData = () => {
   const { games } = window.basketStatData.loadData();
-  return games
+  const selectedLeagues = getSelectedLeagues();
+  const filteredGames = selectedLeagues.length === 0
+    ? games
+    : games.filter(g => selectedLeagues.includes((g.league || '').trim()));
+  return filteredGames
     .flatMap((game) => {
       // Handle both old format (entries array) and new format (performances object)
       if (game.performances) {
@@ -1141,6 +1191,10 @@ const init = () => {
   const currentPlayer = playerSelect.value;
   const currentStat = statSelect.value;
 
+  // Populate league filter from the full (unfiltered) game list
+  const { games: allGames } = window.basketStatData.loadData();
+  populateLeagueFilter(allGames);
+
   // Update player selector
   updatePlayerSelector(data);
 
@@ -1165,6 +1219,29 @@ playerSelect.addEventListener("change", updateView);
 
 if (windowSizeSelect) {
   windowSizeSelect.addEventListener("change", updateView);
+}
+
+if (leagueFilterSelect) {
+  leagueFilterSelect.addEventListener("change", (e) => {
+    // Clicking "Any" clears all specific league selections
+    const anyOpt = leagueFilterSelect.options[0];
+    if (anyOpt && e.target === leagueFilterSelect) {
+      const clickedAny = anyOpt.selected && getSelectedLeagues().length === 0;
+      if (clickedAny) {
+        // "Any" was just (re)selected — deselect everything else
+        Array.from(leagueFilterSelect.options).forEach(o => {
+          o.selected = o.value === '';
+        });
+      } else if (getSelectedLeagues().length > 0) {
+        // A specific league was selected — deselect "Any"
+        anyOpt.selected = false;
+      } else {
+        // Nothing selected — fall back to "Any"
+        anyOpt.selected = true;
+      }
+    }
+    updateView();
+  });
 }
 
 // ========================================
