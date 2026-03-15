@@ -1229,25 +1229,48 @@
         };
       });
       
+      /**
+       * Extract the canonical numeric sort value for a row+column.
+       * Must match exactly what is displayed in the cell so sort order
+       * is consistent with what the user sees.
+       *
+       * - fg% / 3pt% / ft%  → window-total made/attempted percentage
+       *                        (same calculation used for display)
+       * - fg  / 3pt / ft    → average made per game
+       * - everything else   → avg from windowed stats
+       */
+      const getSortValue = (row, col) => {
+        const percentageToBase = { 'fg%': 'fg', '3pt%': '3pt', 'ft%': 'ft' };
+        const baseStat = percentageToBase[col];
+        if (baseStat) {
+          const baseData = row.stats[baseStat];
+          if (baseData?.totals && baseData.totals.attempted > 0) {
+            return (baseData.totals.made / baseData.totals.attempted) * 100;
+          }
+          return -Infinity; // no attempts → sort last
+        }
+        return row.stats[col]?.avg ?? -Infinity;
+      };
+
       // Sort if needed
       if (sortColumn) {
         rows.sort((a, b) => {
-          let aVal, bVal;
-          
           if (sortColumn === 'name') {
-            aVal = a.name.toLowerCase();
-            bVal = b.name.toLowerCase();
-            return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+            const aName = a.name.toLowerCase();
+            const bName = b.name.toLowerCase();
+            return sortDirection === 'asc'
+              ? aName.localeCompare(bName)
+              : bName.localeCompare(aName);
           }
-          
-          if (sortColumn === 'games') {
-            aVal = a.games;
-            bVal = b.games;
-          } else {
-            aVal = a.stats[sortColumn]?.avg ?? -Infinity;
-            bVal = b.stats[sortColumn]?.avg ?? -Infinity;
-          }
-          
+
+          const aVal = sortColumn === 'games' ? a.games : getSortValue(a, sortColumn);
+          const bVal = sortColumn === 'games' ? b.games : getSortValue(b, sortColumn);
+
+          // Always push missing data (−Infinity) to the bottom regardless of direction
+          if (aVal === -Infinity && bVal === -Infinity) return 0;
+          if (aVal === -Infinity) return 1;
+          if (bVal === -Infinity) return -1;
+
           return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
         });
       }
