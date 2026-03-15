@@ -697,6 +697,12 @@
       </div>
       <div class="team-controls">
         <div class="control-group">
+          <span class="control-label">League:</span>
+          <select id="leagueSelect" class="select-input">
+            <option value="all">All Leagues</option>
+          </select>
+        </div>
+        <div class="control-group">
           <span class="control-label">Window:</span>
           <select id="windowSelect" class="select-input">
             <option value="1">Last Game</option>
@@ -827,9 +833,11 @@
     let selectedPlayers = [];
     let currentCategory = 'all';
     let currentWindow = 5;
+    let currentLeague = 'all';
     let sortColumn = null;
     let sortDirection = 'desc';
     
+    const leagueSelect = document.getElementById('leagueSelect');
     const windowSelect = document.getElementById('windowSelect');
     const categoryTabs = document.getElementById('categoryTabs');
     const tableHead = document.getElementById('tableHead');
@@ -1362,9 +1370,25 @@
         return;
       }
       
+      // Populate league dropdown dynamically
+      const leagues = [...new Set(data.games.map(g => g.league).filter(Boolean))].sort();
+      const currentLeagueSelectValue = leagueSelect.value;
+      leagueSelect.innerHTML = '<option value="all">All Leagues</option>' +
+        leagues.map(l => `<option value="${l}"${l === currentLeagueSelectValue ? ' selected' : ''}>${l}</option>`).join('');
+      // Restore or reset currentLeague if it no longer exists
+      if (currentLeague !== 'all' && !leagues.includes(currentLeague)) {
+        currentLeague = 'all';
+        leagueSelect.value = 'all';
+      }
+      
+      // Filter games by selected league
+      const filteredGames = currentLeague === 'all'
+        ? data.games
+        : data.games.filter(g => g.league === currentLeague);
+      
       // Build player data map
       const playerData = {};
-      data.games.forEach(game => {
+      filteredGames.forEach(game => {
         Object.entries(game.performances || {}).forEach(([name, stats]) => {
           if (!playerData[name]) {
             playerData[name] = { records: [] };
@@ -1394,6 +1418,12 @@
     };
     
     // Event listeners
+    leagueSelect.addEventListener('change', () => {
+      currentLeague = leagueSelect.value;
+      selectedPlayers = []; // reset radar selection when league changes
+      render();
+    });
+    
     windowSelect.addEventListener('change', () => {
       currentWindow = windowSelect.value === 'all' ? 'all' : parseInt(windowSelect.value);
       render();
