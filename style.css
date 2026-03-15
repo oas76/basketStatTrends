@@ -448,6 +448,51 @@ button.secondary:hover {
   transform: translateX(-100%);
 }
 
+/* Stat info tooltip (shared across pages) */
+.stat-info-tooltip {
+  position: fixed;
+  z-index: 9999;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  width: 230px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.stat-info-tooltip.visible {
+  opacity: 1;
+}
+
+.stat-info-tooltip-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.stat-info-tooltip-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.stat-info-tooltip-formula {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--accent);
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+[data-stat-tooltip] {
+  cursor: help;
+}
+
 /* Chart tooltip */
 .chart-tooltip {
   position: absolute;

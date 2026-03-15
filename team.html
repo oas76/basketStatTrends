@@ -993,7 +993,7 @@
         
         return `
           <div class="top-performer-card">
-            <div class="top-performer-header">
+            <div class="top-performer-header" data-stat-tooltip="${cat.key}">
               <span class="top-performer-icon">${cat.icon}</span>
               <span class="top-performer-title">${cat.title}</span>
             </div>
@@ -1212,7 +1212,7 @@
         <tr>
           <th data-sort="name">Player</th>
           <th data-sort="games">GP</th>
-          ${stats.map(stat => `<th data-sort="${stat}">${getStatName(stat)}</th>`).join('')}
+          ${stats.map(stat => `<th data-sort="${stat}" data-stat-tooltip="${stat}">${getStatName(stat)}</th>`).join('')}
         </tr>
       `;
       

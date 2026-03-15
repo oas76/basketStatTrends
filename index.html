@@ -121,25 +121,25 @@
         
         <!-- Aggregate Performance Stats -->
         <div class="aggregate-stats" id="aggregateStats">
-          <div class="aggregate-stat" data-stat="atk" title="Attack Energy = (FG Attempts + FT Attempts + Assists + Offensive Rebounds) / Minutes. Measures offensive intensity per minute played.">
+          <div class="aggregate-stat" data-stat="atk" data-stat-tooltip="atk">
             <div class="aggregate-icon">⚡</div>
             <div class="aggregate-content">
               <div class="aggregate-label">Attack Energy</div>
               <div class="aggregate-value" id="atkValue">—</div>
-              <div class="aggregate-formula">(FGA + FTA + AST + OREB) / MIN</div>
+              <div class="aggregate-formula">FGA + FTA + AST + OREB</div>
             </div>
             <div class="aggregate-trend" id="atkTrend"></div>
           </div>
-          <div class="aggregate-stat" data-stat="def" title="Defence Domination = ((Blocks + Steals + Defensive Rebounds) × Foul Multiplier) / Minutes. Rewards aggressive defense with smart fouling, normalized by playing time.">
+          <div class="aggregate-stat" data-stat="def" data-stat-tooltip="def">
             <div class="aggregate-icon">🛡️</div>
             <div class="aggregate-content">
               <div class="aggregate-label">Defence Domination</div>
               <div class="aggregate-value" id="defValue">—</div>
-              <div class="aggregate-formula">((BLK + STL + DREB) × Foul) / MIN</div>
+              <div class="aggregate-formula">(BLK + STL + DREB) × Foul</div>
             </div>
             <div class="aggregate-trend" id="defTrend"></div>
           </div>
-          <div class="aggregate-stat" data-stat="shoot" title="Shooting Star = Average of FG%, 3PT%, and FT%. Measures overall shooting efficiency across all shot types.">
+          <div class="aggregate-stat" data-stat="shoot" data-stat-tooltip="shoot">
             <div class="aggregate-icon">🎯</div>
             <div class="aggregate-content">
               <div class="aggregate-label">Shooting Star</div>
