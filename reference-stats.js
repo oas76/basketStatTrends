@@ -216,27 +216,27 @@ const referenceStats = {
       invertedScale: false  // Higher is better
     },
 
-    // Attack Energy - measures offensive involvement per minute
+    // Attack Energy - measures total offensive involvement per game
     "atk": {
       name: "Attack Energy",
-      unit: "per minute",
-      p25: 0.5,
-      p50: 0.9,
-      p75: 1.3,
-      p90: 1.8,
-      description: "(FGA + FTA + AST + OREB) / Minutes",
+      unit: "per game",
+      p25: 5,
+      p50: 9,
+      p75: 14,
+      p90: 19,
+      description: "FGA + FTA + AST + OREB",
       invertedScale: false  // Higher is better
     },
 
-    // Defence Domination - measures defensive impact with foul efficiency per minute
+    // Defence Domination - measures total defensive impact per game with foul efficiency
     "def": {
       name: "Defence Domination",
-      unit: "per minute",
-      p25: 0.15,
-      p50: 0.25,
-      p75: 0.4,
-      p90: 0.6,
-      description: "((BLK + STL + DREB) × Foul) / Minutes",
+      unit: "per game",
+      p25: 2,
+      p50: 4,
+      p75: 7,
+      p90: 11,
+      description: "(BLK + STL + DREB) × Foul Multiplier",
       invertedScale: false  // Higher is better
     },
 

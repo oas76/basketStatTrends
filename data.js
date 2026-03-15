@@ -494,15 +494,13 @@ const computeTotalRebounds = (stats) => {
 
 /**
  * Compute Attack Energy (ATK)
- * Higher is better - measures offensive involvement/aggression per minute
- * Formula: (FG Attempts + FT Attempts + Assists + Offensive Rebounds) / Minutes
- * This shows offensive intensity normalized by playing time
+ * Higher is better - measures total offensive involvement per game
+ * Formula: FG Attempts + FT Attempts + Assists + Offensive Rebounds
  */
 const computeAttackEnergy = (stats) => {
-  // Get minutes played (floor to whole minutes for consistency)
+  // Require minutes > 0 to confirm player actually played
   const rawMinutes = typeof stats.min === 'number' ? stats.min : 0;
-  const minutes = Math.floor(rawMinutes);
-  if (minutes <= 0) return null; // Need minutes to calculate rate
+  if (Math.floor(rawMinutes) <= 0) return null;
   
   // Get FG attempts (from made-attempted format)
   let fga = 0;
@@ -528,8 +526,7 @@ const computeAttackEnergy = (stats) => {
     return null;
   }
   
-  // Return per-minute rate, rounded to 2 decimals
-  return Math.round((rawTotal / minutes) * 100) / 100;
+  return Math.round(rawTotal * 10) / 10;
 };
 
 /**
@@ -545,14 +542,13 @@ const getFoulMultiplier = (fouls) => {
 
 /**
  * Compute Defence Domination (DEF)
- * Higher is better - measures defensive impact with foul efficiency per minute
- * Formula: ((Blocks + Steals + Defensive Rebounds) * Foul Multiplier) / Minutes
+ * Higher is better - measures total defensive impact per game with foul efficiency
+ * Formula: (Blocks + Steals + Defensive Rebounds) * Foul Multiplier
  */
 const computeDefenceDomination = (stats) => {
-  // Get minutes played (floor to whole minutes for consistency)
+  // Require minutes > 0 to confirm player actually played
   const rawMinutes = typeof stats.min === 'number' ? stats.min : 0;
-  const minutes = Math.floor(rawMinutes);
-  if (minutes <= 0) return null; // Need minutes to calculate rate
+  if (Math.floor(rawMinutes) <= 0) return null;
   
   const blocks = typeof stats.blk === 'number' ? stats.blk : 0;
   const steals = typeof stats.stl === 'number' ? stats.stl : 0;
@@ -567,10 +563,8 @@ const computeDefenceDomination = (stats) => {
   }
   
   const multiplier = getFoulMultiplier(fouls);
-  const adjustedDefence = rawDefence * multiplier;
   
-  // Return per-minute rate, rounded to 2 decimals
-  return Math.round((adjustedDefence / minutes) * 100) / 100;
+  return Math.round(rawDefence * multiplier * 10) / 10;
 };
 
 /**

@@ -909,7 +909,7 @@
       if (stat.includes('%') || stat === 'shoot') {
         return value.toFixed(1) + '%';
       }
-      if (stat === 'a/to' || stat === 'atk' || stat === 'def') {
+      if (stat === 'a/to') {
         return value.toFixed(2);
       }
       return value.toFixed(1);
@@ -989,7 +989,7 @@
           .slice(0, 3);
         
         const unit = cat.key.includes('%') || cat.key === 'shoot' ? '%' : '';
-        const decimals = ['a/to', 'atk', 'def'].includes(cat.key) ? 2 : 1;
+        const decimals = cat.key === 'a/to' ? 2 : 1;
         
         return `
           <div class="top-performer-card">
