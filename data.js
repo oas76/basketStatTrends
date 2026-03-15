@@ -570,34 +570,34 @@ const computeDefenceDomination = (stats) => {
 /**
  * Compute Shooting Star (SHOOT)
  * Higher is better - average of FG%, 3PT%, and FT%
- * Measures overall shooting efficiency across all shot types
+ * Only categories with at least 1 attempt are included.
+ * A category with 0 attempts is ignored entirely (not counted as 0%).
+ * A category with attempts but 0 makes (0%) IS included.
  */
 const computeShootingStar = (stats) => {
   const percentages = [];
-  
-  // Get FG% (already parsed as number)
-  if (typeof stats['fg%'] === 'number' && stats['fg%'] > 0) {
-    percentages.push(stats['fg%']);
+
+  // FG: include only if there were attempts
+  if (stats.fg && typeof stats.fg === 'object' && stats.fg.attempted > 0) {
+    percentages.push((stats.fg.made / stats.fg.attempted) * 100);
   }
-  
-  // Get 3PT% (already parsed as number)
-  if (typeof stats['3pt%'] === 'number' && stats['3pt%'] > 0) {
-    percentages.push(stats['3pt%']);
+
+  // 3PT: include only if there were attempts
+  if (stats['3pt'] && typeof stats['3pt'] === 'object' && stats['3pt'].attempted > 0) {
+    percentages.push((stats['3pt'].made / stats['3pt'].attempted) * 100);
   }
-  
-  // Get FT% (already parsed as number)
-  if (typeof stats['ft%'] === 'number' && stats['ft%'] > 0) {
-    percentages.push(stats['ft%']);
+
+  // FT: include only if there were attempts
+  if (stats.ft && typeof stats.ft === 'object' && stats.ft.attempted > 0) {
+    percentages.push((stats.ft.made / stats.ft.attempted) * 100);
   }
-  
-  // Need at least one valid percentage
+
   if (percentages.length === 0) {
     return null;
   }
-  
-  // Calculate average of available percentages
+
   const avg = percentages.reduce((sum, p) => sum + p, 0) / percentages.length;
-  return Math.round(avg * 10) / 10; // Round to 1 decimal
+  return Math.round(avg * 10) / 10;
 };
 
 /**

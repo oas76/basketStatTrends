@@ -78,7 +78,7 @@ const STAT_FORMULAS = {
   'a/to':  'AST ÷ TO',
   'atk':   'FGA + FTA + AST + OREB',
   'def':   '(BLK + STL + DREB) × Foul Multiplier\n3 fouls = ×1.25 · 2 fouls = ×1.0 · 4 fouls = ×0.85 · 0/1/5 = ×0.70',
-  'shoot': 'Avg(FG%, 3PT%, FT%)',
+  'shoot': 'Avg(FG%, 3PT%, FT%) — only shot types with ≥1 attempt are counted',
   'foul':  '3 fouls = optimal · 0-1 = passive · 5 = fouled out',
   'to':    'Lower is better',
 };
