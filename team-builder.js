@@ -290,6 +290,62 @@
   /**
    * Render all 5 perspective radars.
    */
+  /**
+   * For each stat, find the single best individual game value across all
+   * players in the roster within the filtered game set.
+   * Returns { stat: value|null } — same shape as one entry in teamsPlayerAvgs
+   * so it can be passed directly to renderRadar via a synthetic perspective object.
+   */
+  function computePeakSingleGame(roster, games) {
+    const rosterSet = new Set(roster);
+    const peak = {};
+    RADAR_STATS.forEach(stat => { peak[stat] = null; });
+
+    games.forEach(game => {
+      Object.entries(game.performances || {}).forEach(([name, stats]) => {
+        if (!rosterSet.has(name)) return;
+        RADAR_STATS.forEach(stat => {
+          const raw = stats[stat];
+          let val = null;
+
+          // Handle made/attempted objects (fg, 3pt, ft → use percentage)
+          if (raw && typeof raw === 'object' && 'made' in raw && 'attempted' in raw) {
+            if (raw.attempted > 0) val = (raw.made / raw.attempted) * 100;
+          } else if (typeof raw === 'number' && !Number.isNaN(raw)) {
+            val = raw;
+          }
+
+          if (val === null) return;
+
+          const current = peak[stat];
+          if (current === null) {
+            peak[stat] = val;
+          } else {
+            // For inverted stats (TO) a lower single-game value is "better"
+            peak[stat] = INVERTED_STATS.has(stat)
+              ? Math.min(current, val)
+              : Math.max(current, val);
+          }
+        });
+      });
+    });
+
+    return peak;
+  }
+
+  /**
+   * Wrap a peak object into the perspective shape expected by renderRadar.
+   * renderRadar reads persp[stat][perspectiveKey], so we wrap each value.
+   */
+  function peakToPerspective(peakObj) {
+    const result = {};
+    RADAR_STATS.forEach(stat => {
+      const v = peakObj[stat];
+      result[stat] = { peak: v };
+    });
+    return result;
+  }
+
   function renderAllRadars() {
     const activeTeams = teams.slice(0, teamCount);
     const filtered = getFilteredGames();
@@ -300,27 +356,51 @@
       roster.map(name => allAvgs[name]).filter(Boolean)
     );
 
-    // Compute perspectives per team
+    // Compute average-based perspectives per team
     const teamPerspectives = teamsPlayerAvgs.map(avgs =>
       avgs.length ? computePerspectives(avgs) : null
     );
 
-    // Global ranges across all teams and ALL perspective values
-    const valuesForRanges = teamsPlayerAvgs.flat();
-    const ranges = computeGlobalRanges(valuesForRanges.length ? [valuesForRanges] : []);
+    // Compute peak single-game per team
+    const teamPeaks = activeTeams.map(roster =>
+      roster.length ? computePeakSingleGame(roster, filtered) : null
+    );
+    const teamPeakPerspectives = teamPeaks.map(p => p ? peakToPerspective(p) : null);
+
+    // Global ranges: include both average-based AND peak values so all 6
+    // radars share the same axis scale and are directly comparable
+    const allPlayerObjs = [
+      ...teamsPlayerAvgs.flat(),
+      ...teamPeaks.filter(Boolean)
+    ];
+    const ranges = computeGlobalRanges(allPlayerObjs.length ? [allPlayerObjs] : []);
     globalStatRanges = ranges;
 
-    // Render each perspective card
-    tbRadarGrid.querySelectorAll('.tb-radar-card').forEach(card => {
+    const anyData = teamPerspectives.some(tp => tp !== null);
+
+    // Render the 5 average-based perspective cards
+    tbRadarGrid.querySelectorAll('.tb-radar-card[data-perspective]').forEach(card => {
       const perspKey = card.dataset.perspective;
+      if (perspKey === 'peak') return; // handled separately below
       const svg = card.querySelector('svg.tb-radar');
-      const anyData = teamPerspectives.some(tp => tp !== null);
       if (!anyData) {
         svg.innerHTML = `<text x="180" y="180" text-anchor="middle" dominant-baseline="middle" fill="var(--text-muted)" font-size="13">Assign players to teams</text>`;
         return;
       }
       renderRadar(svg, perspKey, teamPerspectives, ranges);
     });
+
+    // Render the 6th peak card
+    const peakCard = tbRadarGrid.querySelector('.tb-radar-card[data-perspective="peak"]');
+    if (peakCard) {
+      const svg = peakCard.querySelector('svg.tb-radar');
+      const anyPeak = teamPeakPerspectives.some(tp => tp !== null);
+      if (!anyPeak) {
+        svg.innerHTML = `<text x="180" y="180" text-anchor="middle" dominant-baseline="middle" fill="var(--text-muted)" font-size="13">Assign players to teams</text>`;
+      } else {
+        renderRadar(svg, 'peak', teamPeakPerspectives, ranges);
+      }
+    }
 
     renderLegend();
     renderAppearancesCard();

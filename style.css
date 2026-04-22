@@ -2939,6 +2939,16 @@ button.danger:hover {
   display: block;
 }
 
+/* Peak card gets a subtle accent border to stand out */
+.tb-radar-card--peak {
+  border-color: var(--accent);
+  border-width: 1.5px;
+}
+
+.tb-radar-card--peak h3 {
+  color: var(--accent);
+}
+
 /* ---- Game appearances card ---- */
 .tb-appearances-section {
   display: flex;
