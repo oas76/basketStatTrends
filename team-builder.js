@@ -58,6 +58,8 @@
   const tbTeamsEl  = document.getElementById('tbTeams');
   const tbLegend   = document.getElementById('tbLegend');
   const tbRadarGrid = document.getElementById('tbRadarGrid');
+  const tbAppearancesSection = document.getElementById('tbAppearancesSection');
+  const tbAppearancesCard    = document.getElementById('tbAppearancesCard');
   const tbEmptyState = document.getElementById('tbEmptyState');
   const tbMainEl   = document.querySelector('.tb-main');
 
@@ -71,6 +73,22 @@
     const now = new Date();
     return (data.games || []).filter(game => {
       if (currentLeague !== 'all' && game.league !== currentLeague) return false;
+      if (windowMonths === 'all') return true;
+      const gameDate = new Date(game.date);
+      const months = typeof windowMonths === 'number' ? windowMonths : parseInt(windowMonths, 10);
+      const cutoff = new Date(now.getFullYear(), now.getMonth() - months, now.getDate());
+      return gameDate >= cutoff;
+    });
+  }
+
+  /**
+   * Get all games within the time window, WITHOUT league filtering.
+   * Used for the appearances breakdown so all leagues are always visible.
+   */
+  function getWindowedGames() {
+    const data = window.basketStatData.loadData();
+    const now = new Date();
+    return (data.games || []).filter(game => {
       if (windowMonths === 'all') return true;
       const gameDate = new Date(game.date);
       const months = typeof windowMonths === 'number' ? windowMonths : parseInt(windowMonths, 10);
@@ -305,6 +323,75 @@
     });
 
     renderLegend();
+    renderAppearancesCard();
+  }
+
+  // ---- Appearances card -----------------------------------------
+
+  /**
+   * Count individual player game appearances per league per team.
+   * Uses getWindowedGames() (no league filter) so all leagues always show.
+   */
+  function renderAppearancesCard() {
+    if (!tbAppearancesSection || !tbAppearancesCard) return;
+
+    const games = getWindowedGames();
+
+    // Collect all leagues present in the window (sorted)
+    const leagueSet = new Set(games.map(g => g.league).filter(Boolean));
+    const leagues = [...leagueSet].sort();
+
+    // Build appearance counts: teamIdx -> league -> count
+    const activeTeams = teams.slice(0, teamCount);
+    const anyAssigned = activeTeams.some(r => r.length > 0);
+
+    if (!anyAssigned || leagues.length === 0) {
+      tbAppearancesSection.hidden = true;
+      return;
+    }
+
+    tbAppearancesSection.hidden = false;
+
+    const counts = activeTeams.map(roster => {
+      const byLeague = {};
+      leagues.forEach(l => { byLeague[l] = 0; });
+      let total = 0;
+      games.forEach(game => {
+        if (!game.league) return;
+        roster.forEach(name => {
+          if (game.performances && game.performances[name]) {
+            byLeague[game.league] = (byLeague[game.league] || 0) + 1;
+            total++;
+          }
+        });
+      });
+      byLeague['__total__'] = total;
+      return byLeague;
+    });
+
+    // Render table
+    const colHeaders = leagues.map(l => `<th>${escHtml(l)}</th>`).join('') + '<th class="tb-app-total">Total</th>';
+
+    const rows = activeTeams.map((roster, i) => {
+      const dot = `<span class="tb-legend-dot" style="background:${TEAM_COLORS[i]};display:inline-block;margin-right:6px;"></span>`;
+      const leagueCells = leagues.map(l => {
+        const n = counts[i][l] || 0;
+        return `<td>${n > 0 ? n : '<span style="color:var(--text-muted)">—</span>'}</td>`;
+      }).join('');
+      const total = counts[i]['__total__'] || 0;
+      return `<tr>
+        <td class="tb-app-team">${dot}${escHtml(teamNames[i])} <span class="tb-app-pcount">${roster.length}p</span></td>
+        ${leagueCells}
+        <td class="tb-app-total">${total > 0 ? total : '—'}</td>
+      </tr>`;
+    }).join('');
+
+    tbAppearancesCard.innerHTML = `
+      <table class="tb-app-table">
+        <thead><tr><th>Team</th>${colHeaders}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
   }
 
   function renderLegend() {

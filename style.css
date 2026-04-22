@@ -2939,6 +2939,95 @@ button.danger:hover {
   display: block;
 }
 
+/* ---- Game appearances card ---- */
+.tb-appearances-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tb-appearances-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.tb-appearances-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.tb-appearances-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.tb-app-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tb-app-table thead tr {
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.tb-app-table th {
+  padding: 10px 16px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.tb-app-table th:first-child {
+  text-align: left;
+}
+
+.tb-app-table td {
+  padding: 12px 16px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.tb-app-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tb-app-table tbody tr:hover td {
+  background: var(--surface-raised);
+}
+
+.tb-app-team {
+  text-align: left !important;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tb-app-pcount {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+.tb-app-total {
+  font-weight: 700 !important;
+  color: var(--accent) !important;
+  border-left: 1px solid var(--border-subtle);
+}
+
 /* ---- Footer note ---- */
 .tb-note {
   font-size: 12px;
