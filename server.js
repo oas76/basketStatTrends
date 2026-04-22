@@ -430,6 +430,7 @@ app.use('/data.js', express.static(path.join(__dirname, 'data.js')));
 app.use('/app.js', express.static(path.join(__dirname, 'app.js')));
 app.use('/admin.js', express.static(path.join(__dirname, 'admin.js')));
 app.use('/reference-stats.js', express.static(path.join(__dirname, 'reference-stats.js')));
+app.use('/team-builder.js', express.static(path.join(__dirname, 'team-builder.js')));
 
 // ========================================
 // AUTHENTICATION MIDDLEWARE
@@ -449,7 +450,8 @@ const authMiddleware = (req, res, next) => {
     '/data.js',
     '/app.js',
     '/admin.js',
-    '/reference-stats.js'
+    '/reference-stats.js',
+    '/team-builder.js'
   ];
   
   // Admin-only paths (require admin role)
@@ -566,6 +568,10 @@ app.get('/admin.html', (req, res) => {
 
 app.get('/team.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'team.html'));
+});
+
+app.get('/team-builder.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'team-builder.html'));
 });
 
 app.get('/bulk-import.html', (req, res) => {

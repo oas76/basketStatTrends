@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Team Builder | BasketStat</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>🧩 Team Builder</h1>
+        <p>Draft groups of players and compare them from multiple perspectives</p>
+      </div>
+      <nav style="display: flex; gap: 16px; align-items: center;">
+        <a href="index.html">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          Dashboard
+        </a>
+        <a href="team.html">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Team
+        </a>
+        <a href="admin.html" class="settings-link" title="Settings &amp; Data Management">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </a>
+        <button onclick="logout()" title="Sign Out" style="background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-muted); transition: color 0.2s;" onmouseover="this.style.color='var(--negative)'" onmouseout="this.style.color='var(--text-muted)'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+        </button>
+      </nav>
+    </header>
+
+    <main class="tb-main">
+      <!-- Controls -->
+      <section class="tb-controls">
+        <div class="tb-control-group">
+          <label for="tbWindow" class="tb-control-label">Time window</label>
+          <select id="tbWindow" class="select-input">
+            <option value="3">Last 3 months</option>
+            <option value="6" selected>Last 6 months</option>
+            <option value="12">Last 12 months</option>
+            <option value="all">All games</option>
+          </select>
+        </div>
+        <div class="tb-control-group">
+          <label for="tbLeague" class="tb-control-label">League</label>
+          <select id="tbLeague" class="select-input">
+            <option value="all">All leagues</option>
+          </select>
+        </div>
+        <div class="tb-control-group">
+          <label for="tbTeamCount" class="tb-control-label">Teams</label>
+          <select id="tbTeamCount" class="select-input">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4" selected>4</option>
+          </select>
+        </div>
+        <div class="tb-control-actions">
+          <button type="button" id="tbShuffle" class="secondary" title="Randomly distribute unassigned players">Auto-balance</button>
+          <button type="button" id="tbClear" class="danger-link">Clear rosters</button>
+        </div>
+      </section>
+
+      <!-- Builder layout -->
+      <section class="tb-layout">
+        <aside class="tb-pool">
+          <div class="tb-pool-header">
+            <h2>Player Pool</h2>
+            <span class="tb-count-pill" id="tbPoolCount">0</span>
+          </div>
+          <input type="search" id="tbPoolSearch" class="tb-search" placeholder="Filter players..." aria-label="Filter players" />
+          <div class="tb-chip-list tb-dropzone" id="tbPool" data-team="pool">
+            <p class="tb-empty" id="tbPoolEmpty" hidden>No players match.</p>
+          </div>
+        </aside>
+
+        <div class="tb-teams" id="tbTeams">
+          <!-- Team columns are populated by JS -->
+        </div>
+      </section>
+
+      <!-- Small multiples: one radar per perspective -->
+      <section class="tb-compare">
+        <div class="tb-compare-header">
+          <div>
+            <h2>Team Comparison</h2>
+            <p class="tb-compare-subtitle">Each chart overlays all teams for a given perspective using per-player averages in the selected window.</p>
+          </div>
+          <div class="tb-compare-legend" id="tbLegend" aria-label="Team legend"></div>
+        </div>
+
+        <div class="tb-radar-grid" id="tbRadarGrid">
+          <article class="tb-radar-card" data-perspective="top">
+            <header>
+              <h3>Top Performer</h3>
+              <p>Best value per stat across each roster</p>
+            </header>
+            <svg class="tb-radar" viewBox="0 0 360 360" role="img" aria-label="Top performer radar"></svg>
+          </article>
+
+          <article class="tb-radar-card" data-perspective="aboveAvg">
+            <header>
+              <h3>Above-median Average</h3>
+              <p>Mean of players scoring above the roster median</p>
+            </header>
+            <svg class="tb-radar" viewBox="0 0 360 360" role="img" aria-label="Above-median average radar"></svg>
+          </article>
+
+          <article class="tb-radar-card" data-perspective="median">
+            <header>
+              <h3>Median</h3>
+              <p>Per-stat median across each roster</p>
+            </header>
+            <svg class="tb-radar" viewBox="0 0 360 360" role="img" aria-label="Median radar"></svg>
+          </article>
+
+          <article class="tb-radar-card" data-perspective="belowAvg">
+            <header>
+              <h3>Below-median Average</h3>
+              <p>Mean of players scoring below the roster median</p>
+            </header>
+            <svg class="tb-radar" viewBox="0 0 360 360" role="img" aria-label="Below-median average radar"></svg>
+          </article>
+
+          <article class="tb-radar-card" data-perspective="bottom">
+            <header>
+              <h3>Bottom Performer</h3>
+              <p>Worst value per stat across each roster</p>
+            </header>
+            <svg class="tb-radar" viewBox="0 0 360 360" role="img" aria-label="Bottom performer radar"></svg>
+          </article>
+        </div>
+
+        <p class="tb-note">Radars share the same scale per stat axis across all five perspectives, so polygons are directly comparable. "TO" is inverted (outer ring = fewer turnovers).</p>
+      </section>
+
+      <div class="tb-empty-state" id="tbEmptyState" hidden>
+        <h2>No data yet</h2>
+        <p>Upload games in <a href="admin.html">Settings</a> to build teams.</p>
+      </div>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="reference-stats.js"></script>
+    <script src="data.js"></script>
+    <script src="team-builder.js"></script>
+  </body>
+</html>

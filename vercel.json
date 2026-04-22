@@ -9,6 +9,7 @@
           "index.html",
           "admin.html",
           "team.html",
+          "team-builder.html",
           "bulk-import.html",
           "reference-admin.html",
           "style.css",
@@ -17,6 +18,7 @@
           "app.js",
           "admin.js",
           "reference-stats.js",
+          "team-builder.js",
           "csv/**"
         ]
       }
