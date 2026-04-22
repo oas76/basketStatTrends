@@ -206,6 +206,54 @@
     return result;
   }
 
+  // ---- Tooltip infrastructure -----------------------------------
+
+  let _tbTip = null;
+
+  function getTip() {
+    if (_tbTip) return _tbTip;
+    _tbTip = document.createElement('div');
+    _tbTip.id = 'tb-tooltip';
+    _tbTip.setAttribute('role', 'tooltip');
+    _tbTip.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(_tbTip);
+    return _tbTip;
+  }
+
+  const PERSPECTIVE_LABELS = {
+    top: 'Top Performer', aboveAvg: 'Above-median Avg',
+    median: 'Median', belowAvg: 'Below-median Avg',
+    bottom: 'Bottom Performer', peak: 'Peak Single Game'
+  };
+
+  function showTip(e, teamName, teamColor, statLabel, rawValue, perspKey) {
+    const tip = getTip();
+    tip.innerHTML =
+      `<span class="tb-tip-team" style="color:${teamColor}">${teamName}</span>` +
+      `<span class="tb-tip-stat">${statLabel}</span>` +
+      `<span class="tb-tip-value">${rawValue}</span>` +
+      `<span class="tb-tip-persp">${PERSPECTIVE_LABELS[perspKey] || perspKey}</span>`;
+    tip.style.display = 'block';
+    moveTip(e);
+  }
+
+  function moveTip(e) {
+    const tip = getTip();
+    const pad = 14;
+    let x = e.clientX + pad;
+    let y = e.clientY + pad;
+    const tw = tip.offsetWidth;
+    const th = tip.offsetHeight;
+    if (x + tw > window.innerWidth - 8)  x = e.clientX - tw - pad;
+    if (y + th > window.innerHeight - 8) y = e.clientY - th - pad;
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
+  }
+
+  function hideTip() { getTip().style.display = 'none'; }
+
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+
   // ---- Radar rendering ------------------------------------------
 
   /**
@@ -277,20 +325,46 @@
       const color = TEAM_COLORS[teamIdx];
       html += `<polygon points="${pts.join(' ')}" fill="${color}" fill-opacity="0.18" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
 
-      // Dot per vertex
+      // Dot + value label per vertex
       values.forEach((v, i) => {
         let norm = normalize(RADAR_STATS[i], v, ranges);
         if (norm === null) norm = MIN_PAD;
         const r = maxR * (MIN_PAD + norm * (MAX_PAD - MIN_PAD));
         const [dx, dy] = pt(r, i);
         const raw = v !== null ? v.toFixed(1) : '—';
-        html += `<circle cx="${dx.toFixed(2)}" cy="${dy.toFixed(2)}" r="4" fill="${color}" opacity="0.9">
-          <title>${teamNames[teamIdx]}: ${STAT_LABELS[RADAR_STATS[i]]} = ${raw}</title>
-        </circle>`;
+        const stat = RADAR_STATS[i];
+
+        // Dot — data attributes drive the JS tooltip
+        html += `<circle cx="${dx.toFixed(2)}" cy="${dy.toFixed(2)}" r="5"` +
+          ` fill="${color}" opacity="0.9" class="tb-dot"` +
+          ` data-team="${esc(teamNames[teamIdx])}"` +
+          ` data-color="${color}"` +
+          ` data-stat="${esc(STAT_LABELS[stat])}"` +
+          ` data-value="${esc(raw)}"` +
+          ` style="cursor:crosshair"/>`;
+
+        // Value label — placed radially outward from the dot by 13 px
+        const angle = i * angleStep - Math.PI / 2;
+        const loff  = 13;
+        const lx = dx + loff * Math.cos(angle);
+        const ly = dy + loff * Math.sin(angle);
+        html += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}"` +
+          ` text-anchor="middle" dominant-baseline="middle"` +
+          ` fill="${color}" font-size="8.5" font-weight="700" opacity="0.85"` +
+          ` pointer-events="none">${raw}</text>`;
       });
     });
 
     svg.innerHTML = html;
+
+    // Attach rich tooltip listeners to all dots in this SVG
+    svg.querySelectorAll('.tb-dot').forEach(dot => {
+      dot.addEventListener('mouseenter', e =>
+        showTip(e, dot.dataset.team, dot.dataset.color,
+                   dot.dataset.stat, dot.dataset.value, perspectiveKey));
+      dot.addEventListener('mousemove',  moveTip);
+      dot.addEventListener('mouseleave', hideTip);
+    });
   }
 
   /**

@@ -3102,3 +3102,59 @@ button.danger:hover {
     margin-left: 0;
   }
 }
+
+/* ─── Team Builder – Radar Tooltip ─────────────────────────────── */
+#tb-tooltip {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  display: none;
+  padding: 10px 14px;
+  background: var(--surface-2, #1e293b);
+  border: 1px solid var(--border, #334155);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  min-width: 130px;
+  max-width: 200px;
+}
+
+#tb-tooltip .tb-tip-team {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  opacity: 0.9;
+}
+
+#tb-tooltip .tb-tip-stat {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #e2e8f0);
+}
+
+#tb-tooltip .tb-tip-value {
+  display: block;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text, #e2e8f0);
+  line-height: 1.2;
+  margin: 2px 0 4px;
+}
+
+#tb-tooltip .tb-tip-persp {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted, #94a3b8);
+  font-style: italic;
+}
+
+.tb-dot {
+  transition: r 0.1s ease, opacity 0.1s ease;
+}
+.tb-dot:hover {
+  opacity: 1 !important;
+}
