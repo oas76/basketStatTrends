@@ -23,6 +23,7 @@
       </div>
       <nav style="display: flex; gap: 12px; align-items: center;">
         <a href="team.html" style="color: var(--text-muted); text-decoration: none; font-weight: 500; font-size: 14px; transition: color 0.2s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-muted)'">Team</a>
+        <a href="team-builder.html" style="color: var(--text-muted); text-decoration: none; font-weight: 500; font-size: 14px; transition: color 0.2s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-muted)'">Team Builder</a>
         <a href="admin.html" class="settings-link" title="Settings & Data Management">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </a>
@@ -178,6 +179,7 @@
               <select id="aiProvider">
                 <option value="groq">Groq (Recommended - generous free tier)</option>
                 <option value="openai">OpenAI / ChatGPT</option>
+                <option value="anthropic">Anthropic / Claude</option>
                 <option value="gemini">Google Gemini</option>
               </select>
             </div>
@@ -203,6 +205,43 @@
               ✨ Generate AI Analysis
             </button>
             <div id="aiInsightText" class="ai-insight-text"></div>
+
+            <div id="aiHandoutSection" class="ai-handout-section">
+              <div class="ai-handout-header">
+                <div>
+                  <h4>AI Player Handout</h4>
+                  <p>Printable player summary with AI-generated progress review, focus areas, stat visuals, coach remark, and tips.</p>
+                </div>
+              </div>
+
+              <div id="aiHandoutLocked" class="ai-handout-locked">
+                Connect an AI provider above to unlock the printable player handout.
+              </div>
+
+              <div id="aiHandoutControls" class="ai-handout-controls" hidden>
+                <div class="ai-handout-grid">
+                  <div class="field">
+                    <label for="aiHandoutPeriod">Time Period</label>
+                    <select id="aiHandoutPeriod">
+                      <option value="6m">Last 6 months</option>
+                      <option value="12m">Last year</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="ai-handout-actions">
+                  <button type="button" id="generateAiHandout" class="ai-generate-btn" disabled>
+                    Generate Player Handout
+                  </button>
+                  <button type="button" id="printAiHandout" class="btn-secondary" disabled>
+                    Print Handout
+                  </button>
+                </div>
+
+                <div id="aiHandoutStatus" class="ai-handout-status"></div>
+                <div id="aiHandoutOutput" class="ai-handout-output"></div>
+              </div>
+            </div>
           </div>
         </div>
         

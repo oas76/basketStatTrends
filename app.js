@@ -28,6 +28,50 @@ const cancelProfileBtn = document.getElementById("cancelProfileBtn");
 const AGGREGATE_STATS = ['atk', 'def', 'shoot'];
 
 const formatDate = (value) => new Date(value).toLocaleDateString();
+const formatDateLong = (value) => new Date(value).toLocaleDateString(undefined, {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric'
+});
+
+const escapeHtml = (value = "") => String(value)
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#39;");
+
+const formatAiText = (value = "") => value
+  .split('\n\n')
+  .filter(p => p.trim())
+  .map(p => `<p>${escapeHtml(p).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')}</p>`)
+  .join('');
+
+const formatHandoutNumber = (value, decimals = 1) => {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return '—';
+  const numeric = Number(value);
+  if (Math.abs(numeric) >= 100 || Number.isInteger(numeric)) {
+    return String(Math.round(numeric));
+  }
+  return numeric.toFixed(decimals);
+};
+
+const getStatSuffix = (stat) => ['fg%', '3pt%', 'ft%', 'shoot'].includes((stat || '').toLowerCase()) ? '%' : '';
+
+const HANDOUT_PERIODS = {
+  '6m': { months: 6, label: 'Last 6 months' },
+  '12m': { months: 12, label: 'Last year' }
+};
+
+const HANDOUT_VISUAL_STATS = ['pts', 'reb', 'asst', 'shoot', 'atk', 'def', 'fg%', '3pt%', 'ft%'];
+
+const normalizeHintList = (value) => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(item => String(item || '').trim())
+    .filter(Boolean)
+    .slice(0, 4);
+};
 
 /**
  * Format a stat value for display
@@ -1078,6 +1122,513 @@ const generateRecommendation = (analysis) => {
   return null;
 };
 
+const POSITION_NAMES = {
+  PG: 'Point Guard',
+  SG: 'Shooting Guard',
+  SF: 'Small Forward',
+  PF: 'Power Forward',
+  C: 'Center'
+};
+
+const setAiHandoutStatus = (message = '', tone = 'neutral') => {
+  if (!aiHandoutStatus) return;
+  aiHandoutStatus.textContent = message;
+  aiHandoutStatus.className = message
+    ? `ai-handout-status visible ${tone}`
+    : 'ai-handout-status';
+};
+
+const clearAiHandout = (message = '') => {
+  handoutIsReady = false;
+  if (printAiHandoutBtn) {
+    printAiHandoutBtn.disabled = true;
+  }
+  if (aiHandoutOutput) {
+    aiHandoutOutput.innerHTML = message
+      ? `<div class="ai-handout-placeholder">${escapeHtml(message)}</div>`
+      : '';
+  }
+  if (!message) {
+    setAiHandoutStatus('');
+  }
+};
+
+const getHandoutPeriodData = (records, periodKey) => {
+  const period = HANDOUT_PERIODS[periodKey] || HANDOUT_PERIODS['6m'];
+  const sortedRecords = [...records].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  if (sortedRecords.length === 0) {
+    return {
+      records: [],
+      period,
+      startDate: null,
+      endDate: null,
+      dateRangeLabel: 'No games'
+    };
+  }
+
+  const endDate = new Date(sortedRecords[sortedRecords.length - 1].date);
+  const cutoffDate = new Date(endDate);
+  cutoffDate.setMonth(cutoffDate.getMonth() - period.months);
+
+  const filteredRecords = sortedRecords.filter(record => new Date(record.date) >= cutoffDate);
+  const actualStart = filteredRecords[0] ? new Date(filteredRecords[0].date) : cutoffDate;
+
+  return {
+    records: filteredRecords,
+    period,
+    startDate: actualStart,
+    endDate,
+    dateRangeLabel: `${formatDateLong(actualStart)} - ${formatDateLong(endDate)}`
+  };
+};
+
+const getStatTrendValues = (records, stat) => {
+  const lowerStat = (stat || '').toLowerCase();
+  const percentageBaseStats = { 'fg%': 'fg', '3pt%': '3pt', 'ft%': 'ft' };
+  const baseStat = percentageBaseStats[lowerStat];
+
+  if (baseStat) {
+    return records
+      .map(record => {
+        const baseValue = record.stats?.[baseStat];
+        if (!baseValue || typeof baseValue !== 'object' || baseValue.attempted <= 0) return null;
+        return (baseValue.made / baseValue.attempted) * 100;
+      })
+      .filter(value => value !== null);
+  }
+
+  return records
+    .map(record => record.stats?.[stat])
+    .filter(value => hasValidStatForDisplay(value))
+    .map(value => getNumericStatValue(value));
+};
+
+const getStatSummaryForRecords = (records, stat) => {
+  const lowerStat = (stat || '').toLowerCase();
+  const percentageBaseStats = { 'fg%': 'fg', '3pt%': '3pt', 'ft%': 'ft' };
+  const baseStat = percentageBaseStats[lowerStat];
+
+  if (baseStat) {
+    const baseWindow = calculateWindowedStats(records, baseStat, 'all');
+    if (!baseWindow?.totals || baseWindow.totals.attempted <= 0) return null;
+    const average = (baseWindow.totals.made / baseWindow.totals.attempted) * 100;
+    return {
+      stat,
+      average,
+      perfLevel: window.referenceStats?.getPerformanceLevel(stat, average) || 'average',
+      values: getStatTrendValues(records, stat),
+      totals: baseWindow.totals,
+      games: baseWindow.gamesInWindow
+    };
+  }
+
+  const statWindow = calculateWindowedStats(records, stat, 'all');
+  if (!statWindow) return null;
+
+  return {
+    stat,
+    average: statWindow.average,
+    perfLevel: window.referenceStats?.getPerformanceLevel(stat, statWindow.average) || 'average',
+    values: getStatTrendValues(records, stat),
+    totals: statWindow.totals,
+    games: statWindow.gamesInWindow
+  };
+};
+
+const getHandoutComparisonWindowSize = (records) => Math.max(2, Math.min(6, Math.floor(records.length / 2) || 2));
+
+const getHandoutImprovementItems = (analysis) => {
+  const items = [];
+  const seen = new Set();
+
+  [...analysis.improving]
+    .sort((a, b) => Number(b.changePercent) - Number(a.changePercent))
+    .forEach(item => {
+      if (seen.has(item.stat)) return;
+      seen.add(item.stat);
+      items.push({
+        stat: item.stat,
+        title: getStatDisplayName(item.stat),
+        value: `${formatHandoutNumber(item.from)}${getStatSuffix(item.stat)} -> ${formatHandoutNumber(item.to)}${getStatSuffix(item.stat)}`,
+        badge: `+${item.changePercent}%`,
+        note: 'Positive trend in the recent comparison window.',
+        tone: 'positive'
+      });
+    });
+
+  [...analysis.strengths]
+    .sort((a, b) => a.avg - b.avg)
+    .reverse()
+    .forEach(item => {
+      if (seen.has(item.stat) || items.length >= 3) return;
+      seen.add(item.stat);
+      items.push({
+        stat: item.stat,
+        title: getStatDisplayName(item.stat),
+        value: `${formatHandoutNumber(item.avg)}${getStatSuffix(item.stat)}`,
+        badge: item.level,
+        note: item.refP75 !== undefined
+          ? `Already above the strong benchmark of ${formatHandoutNumber(item.refP75)}${getStatSuffix(item.stat)}.`
+          : 'Strong current level.',
+        tone: 'positive'
+      });
+    });
+
+  return items.slice(0, 3);
+};
+
+const getHandoutFocusItems = (analysis) => {
+  const items = [];
+  const seen = new Set();
+
+  [...analysis.declining]
+    .sort((a, b) => Number(b.changePercent) - Number(a.changePercent))
+    .forEach(item => {
+      if (seen.has(item.stat)) return;
+      seen.add(item.stat);
+      items.push({
+        stat: item.stat,
+        title: getStatDisplayName(item.stat),
+        value: `${formatHandoutNumber(item.from)}${getStatSuffix(item.stat)} -> ${formatHandoutNumber(item.to)}${getStatSuffix(item.stat)}`,
+        badge: `-${item.changePercent}%`,
+        note: 'Needs attention in the recent comparison window.',
+        tone: 'focus'
+      });
+    });
+
+  [...analysis.weaknesses]
+    .sort((a, b) => a.avg - b.avg)
+    .forEach(item => {
+      if (seen.has(item.stat) || items.length >= 3) return;
+      seen.add(item.stat);
+      items.push({
+        stat: item.stat,
+        title: getStatDisplayName(item.stat),
+        value: `${formatHandoutNumber(item.avg)}${getStatSuffix(item.stat)}`,
+        badge: item.level,
+        note: item.refP50 !== undefined
+          ? `Target the benchmark average of ${formatHandoutNumber(item.refP50)}${getStatSuffix(item.stat)}.`
+          : 'Below target level right now.',
+        tone: 'focus'
+      });
+    });
+
+  return items.slice(0, 3);
+};
+
+const buildSparklineSvg = (values, stat) => {
+  if (!values.length) {
+    return '<div class="ai-handout-sparkline-empty">No data</div>';
+  }
+
+  const width = 240;
+  const height = 72;
+  const padding = 8;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const range = Math.max(max - min, 1);
+  const stroke = getPerformanceColor(values[values.length - 1], stat);
+
+  const points = values.map((value, index) => {
+    const x = padding + (index / Math.max(values.length - 1, 1)) * (width - padding * 2);
+    const y = height - padding - ((value - min) / range) * (height - padding * 2);
+    return { x, y, value };
+  });
+
+  const polyline = points.map(point => `${point.x},${point.y}`).join(' ');
+  const lastPoint = points[points.length - 1];
+
+  return `
+    <svg viewBox="0 0 ${width} ${height}" class="ai-handout-sparkline" aria-hidden="true">
+      <polyline points="${polyline}" fill="none" stroke="${stroke}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>
+      <circle cx="${lastPoint.x}" cy="${lastPoint.y}" r="4.5" fill="${stroke}"></circle>
+    </svg>
+  `;
+};
+
+const getHandoutVisualStats = (records) => HANDOUT_VISUAL_STATS
+  .map(stat => ({ stat, summary: getStatSummaryForRecords(records, stat) }))
+  .filter(item => item.summary && item.summary.values.length > 0)
+  .slice(0, 4);
+
+const buildPlayerHandoutContext = (playerName, records, periodKey) => {
+  const profile = window.basketStatData.getPlayerProfile(playerName);
+  const playerAge = window.basketStatData.calculateAge(profile.birthdate);
+  const periodData = getHandoutPeriodData(records, periodKey);
+  const filteredRecords = periodData.records;
+  const comparisonWindow = getHandoutComparisonWindowSize(filteredRecords);
+  const analysis = analyzePlayerPerformance(filteredRecords, comparisonWindow);
+  const improvementItems = getHandoutImprovementItems(analysis);
+  const focusItems = getHandoutFocusItems(analysis);
+  const visualStats = getHandoutVisualStats(filteredRecords);
+  const trendIndex = calculateTrendingIndex(filteredRecords, comparisonWindow);
+  const pointsSummary = getStatSummaryForRecords(filteredRecords, 'pts');
+  const attackSummary = getStatSummaryForRecords(filteredRecords, 'atk');
+  const shootingSummary = getStatSummaryForRecords(filteredRecords, 'shoot');
+
+  return {
+    playerName,
+    profile,
+    playerAge,
+    periodData,
+    filteredRecords,
+    comparisonWindow,
+    analysis,
+    improvementItems,
+    focusItems,
+    visualStats,
+    trendIndex,
+    pointsSummary,
+    attackSummary,
+    shootingSummary
+  };
+};
+
+const buildPlayerHandoutPrompt = (context) => {
+  const { playerName, profile, playerAge, periodData, filteredRecords, improvementItems, focusItems, visualStats, trendIndex } = context;
+  const profileSummary = [
+    profile.number ? `#${profile.number}` : null,
+    playerAge !== null ? `${playerAge} years old` : null,
+    profile.height ? `${profile.height}m` : null,
+    profile.position ? (POSITION_NAMES[profile.position] || profile.position) : null
+  ].filter(Boolean).join(' · ');
+
+  return `You are writing a printable one-page youth basketball handout for a player.
+Return valid JSON only. Do not wrap the JSON in markdown fences.
+
+Use this exact schema:
+{
+  "developmentSummary": "2 short paragraphs max. Mention concrete stats.",
+  "coachRemark": "1 short encouraging but honest paragraph to the player.",
+  "hintsAndTips": ["short practical tip", "short practical tip", "short practical tip"]
+}
+
+Rules:
+- Be specific, positive, and honest.
+- Do not invent stats or achievements.
+- Keep language suitable for a youth player handout.
+- The tips should be actionable training advice, not generic motivation.
+- hintsAndTips must contain 2 to 4 items.
+
+PLAYER: ${playerName}
+PROFILE: ${profileSummary || 'No extra profile info'}
+PERIOD: ${periodData.period.label}
+DATE RANGE: ${periodData.dateRangeLabel}
+GAMES IN PERIOD: ${filteredRecords.length}
+TRENDING INDEX: ${trendIndex.index.toFixed(2)}
+
+IMPROVEMENTS:
+${improvementItems.length > 0 ? improvementItems.map(item => `- ${item.title}: ${item.value} (${item.badge})`).join('\n') : '- None clearly identified'}
+
+FOCUS AREAS:
+${focusItems.length > 0 ? focusItems.map(item => `- ${item.title}: ${item.value} (${item.badge})`).join('\n') : '- No major weak areas, focus on consistency'}
+
+KEY STATS:
+${visualStats.length > 0 ? visualStats.map(item => `- ${getStatDisplayName(item.stat)} avg: ${formatHandoutNumber(item.summary.average)}${getStatSuffix(item.stat)}`).join('\n') : '- No key stat visuals available'}`;
+};
+
+const parseAiHandoutResponse = (responseText) => {
+  const raw = String(responseText || '').trim();
+  const withoutFences = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  const jsonMatch = withoutFences.match(/\{[\s\S]*\}/);
+  const candidate = jsonMatch ? jsonMatch[0] : withoutFences;
+
+  try {
+    const parsed = JSON.parse(candidate);
+    const hintsAndTips = normalizeHintList(parsed.hintsAndTips);
+    return {
+      developmentSummary: String(parsed.developmentSummary || '').trim(),
+      coachRemark: String(parsed.coachRemark || '').trim(),
+      hintsAndTips: hintsAndTips.length > 0 ? hintsAndTips : ['Keep building on the strongest trends shown in the handout.']
+    };
+  } catch (error) {
+    const paragraphs = raw.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+    return {
+      developmentSummary: paragraphs[0] || raw || 'AI summary unavailable.',
+      coachRemark: paragraphs[1] || paragraphs[0] || 'Keep working on the focus areas in this handout.',
+      hintsAndTips: normalizeHintList(
+        paragraphs.slice(2).flatMap(paragraph => paragraph.split(/\n|•|- /).map(item => item.trim()))
+      ).slice(0, 4)
+    };
+  }
+};
+
+const buildHandoutAreaCards = (items, emptyMessage) => {
+  if (!items.length) {
+    return `<div class="ai-handout-empty">${escapeHtml(emptyMessage)}</div>`;
+  }
+
+  return items.map(item => `
+    <article class="ai-handout-area-card ${item.tone}">
+      <div class="ai-handout-area-header">
+        <h4>${escapeHtml(item.title)}</h4>
+        <span class="ai-handout-badge ${item.tone}">${escapeHtml(item.badge)}</span>
+      </div>
+      <div class="ai-handout-area-value">${escapeHtml(item.value)}</div>
+      <p>${escapeHtml(item.note)}</p>
+    </article>
+  `).join('');
+};
+
+const buildHandoutVisualCards = (visualStats) => {
+  if (!visualStats.length) {
+    return `<div class="ai-handout-empty">Not enough stat history in this period to draw visuals.</div>`;
+  }
+
+  return visualStats.map(item => `
+    <article class="ai-handout-visual-card">
+      <div class="ai-handout-visual-header">
+        <h4>${escapeHtml(getStatDisplayName(item.stat))}</h4>
+        <span class="ai-handout-visual-value perf-${item.summary.perfLevel}">
+          ${formatHandoutNumber(item.summary.average)}${getStatSuffix(item.stat)}
+        </span>
+      </div>
+      ${buildSparklineSvg(item.summary.values, item.stat)}
+      <div class="ai-handout-visual-footer">${item.summary.values.length} games with data</div>
+    </article>
+  `).join('');
+};
+
+const renderPlayerHandout = (context, aiHandout) => {
+  const { playerName, profile, playerAge, periodData, filteredRecords, improvementItems, focusItems, visualStats, trendIndex, pointsSummary, attackSummary, shootingSummary } = context;
+  const summaryCards = [
+    {
+      label: 'Games',
+      value: filteredRecords.length,
+      detail: periodData.period.label
+    },
+    {
+      label: 'Trending Index',
+      value: trendIndex.index.toFixed(2),
+      detail: `${trendIndex.improving} up · ${trendIndex.declining} down`
+    },
+    {
+      label: 'Points Avg',
+      value: pointsSummary ? `${formatHandoutNumber(pointsSummary.average)}${getStatSuffix('pts')}` : '—',
+      detail: 'Period average'
+    },
+    {
+      label: shootingSummary ? 'Shooting Star' : 'Attack Energy',
+      value: shootingSummary
+        ? `${formatHandoutNumber(shootingSummary.average)}${getStatSuffix('shoot')}`
+        : attackSummary
+          ? `${formatHandoutNumber(attackSummary.average)}${getStatSuffix('atk')}`
+          : '—',
+      detail: shootingSummary ? 'Shot quality blend' : 'Offensive involvement'
+    }
+  ];
+
+  const profileMeta = [
+    profile.number ? `#${profile.number}` : null,
+    profile.position ? (POSITION_NAMES[profile.position] || profile.position) : null,
+    profile.height ? `${profile.height}m` : null,
+    playerAge !== null ? `${playerAge} years` : null
+  ].filter(Boolean).join(' · ');
+
+  const aiSummaryHtml = aiHandout?.developmentSummary
+    ? formatAiText(aiHandout.developmentSummary)
+    : '<p>AI summary was not generated for this handout.</p>';
+  const coachRemarkHtml = aiHandout?.coachRemark
+    ? formatAiText(aiHandout.coachRemark)
+    : '<p>No AI remark was generated.</p>';
+  const hintsAndTips = normalizeHintList(aiHandout?.hintsAndTips);
+
+  aiHandoutOutput.innerHTML = `
+    <section class="player-handout-sheet">
+      <header class="player-handout-sheet-header">
+        <div>
+          <div class="player-handout-eyebrow">AI Player Handout</div>
+          <h2>${escapeHtml(playerName)}</h2>
+          <p>${escapeHtml(periodData.period.label)} review · ${escapeHtml(periodData.dateRangeLabel)}</p>
+        </div>
+        <div class="player-handout-meta">${escapeHtml(profileMeta || 'Profile details can be added from the player card.')}</div>
+      </header>
+
+      <section class="player-handout-summary-grid">
+        ${summaryCards.map(card => `
+          <article class="player-handout-summary-card">
+            <span class="player-handout-summary-label">${escapeHtml(card.label)}</span>
+            <strong class="player-handout-summary-value">${escapeHtml(String(card.value))}</strong>
+            <span class="player-handout-summary-detail">${escapeHtml(card.detail)}</span>
+          </article>
+        `).join('')}
+      </section>
+
+      <section class="player-handout-section">
+        <div class="player-handout-section-header">
+          <h3>AI Development Summary</h3>
+          <span>${filteredRecords.length} games in sample</span>
+        </div>
+        <div class="player-handout-prose">${aiSummaryHtml}</div>
+      </section>
+
+      <section class="player-handout-two-column">
+        <div class="player-handout-section">
+          <div class="player-handout-section-header">
+            <h3>Areas of Improvement</h3>
+            <span>What is moving in the right direction</span>
+          </div>
+          <div class="ai-handout-area-grid">
+            ${buildHandoutAreaCards(improvementItems, 'No standout improving trends yet in this period.')}
+          </div>
+        </div>
+
+        <div class="player-handout-section">
+          <div class="player-handout-section-header">
+            <h3>Focus Next</h3>
+            <span>Best targets for the next block</span>
+          </div>
+          <div class="ai-handout-area-grid">
+            ${buildHandoutAreaCards(focusItems, 'Current data is steady. Focus on maintaining consistency.')}
+          </div>
+        </div>
+      </section>
+
+      <section class="player-handout-section">
+        <div class="player-handout-section-header">
+          <h3>Stat Visuals</h3>
+          <span>Recent pattern by category</span>
+        </div>
+        <div class="ai-handout-visual-grid">
+          ${buildHandoutVisualCards(visualStats)}
+        </div>
+      </section>
+
+      <section class="player-handout-two-column">
+        <div class="player-handout-section">
+          <div class="player-handout-section-header">
+            <h3>Coach's Remark</h3>
+            <span>AI generated</span>
+          </div>
+          <div class="player-handout-note player-handout-prose">
+            ${coachRemarkHtml}
+          </div>
+        </div>
+
+        <div class="player-handout-section">
+          <div class="player-handout-section-header">
+            <h3>Hints & Tips</h3>
+            <span>AI generated</span>
+          </div>
+          <div class="player-handout-note">
+            ${hintsAndTips.length > 0 ? `
+              <ul class="player-handout-tips">
+                ${hintsAndTips.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+              </ul>
+            ` : 'No AI tips were generated.'}
+          </div>
+        </div>
+      </section>
+    </section>
+  `;
+
+  handoutIsReady = true;
+  if (printAiHandoutBtn) {
+    printAiHandoutBtn.disabled = false;
+  }
+};
+
 const updateChartAndTable = () => {
   const data = buildData();
   if (data.length === 0) return;
@@ -1096,6 +1647,7 @@ const updateChartAndTable = () => {
 const updateView = () => {
   const data = buildData();
   if (data.length === 0) {
+    clearAiHandout('No player data available for a handout yet.');
     return;
   }
 
@@ -1110,6 +1662,7 @@ const updateView = () => {
   
   // Update chart and table with selected stat
   updateChartAndTable();
+  clearAiHandout('Generate a fresh handout for the current player and filters.');
 };
 
 /**
@@ -1184,6 +1737,7 @@ const init = () => {
     if (scorecardGrid) scorecardGrid.innerHTML = '<div class="no-data-message">No game data yet. Upload CSVs from the Admin page.</div>';
     chart.innerHTML = "<p>No game data yet</p>";
     if (gameTable) gameTable.innerHTML = "";
+    clearAiHandout('No player data available for a handout yet.');
     return;
   }
 
@@ -1422,6 +1976,7 @@ const AI_CACHE_TTL = 30 * 60 * 1000; // 30 minutes cache TTL
 let isGenerating = false;
 let lastRequestTime = 0;
 const MIN_REQUEST_INTERVAL = 3000; // 3 seconds between requests
+let handoutIsReady = false;
 
 /**
  * Simple hash function for cache keys
@@ -1496,6 +2051,14 @@ const AI_PROVIDERS = {
     helpText: 'Get key at platform.openai.com',
     type: 'openai'
   },
+  anthropic: {
+    name: 'Anthropic',
+    url: 'https://api.anthropic.com/v1/messages',
+    model: 'claude-sonnet-4-0',
+    helpUrl: 'https://console.anthropic.com/settings/keys',
+    helpText: 'Get key at console.anthropic.com',
+    type: 'anthropic'
+  },
   gemini: {
     name: 'Google Gemini',
     url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
@@ -1517,6 +2080,13 @@ const generateAiBtn = document.getElementById('generateAiInsight');
 const aiStatusText = document.getElementById('aiStatusText');
 const aiStatus = document.getElementById('aiStatus');
 const aiInsightText = document.getElementById('aiInsightText');
+const aiHandoutLocked = document.getElementById('aiHandoutLocked');
+const aiHandoutControls = document.getElementById('aiHandoutControls');
+const aiHandoutPeriod = document.getElementById('aiHandoutPeriod');
+const generateAiHandoutBtn = document.getElementById('generateAiHandout');
+const printAiHandoutBtn = document.getElementById('printAiHandout');
+const aiHandoutStatus = document.getElementById('aiHandoutStatus');
+const aiHandoutOutput = document.getElementById('aiHandoutOutput');
 
 /**
  * Get current provider
@@ -1620,6 +2190,21 @@ const updateAiStatus = () => {
     aiStatusText.textContent = 'Configure API key to enable AI coaching';
     aiStatus.className = 'ai-status';
     generateAiBtn.disabled = true;
+  }
+
+  if (generateAiHandoutBtn) {
+    generateAiHandoutBtn.disabled = !hasKey;
+  }
+  if (aiHandoutLocked) {
+    aiHandoutLocked.hidden = hasKey;
+  }
+  if (aiHandoutControls) {
+    aiHandoutControls.hidden = !hasKey;
+  }
+  if (!hasKey) {
+    clearAiHandout('Connect an AI provider to unlock the printable player handout.');
+  } else if (!handoutIsReady && (!aiHandoutOutput || !aiHandoutOutput.innerHTML.trim())) {
+    clearAiHandout('Generate a player handout for the selected player.');
   }
 };
 
@@ -1871,6 +2456,70 @@ const callGeminiApi = async (prompt, apiKey, config, retryCount = 0) => {
   }
 };
 
+const callAnthropicApi = async (prompt, apiKey, config, retryCount = 0) => {
+  const MAX_RETRIES = 3;
+  const BASE_DELAY = 2000;
+
+  try {
+    const response = await fetch(config.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: config.model,
+        max_tokens: 1024,
+        temperature: 0.7,
+        messages: [
+          { role: 'user', content: prompt }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      const errorMsg = error.error?.message || error.message || '';
+
+      console.error('[AI] Anthropic error:', response.status, errorMsg);
+
+      if (response.status === 429 && retryCount < MAX_RETRIES) {
+        const retryAfter = parseInt(response.headers.get('retry-after') || '0', 10) * 1000;
+        const delay = Math.max(retryAfter, BASE_DELAY * Math.pow(2, retryCount));
+        console.log(`[AI] Rate limited. Retrying in ${delay / 1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+        await sleep(delay);
+        return callAnthropicApi(prompt, apiKey, config, retryCount + 1);
+      }
+
+      if (response.status === 401) {
+        throw new Error('[Anthropic] Invalid API key. Please check your API key.');
+      }
+      if (response.status === 403) {
+        throw new Error('[Anthropic] Access denied. Check workspace access and API key permissions.');
+      }
+      if (response.status === 429) {
+        throw new Error('[Anthropic] Rate limit exceeded. Please wait a minute and try again.');
+      }
+      if (errorMsg.toLowerCase().includes('credit') || errorMsg.toLowerCase().includes('billing')) {
+        throw new Error(`[Anthropic] Billing/quota issue. ${errorMsg}`);
+      }
+      throw new Error(`[Anthropic] ${errorMsg || `API error: ${response.status}`}`);
+    }
+
+    const data = await response.json();
+    return data.content?.map(part => part.text || '').join('\n').trim() || 'No response generated';
+  } catch (error) {
+    if (error.name === 'TypeError' && retryCount < MAX_RETRIES) {
+      const delay = BASE_DELAY * Math.pow(2, retryCount);
+      console.log(`[AI] Network error. Retrying in ${delay / 1000}s...`);
+      await sleep(delay);
+      return callAnthropicApi(prompt, apiKey, config, retryCount + 1);
+    }
+    throw error;
+  }
+};
+
 /**
  * Call AI API (routes to correct provider based on type)
  */
@@ -1893,6 +2542,8 @@ const callAiApi = async (prompt) => {
   // Route based on API type
   if (config.type === 'openai') {
     return callOpenAiCompatibleApi(prompt, apiKey, config);
+  } else if (config.type === 'anthropic') {
+    return callAnthropicApi(prompt, apiKey, config);
   } else if (config.type === 'gemini') {
     return callGeminiApi(prompt, apiKey, config);
   } else {
@@ -1937,11 +2588,7 @@ const generateAiInsight = async () => {
   // Check cache first
   const cachedResponse = getCachedResponse(cacheKey);
   if (cachedResponse) {
-    const formattedResponse = cachedResponse
-      .split('\n\n')
-      .filter(p => p.trim())
-      .map(p => `<p>${p.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</p>`)
-      .join('');
+    const formattedResponse = formatAiText(cachedResponse);
     aiInsightText.innerHTML = `<div class="cache-indicator" style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">📋 Cached response (${Math.round(AI_CACHE_TTL/60000)}min)</div>${formattedResponse}`;
     aiInsightText.classList.add('visible');
     return;
@@ -1964,11 +2611,7 @@ const generateAiInsight = async () => {
     setCachedResponse(cacheKey, response);
     
     // Format the response
-    const formattedResponse = response
-      .split('\n\n')
-      .filter(p => p.trim())
-      .map(p => `<p>${p.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</p>`)
-      .join('');
+    const formattedResponse = formatAiText(response);
     
     aiInsightText.innerHTML = formattedResponse;
     aiInsightText.classList.add('visible');
@@ -1986,6 +2629,94 @@ const generateAiInsight = async () => {
     generateAiBtn.classList.remove('loading');
     generateAiBtn.disabled = false;
   }
+};
+
+const generateAiHandout = async () => {
+  if (isGenerating) {
+    setAiHandoutStatus('Another AI request is already running.', 'neutral');
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastRequestTime < MIN_REQUEST_INTERVAL) {
+    const waitTime = Math.ceil((MIN_REQUEST_INTERVAL - (now - lastRequestTime)) / 1000);
+    setAiHandoutStatus(`Please wait ${waitTime}s before requesting again.`, 'neutral');
+    return;
+  }
+
+  const playerName = playerSelect?.value;
+  if (!playerName) {
+    setAiHandoutStatus('Select a player first.', 'error');
+    return;
+  }
+
+  const data = buildData();
+  const playerRecords = data.filter(record => record.player === playerName);
+  const periodKey = aiHandoutPeriod?.value || '6m';
+  const context = buildPlayerHandoutContext(playerName, playerRecords, periodKey);
+
+  if (context.filteredRecords.length < 2) {
+    clearAiHandout('Need at least 2 games in the selected period to build a useful handout.');
+    setAiHandoutStatus('Not enough games in the selected period.', 'error');
+    return;
+  }
+
+  const provider = getProvider();
+  const dataHash = hashString(JSON.stringify({
+    periodKey,
+    records: context.filteredRecords.map(record => ({
+      date: record.date,
+      opponent: record.opponent,
+      stats: record.stats
+    }))
+  }));
+  const cacheKey = `handout_${playerName}_${periodKey}_${provider}_${dataHash}`;
+
+  const cachedResponse = getCachedResponse(cacheKey);
+  if (cachedResponse) {
+    renderPlayerHandout(context, parseAiHandoutResponse(cachedResponse));
+    setAiHandoutStatus('Loaded cached handout summary.', 'success');
+    return;
+  }
+
+  isGenerating = true;
+  lastRequestTime = now;
+  if (generateAiHandoutBtn) {
+    generateAiHandoutBtn.classList.add('loading');
+    generateAiHandoutBtn.disabled = true;
+  }
+  if (printAiHandoutBtn) {
+    printAiHandoutBtn.disabled = true;
+  }
+  setAiHandoutStatus('Generating printable player handout...', 'neutral');
+
+  try {
+    const prompt = buildPlayerHandoutPrompt(context);
+    const response = await callAiApi(prompt);
+    setCachedResponse(cacheKey, response);
+    renderPlayerHandout(context, parseAiHandoutResponse(response));
+    setAiHandoutStatus('Handout ready to print.', 'success');
+  } catch (error) {
+    console.error('AI handout generation error:', error);
+    clearAiHandout('The handout could not be generated right now.');
+    setAiHandoutStatus(error.message, 'error');
+  } finally {
+    isGenerating = false;
+    if (generateAiHandoutBtn) {
+      generateAiHandoutBtn.classList.remove('loading');
+      generateAiHandoutBtn.disabled = !loadApiKey();
+    }
+  }
+};
+
+const printAiHandout = async () => {
+  if (!handoutIsReady || !aiHandoutOutput?.innerHTML.trim()) {
+    setAiHandoutStatus('Generate a handout before printing.', 'error');
+    return;
+  }
+
+  document.body.classList.add('print-player-handout');
+  window.print();
 };
 
 // AI event listeners
@@ -2030,6 +2761,24 @@ if (saveApiKeyBtn) {
 if (generateAiBtn) {
   generateAiBtn.addEventListener('click', generateAiInsight);
 }
+
+if (generateAiHandoutBtn) {
+  generateAiHandoutBtn.addEventListener('click', generateAiHandout);
+}
+
+if (printAiHandoutBtn) {
+  printAiHandoutBtn.addEventListener('click', printAiHandout);
+}
+
+if (aiHandoutPeriod) {
+  aiHandoutPeriod.addEventListener('change', () => {
+    clearAiHandout('Time period changed. Generate a fresh handout.');
+  });
+}
+
+window.addEventListener('afterprint', () => {
+  document.body.classList.remove('print-player-handout');
+});
 
 // Load saved API key on page load
 if (aiApiKeyInput) {

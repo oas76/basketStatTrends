@@ -351,7 +351,13 @@ const getPlayerProfile = (playerName) => {
   const data = loadData();
   const player = data.players[playerName];
   if (!player) {
-    return { number: null, active: true, height: null, position: null, birthdate: null };
+    return {
+      number: null,
+      active: true,
+      height: null,
+      position: null,
+      birthdate: null
+    };
   }
   return {
     number: player.number || null,
