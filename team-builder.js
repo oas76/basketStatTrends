@@ -988,6 +988,171 @@
         </section>`;
     }
 
+    // --- Overall rating + comparison analysis ---
+
+    // Normalized median score per stat per team (0=worst 1=best, TO already inverted)
+    const handoutRanges = globalStatRanges;
+    const teamStatScores = activeTeams.map((_, ti) => {
+      const tp = teamPerspectives[ti];
+      const out = {};
+      RADAR_STATS.forEach(stat => {
+        if (!tp || !tp[stat]) { out[stat] = null; return; }
+        out[stat] = normalize(stat, tp[stat].median, handoutRanges);
+      });
+      return out;
+    });
+
+    // Overall 0-100 rating
+    const ratings = teamStatScores.map(scores => {
+      const vals = Object.values(scores).filter(v => v !== null);
+      if (!vals.length) return null;
+      return Math.round(vals.reduce((s, v) => s + v, 0) / vals.length * 100);
+    });
+
+    // Category scores
+    const CATEGORIES = {
+      'Shooting':    ['fg%', '3pt%', 'ft%'],
+      'Rebounding':  ['reb'],
+      'Playmaking':  ['asst', 'to'],
+      'Defence':     ['blk', 'stl'],
+    };
+    const teamCatScores = teamStatScores.map(scores => {
+      const cats = {};
+      Object.entries(CATEGORIES).forEach(([cat, stats]) => {
+        const vals = stats.map(s => scores[s]).filter(v => v !== null);
+        cats[cat] = vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length * 100) : null;
+      });
+      return cats;
+    });
+
+    // Per-stat gap analysis (sorted by biggest gap first)
+    const statGaps = RADAR_STATS.map(stat => {
+      const vals = teamStatScores.map((s, ti) => ({ ti, v: s[stat] })).filter(x => x.v !== null);
+      if (vals.length < 2) return { stat, gap: 0, leaderTi: null };
+      const best  = vals.reduce((a, b) => a.v > b.v ? a : b);
+      const worst = vals.reduce((a, b) => a.v < b.v ? a : b);
+      // Raw median values for human-readable display
+      const rawLeader = teamPerspectives[best.ti]  && teamPerspectives[best.ti][stat]  ? teamPerspectives[best.ti][stat].median  : null;
+      const rawWorst  = teamPerspectives[worst.ti] && teamPerspectives[worst.ti][stat] ? teamPerspectives[worst.ti][stat].median : null;
+      return { stat, gap: best.v - worst.v, leaderTi: best.ti, worstTi: worst.ti, rawLeader, rawWorst };
+    }).sort((a, b) => b.gap - a.gap);
+
+    const biggestDiffs  = statGaps.filter(s => s.gap > 0.01).slice(0, 3);
+    const smallestDiffs = [...statGaps].sort((a, b) => a.gap - b.gap).filter(s => s.gap >= 0).slice(0, 3);
+
+    // Rank teams overall
+    const ranked = activeTeams
+      .map((_, i) => ({ i, r: ratings[i] }))
+      .filter(x => x.r !== null)
+      .sort((a, b) => b.r - a.r);
+
+    // Build rating HTML
+    const ratingCards = activeTeams.map((_, i) => {
+      const r = ratings[i];
+      if (r === null) return '';
+      const rank = ranked.findIndex(x => x.i === i) + 1;
+      const rankLabel = ranked.length > 1 ? `<span style="font-size:10px;color:#64748b;margin-left:6px">#${rank} of ${ranked.length}</span>` : '';
+      return `<div style="border-top:4px solid ${TEAM_COLORS[i]};background:#fff;border-radius:8px;padding:16px 20px;box-shadow:0 1px 4px rgba(0,0,0,.08);text-align:center;flex:1">
+        <div style="font-size:13px;font-weight:700;color:${TEAM_COLORS[i]};margin-bottom:8px">${escHtml(teamNames[i])}${rankLabel}</div>
+        <div style="font-size:44px;font-weight:900;color:${TEAM_COLORS[i]};line-height:1">${r}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">/ 100</div>
+        <div style="background:#e2e8f0;border-radius:4px;height:7px;overflow:hidden">
+          <div style="height:100%;width:${r}%;background:${TEAM_COLORS[i]};border-radius:4px"></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Category comparison table rows
+    const catRows = Object.keys(CATEGORIES).map(cat => {
+      const cells = activeTeams.map((_, i) => {
+        const s = teamCatScores[i][cat];
+        if (s === null) return `<td style="text-align:center;padding:5px 10px;color:#94a3b8">—</td>`;
+        // Best in category gets highlighted
+        const catVals = activeTeams.map((__, j) => teamCatScores[j][cat]).filter(v => v !== null);
+        const best = catVals.length ? Math.max(...catVals) : null;
+        const isBest = best !== null && s === best && catVals.filter(v => v === best).length < catVals.length;
+        return `<td style="text-align:center;padding:5px 10px;font-weight:${isBest ? '800' : '500'};color:${isBest ? TEAM_COLORS[i] : '#1e293b'}">${s}</td>`;
+      }).join('');
+      return `<tr>
+        <td style="padding:5px 10px;font-weight:600">${cat}</td>
+        ${cells}
+        <td style="padding:5px 10px;color:#64748b;font-size:11px">${CATEGORIES[cat].map(s => STAT_LABELS[s]).join(', ')}</td>
+      </tr>`;
+    }).join('');
+
+    const catTeamHeaders = activeTeams.map((_, i) =>
+      `<th style="text-align:center;padding:6px 10px;color:${TEAM_COLORS[i]};font-weight:700;background:${TEAM_COLORS[i]}10">${escHtml(teamNames[i])}</th>`
+    ).join('');
+
+    // Gap analysis bullets
+    const biggestBullets = biggestDiffs.length ? biggestDiffs.map(g => {
+      const leader = teamNames[g.leaderTi];
+      const trailer = teamNames[g.worstTi];
+      const rv1 = g.rawLeader !== null ? parseFloat(g.rawLeader).toFixed(1) : '—';
+      const rv2 = g.rawWorst  !== null ? parseFloat(g.rawWorst).toFixed(1)  : '—';
+      const invNote = INVERTED_STATS.has(g.stat) ? ' (lower is better)' : '';
+      const pct = Math.round(g.gap * 100);
+      return `<li style="margin-bottom:6px">
+        <strong style="color:${TEAM_COLORS[g.leaderTi]}">${escHtml(leader)}</strong>
+        leads in <strong>${STAT_LABELS[g.stat]}${invNote}</strong>
+        — ${rv1} vs ${rv2}
+        <span style="font-size:10px;background:#fee2e2;color:#b91c1c;border-radius:3px;padding:1px 5px;margin-left:4px">Δ ${pct}%</span>
+      </li>`;
+    }).join('') : '<li style="color:#94a3b8">No meaningful differences found.</li>';
+
+    const smallestBullets = smallestDiffs.length ? smallestDiffs.map(g => {
+      const vals = activeTeams
+        .map((_, i) => {
+          const tp = teamPerspectives[i];
+          return tp && tp[g.stat] ? tp[g.stat].median : null;
+        })
+        .filter(v => v !== null)
+        .map(v => parseFloat(v).toFixed(1));
+      const pct = Math.round(g.gap * 100);
+      return `<li style="margin-bottom:6px">
+        <strong>${STAT_LABELS[g.stat]}</strong>
+        — ${vals.join(' vs ')}
+        <span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:3px;padding:1px 5px;margin-left:4px">Δ ${pct}%</span>
+      </li>`;
+    }).join('') : '<li style="color:#94a3b8">Not enough data.</li>';
+
+    // Summary sentence
+    const topTeam = ranked[0];
+    const summaryLine = topTeam && ranked.length > 1
+      ? `<strong style="color:${TEAM_COLORS[topTeam.i]}">${escHtml(teamNames[topTeam.i])}</strong> leads overall with a rating of <strong>${topTeam.r}/100</strong>. ${biggestDiffs.length ? `The biggest performance gap is in <strong>${STAT_LABELS[biggestDiffs[0].stat]}</strong>.` : ''}`
+      : 'Only one team has enough data for comparison.';
+
+    const ratingHtml = `
+      <section style="margin-bottom:28px;break-inside:avoid">
+        <h2 class="section-title">Overall Team Rating</h2>
+        <p style="font-size:11px;color:#64748b;margin-bottom:14px">Composite score (0–100) based on per-player <em>median</em> averages across all 8 stats, normalized against the combined team range. TO is scored inversely (fewer turnovers = higher score).</p>
+        <div style="display:flex;gap:12px;margin-bottom:20px">${ratingCards}</div>
+        <p style="font-size:13px;margin-bottom:20px">${summaryLine}</p>
+
+        <h3 style="font-size:13px;font-weight:700;margin-bottom:8px">Category Breakdown</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:6px 10px;background:#f8fafc;font-weight:700">Category</th>
+              ${catTeamHeaders}
+              <th style="text-align:left;padding:6px 10px;background:#f8fafc;font-weight:700;font-size:11px;color:#64748b">Stats included</th>
+            </tr>
+          </thead>
+          <tbody>${catRows}</tbody>
+        </table>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div>
+            <h3 style="font-size:13px;font-weight:700;margin-bottom:8px;color:#b91c1c">📊 Biggest Differences</h3>
+            <ul style="list-style:none;padding:0;font-size:12px;color:#1e293b">${biggestBullets}</ul>
+          </div>
+          <div>
+            <h3 style="font-size:13px;font-weight:700;margin-bottom:8px;color:#065f46">🤝 Most Similar Stats</h3>
+            <ul style="list-style:none;padding:0;font-size:12px;color:#1e293b">${smallestBullets}</ul>
+          </div>
+        </div>
+      </section>`;
+
     // --- Window + league label ---
     const windowLabel = windowMonths === 'all' ? 'All time' : `Last ${windowMonths} months`;
     const leagueLabel = currentLeague === 'all' ? 'All leagues' : currentLeague;
@@ -1035,6 +1200,8 @@
       ${activeTeams.map((r, i) => `<span><span class="legend-dot" style="background:${TEAM_COLORS[i]}"></span>${escHtml(teamNames[i])} (${r.length}p)</span>`).join('')}
     </div>
   </header>
+
+  ${ratingHtml}
 
   <section>
     <h2 class="section-title">Team Rosters</h2>
