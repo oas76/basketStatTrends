@@ -156,15 +156,27 @@
         return;
       }
       const med = median(values);
-      const above = values.filter(v => v > med);
-      const below = values.filter(v => v < med);
+      const inv = INVERTED_STATS.has(stat);
+
+      // For inverted stats (TO: lower is better), "above median" raw means
+      // MORE turnovers = worse performance, so we swap the group roles.
+      const betterThanMedian = values.filter(v => inv ? v < med : v > med);
+      const worseThanMedian  = values.filter(v => inv ? v > med : v < med);
 
       result[stat] = {
-        top:      Math.max(...values),
-        bottom:   Math.min(...values),
+        // "top" = best-performing value for this stat (min for TO, max for others)
+        top:      inv ? Math.min(...values) : Math.max(...values),
+        // "bottom" = worst-performing value (max for TO, min for others)
+        bottom:   inv ? Math.max(...values) : Math.min(...values),
         median:   med,
-        aboveAvg: above.length ? mean(above) : (values.length === 1 ? values[0] : Math.max(...values)),
-        belowAvg: below.length ? mean(below) : (values.length === 1 ? values[0] : Math.min(...values))
+        // "aboveAvg" = mean of players performing better than median
+        aboveAvg: betterThanMedian.length
+          ? mean(betterThanMedian)
+          : (values.length === 1 ? values[0] : (inv ? Math.min(...values) : Math.max(...values))),
+        // "belowAvg" = mean of players performing worse than median
+        belowAvg: worseThanMedian.length
+          ? mean(worseThanMedian)
+          : (values.length === 1 ? values[0] : (inv ? Math.max(...values) : Math.min(...values)))
       };
     });
     return result;
