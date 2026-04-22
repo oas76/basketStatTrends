@@ -827,6 +827,241 @@
       .replace(/"/g, '&quot;');
   }
 
+  // ---- Handout generator ----------------------------------------
+
+  function generateHandout() {
+    const activeTeams = teams.slice(0, teamCount);
+    const filtered    = getFilteredGames();
+    const allAvgs     = computeAllPlayerAverages(filtered);
+
+    const teamsPlayerAvgs = activeTeams.map(roster =>
+      roster.map(name => allAvgs[name]).filter(Boolean)
+    );
+    const teamPerspectives = teamsPlayerAvgs.map(avgs =>
+      avgs.length ? computePerspectives(avgs) : null
+    );
+    const teamPeaks = activeTeams.map(roster =>
+      roster.length ? computePeakSingleGame(roster, filtered) : null
+    );
+
+    if (!teamPerspectives.some(tp => tp !== null)) {
+      alert('Assign players to at least one team first, then generate the handout.');
+      return;
+    }
+
+    // --- Serialize the live SVG elements (they already carry value labels + data) ---
+    const radarCards = [...tbRadarGrid.querySelectorAll('.tb-radar-card[data-perspective]')];
+    const radarBlocks = radarCards.map(card => {
+      const svg   = card.querySelector('svg.tb-radar');
+      const title = card.querySelector('h3').textContent.trim();
+      const desc  = card.querySelector('p') ? card.querySelector('p').textContent.trim() : '';
+      const clone = svg.cloneNode(true);
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      clone.setAttribute('width', '280');
+      clone.setAttribute('height', '280');
+      // Substitute CSS vars with concrete print colours
+      const rawSvg = new XMLSerializer().serializeToString(clone)
+        .replace(/var\(--border[^)]*\)/g, '#cbd5e1')
+        .replace(/var\(--text-muted[^)]*\)/g, '#64748b')
+        .replace(/var\(--text[^)]*\)/g, '#1e293b');
+      return `<div class="radar-item">
+        <h4>${escHtml(title)}</h4>
+        <p class="radar-desc">${escHtml(desc)}</p>
+        ${rawSvg}
+      </div>`;
+    }).join('');
+
+    // --- Per-perspective stats tables ---
+    const allPersp = [
+      { key: 'top',      label: 'Top Performer',      desc: 'Best average per stat across the roster' },
+      { key: 'aboveAvg', label: 'Above-median Avg',    desc: 'Mean of players strictly between Top and Median' },
+      { key: 'median',   label: 'Median',              desc: 'Median player average per stat' },
+      { key: 'belowAvg', label: 'Below-median Avg',    desc: 'Mean of players strictly between Bottom and Median' },
+      { key: 'bottom',   label: 'Bottom Performer',    desc: 'Worst average per stat across the roster' },
+      { key: 'peak',     label: 'Peak Single Game',    desc: 'Best individual game result per stat in the window' },
+    ];
+
+    function fmtVal(v) {
+      if (v === null || v === undefined || Number.isNaN(v)) return '—';
+      return parseFloat(v).toFixed(1);
+    }
+
+    // Subtle accent colours for each perspective section
+    const perspAccents = ['#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+    const tableSections = allPersp.map((p, pi) => {
+      const accent = perspAccents[pi];
+      const thStyle = `style="background:#f8fafc;font-weight:700;text-align:left;padding:6px 10px;border-bottom:2px solid #e2e8f0"`;
+      const teamHeaders = activeTeams.map((_, i) =>
+        `<th style="background:${TEAM_COLORS[i]}18;color:${TEAM_COLORS[i]};font-weight:700;text-align:center;padding:6px 10px;border-bottom:2px solid ${TEAM_COLORS[i]}40">${escHtml(teamNames[i])}</th>`
+      ).join('');
+
+      const rows = RADAR_STATS.map((stat, si) => {
+        const cells = activeTeams.map((_, ti) => {
+          let val = null;
+          if (p.key === 'peak') {
+            val = teamPeaks[ti] ? teamPeaks[ti][stat] : null;
+          } else {
+            const tp = teamPerspectives[ti];
+            val = tp && tp[stat] ? tp[stat][p.key] : null;
+          }
+          const isInv = INVERTED_STATS.has(stat);
+          // Highlight the best team for this stat (green-tinted)
+          const allVals = activeTeams.map((_, ti2) => {
+            if (p.key === 'peak') return teamPeaks[ti2] ? teamPeaks[ti2][stat] : null;
+            const tp2 = teamPerspectives[ti2];
+            return tp2 && tp2[stat] ? tp2[stat][p.key] : null;
+          }).filter(v => v !== null);
+          const best = allVals.length
+            ? (isInv ? Math.min(...allVals) : Math.max(...allVals))
+            : null;
+          const isBest = val !== null && best !== null && parseFloat(val).toFixed(1) === parseFloat(best).toFixed(1);
+          const cellBg = isBest ? 'background:#d1fae5' : (si % 2 === 0 ? 'background:#f8fafc' : '');
+          return `<td style="text-align:center;padding:5px 10px;${cellBg};${isBest ? 'font-weight:700' : ''}">${fmtVal(val)}</td>`;
+        }).join('');
+        return `<tr><td style="padding:5px 10px;font-weight:600;white-space:nowrap;${si % 2 === 0 ? 'background:#f8fafc' : ''}">${STAT_LABELS[stat]}</td>${cells}</tr>`;
+      }).join('');
+
+      return `<div class="persp-block" style="margin-bottom:24px;break-inside:avoid">
+        <h3 style="margin:0 0 8px;padding:8px 12px;border-left:4px solid ${accent};background:${accent}10;font-size:14px;display:flex;justify-content:space-between;align-items:baseline">
+          <span>${p.label}</span>
+          <span style="font-size:11px;font-weight:400;color:#64748b">${p.desc}</span>
+        </h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr><th ${thStyle}>Stat</th>${teamHeaders}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }).join('');
+
+    // --- Roster cards ---
+    const rosterCards = activeTeams.map((roster, i) =>
+      `<div style="border-top:3px solid ${TEAM_COLORS[i]};background:#fff;border-radius:6px;padding:12px 14px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="width:12px;height:12px;border-radius:50%;background:${TEAM_COLORS[i]};flex-shrink:0"></span>
+          <strong style="font-size:14px;color:${TEAM_COLORS[i]}">${escHtml(teamNames[i])}</strong>
+          <span style="font-size:11px;color:#94a3b8;margin-left:auto">${roster.length} player${roster.length !== 1 ? 's' : ''}</span>
+        </div>
+        <ul style="margin:0;padding-left:16px;font-size:12px;color:#334155;line-height:1.7">
+          ${roster.length ? roster.map(n => `<li>${escHtml(n)}</li>`).join('') : '<li style="color:#94a3b8">—</li>'}
+        </ul>
+      </div>`
+    ).join('');
+
+    // --- Game appearances ---
+    const games    = getWindowedGames();
+    const leagues  = [...new Set(games.map(g => g.league).filter(Boolean))].sort();
+    let appearancesHtml = '';
+    if (leagues.length) {
+      const counts = activeTeams.map(roster => {
+        const byLeague = {};
+        leagues.forEach(l => { byLeague[l] = 0; });
+        let total = 0;
+        games.forEach(game => {
+          if (!game.league) return;
+          roster.forEach(name => {
+            if (game.performances && game.performances[name]) {
+              byLeague[game.league] = (byLeague[game.league] || 0) + 1;
+              total++;
+            }
+          });
+        });
+        byLeague['__total__'] = total;
+        return byLeague;
+      });
+      const leagueHeaders = leagues.map(l => `<th style="padding:6px 10px;background:#f8fafc;font-weight:700">${escHtml(l)}</th>`).join('');
+      const appRows = activeTeams.map((roster, i) => {
+        const cells = leagues.map(l => {
+          const n = counts[i][l] || 0;
+          return `<td style="text-align:center;padding:5px 10px">${n || '—'}</td>`;
+        }).join('');
+        const total = counts[i]['__total__'] || 0;
+        return `<tr><td style="padding:5px 10px;font-weight:600;white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${TEAM_COLORS[i]};margin-right:6px;vertical-align:middle"></span>${escHtml(teamNames[i])}</td>${cells}<td style="text-align:center;padding:5px 10px;font-weight:700">${total || '—'}</td></tr>`;
+      }).join('');
+      appearancesHtml = `
+        <section style="margin-top:28px;break-inside:avoid">
+          <h2 style="font-size:15px;margin:0 0 10px;padding-bottom:6px;border-bottom:2px solid #e2e8f0">Game Appearances</h2>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead><tr><th style="padding:6px 10px;background:#f8fafc;font-weight:700;text-align:left">Team</th>${leagueHeaders}<th style="padding:6px 10px;background:#f8fafc;font-weight:700">Total</th></tr></thead>
+            <tbody>${appRows}</tbody>
+          </table>
+        </section>`;
+    }
+
+    // --- Window + league label ---
+    const windowLabel = windowMonths === 'all' ? 'All time' : `Last ${windowMonths} months`;
+    const leagueLabel = currentLeague === 'all' ? 'All leagues' : currentLeague;
+    const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    // --- Assemble full HTML ---
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Team Builder – Handout</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           color: #1e293b; background: #fff; padding: 24px 28px; font-size: 13px; }
+    h1 { font-size: 20px; font-weight: 800; }
+    h2 { font-size: 15px; font-weight: 700; }
+    h3 { font-size: 13px; font-weight: 700; }
+    h4 { font-size: 12px; font-weight: 700; margin-bottom: 2px; }
+    .meta { font-size: 12px; color: #64748b; margin-top: 4px; }
+    .section-title { font-size: 15px; font-weight: 700; margin: 0 0 12px;
+                     padding-bottom: 6px; border-bottom: 2px solid #e2e8f0; }
+    .rosters { display: grid; grid-template-columns: repeat(${activeTeams.length}, 1fr);
+               gap: 12px; margin: 16px 0 24px; }
+    .radar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 28px; }
+    .radar-item { text-align: center; break-inside: avoid; }
+    .radar-item svg { width: 100%; height: auto; max-width: 280px; }
+    .radar-desc { font-size: 10px; color: #94a3b8; margin-bottom: 4px; }
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; font-size: 12px; }
+    .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+    table { border-collapse: collapse; width: 100%; }
+    @media print {
+      body { padding: 12px 16px; }
+      @page { size: A4 landscape; margin: 12mm; }
+    }
+  </style>
+</head>
+<body>
+  <header style="margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end">
+    <div>
+      <h1>🏀 Team Builder — Comparison Handout</h1>
+      <p class="meta">${windowLabel} · ${leagueLabel} · Generated ${dateStr}</p>
+    </div>
+    <div class="legend">
+      ${activeTeams.map((r, i) => `<span><span class="legend-dot" style="background:${TEAM_COLORS[i]}"></span>${escHtml(teamNames[i])} (${r.length}p)</span>`).join('')}
+    </div>
+  </header>
+
+  <section>
+    <h2 class="section-title">Team Rosters</h2>
+    <div class="rosters">${rosterCards}</div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Radar Comparison <span style="font-size:11px;font-weight:400;color:#64748b">— all charts share the same axis scale</span></h2>
+    <div class="radar-grid">${radarBlocks}</div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Stats by Perspective <span style="font-size:11px;font-weight:400;color:#64748b">— highlighted cell = best team for that stat</span></h2>
+    ${tableSections}
+  </section>
+
+  ${appearancesHtml}
+</body>
+</html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) { alert('Pop-up blocked — please allow pop-ups for this page and try again.'); return; }
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 500);
+  }
+
   // ---- Event wiring ---------------------------------------------
 
   tbWindow.addEventListener('change', () => {
@@ -856,6 +1091,7 @@
   });
 
   tbShuffle.addEventListener('click', autoBalance);
+  document.getElementById('tbPrint').addEventListener('click', generateHandout);
 
   tbClear.addEventListener('click', () => {
     teams = [[], [], [], []];
