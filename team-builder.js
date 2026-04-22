@@ -176,25 +176,31 @@
       const med = median(values);
       const inv = INVERTED_STATS.has(stat);
 
-      // For inverted stats (TO: lower is better), "above median" raw means
-      // MORE turnovers = worse performance, so we swap the group roles.
-      const betterThanMedian = values.filter(v => inv ? v < med : v > med);
-      const worseThanMedian  = values.filter(v => inv ? v > med : v < med);
+      // best/worst anchors are flipped for inverted stats (TO: lower is better)
+      const topVal    = inv ? Math.min(...values) : Math.max(...values);
+      const bottomVal = inv ? Math.max(...values) : Math.min(...values);
+
+      // "above-avg" = mean of values strictly between median and top (both excluded)
+      // For inverted stats the band sits below the median numerically.
+      const [abLo, abHi] = [Math.min(med, topVal), Math.max(med, topVal)];
+      const betterBand = values.filter(v => v > abLo && v < abHi);
+
+      // "below-avg" = mean of values strictly between bottom and median (both excluded)
+      const [blLo, blHi] = [Math.min(bottomVal, med), Math.max(bottomVal, med)];
+      const worseBand  = values.filter(v => v > blLo && v < blHi);
 
       result[stat] = {
         // "top" = best-performing value for this stat (min for TO, max for others)
-        top:      inv ? Math.min(...values) : Math.max(...values),
+        top:    topVal,
         // "bottom" = worst-performing value (max for TO, min for others)
-        bottom:   inv ? Math.max(...values) : Math.min(...values),
-        median:   med,
-        // "aboveAvg" = mean of players performing better than median
-        aboveAvg: betterThanMedian.length
-          ? mean(betterThanMedian)
-          : (values.length === 1 ? values[0] : (inv ? Math.min(...values) : Math.max(...values))),
-        // "belowAvg" = mean of players performing worse than median
-        belowAvg: worseThanMedian.length
-          ? mean(worseThanMedian)
-          : (values.length === 1 ? values[0] : (inv ? Math.max(...values) : Math.min(...values)))
+        bottom: bottomVal,
+        median: med,
+        // "aboveAvg" = mean of players strictly between median and top
+        // Falls back to topVal when no player occupies that band
+        aboveAvg: betterBand.length ? mean(betterBand) : topVal,
+        // "belowAvg" = mean of players strictly between bottom and median
+        // Falls back to bottomVal when no player occupies that band
+        belowAvg: worseBand.length  ? mean(worseBand)  : bottomVal
       };
     });
     return result;
