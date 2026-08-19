@@ -6,6 +6,7 @@
       "config": {
         "includeFiles": [
           "login.html",
+          "change-password.html",
           "index.html",
           "admin.html",
           "team.html",

@@ -769,18 +769,23 @@ const loadAuditLog = async () => {
       return;
     }
     
+    // Escape untrusted fields (email/IP are user-influenced) to prevent XSS.
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+
     auditLogTable.innerHTML = data.entries.map(entry => {
       const statusClass = entry.success ? 'color: var(--positive)' : 'color: var(--negative)';
       const statusText = entry.success ? '✓ Success' : '✗ Failed';
-      const email = entry.email || entry.emailHash || '—';
+      const email = esc(entry.email || entry.emailHash || '—');
       
       return `
         <tr>
-          <td style="white-space: nowrap; font-size: 12px;">${formatTimestamp(entry.timestamp)}</td>
-          <td><code style="font-size: 11px; background: var(--surface-raised); padding: 2px 6px; border-radius: 4px;">${entry.action}</code></td>
+          <td style="white-space: nowrap; font-size: 12px;">${esc(formatTimestamp(entry.timestamp))}</td>
+          <td><code style="font-size: 11px; background: var(--surface-raised); padding: 2px 6px; border-radius: 4px;">${esc(entry.action)}</code></td>
           <td style="font-size: 12px;">${email}</td>
-          <td style="font-size: 12px;">${entry.role || '—'}</td>
-          <td style="font-size: 11px; color: var(--text-muted);">${entry.ip || '—'}</td>
+          <td style="font-size: 12px;">${esc(entry.role || '—')}</td>
+          <td style="font-size: 11px; color: var(--text-muted);">${esc(entry.ip || '—')}</td>
           <td style="${statusClass}; font-size: 12px;">${statusText}</td>
         </tr>
       `;
@@ -799,3 +804,225 @@ if (refreshAuditLog) {
 
 // Load audit log on page load
 loadAuditLog();
+
+// ========================================
+// USER MANAGEMENT
+// ========================================
+
+const usersTable = document.getElementById('usersTable');
+const userCount = document.getElementById('userCount');
+const addUserBtn = document.getElementById('addUserBtn');
+const addUserModal = document.getElementById('addUserModal');
+const addUserForm = document.getElementById('addUserForm');
+const closeAddUser = document.getElementById('closeAddUser');
+const cancelAddUser = document.getElementById('cancelAddUser');
+const addUserError = document.getElementById('addUserError');
+const passwordModal = document.getElementById('passwordModal');
+const generatedPassword = document.getElementById('generatedPassword');
+const copyPasswordBtn = document.getElementById('copyPasswordBtn');
+const closePasswordModal = document.getElementById('closePasswordModal');
+const donePasswordModal = document.getElementById('donePasswordModal');
+
+// Escape untrusted values before inserting into innerHTML (prevents XSS)
+const escapeHtml = (s) =>
+  String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+
+const openModal = (el) => el && el.classList.add('active');
+const closeModal = (el) => el && el.classList.remove('active');
+
+const PROVIDER_LABELS = { google: 'Google', apple: 'Apple', vipps: 'Vipps' };
+
+// Render the users table
+const renderUsers = (users) => {
+  if (!usersTable) return;
+  if (userCount) userCount.textContent = users.length;
+
+  if (users.length === 0) {
+    usersTable.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No users yet</td></tr>';
+    return;
+  }
+
+  usersTable.innerHTML = users.map((u) => {
+    const roleBadge = u.role === 'admin'
+      ? '<span class="badge" style="background: var(--accent-dim); color: var(--accent);">admin</span>'
+      : '<span class="badge">user</span>';
+    const statusBadge = u.status === 'active'
+      ? '<span style="color: var(--positive); font-size:12px;">● active</span>'
+      : '<span style="color: var(--text-muted); font-size:12px;">○ disabled</span>';
+
+    const signins = [];
+    if (u.hasPassword) signins.push('<span class="badge" style="font-size:10px;">password</span>');
+    (u.providers || []).forEach((p) => {
+      signins.push(
+        `<span class="badge" style="font-size:10px;">${escapeHtml(PROVIDER_LABELS[p] || p)}` +
+        ` <a href="#" data-action="unlink" data-id="${escapeHtml(u.id)}" data-provider="${escapeHtml(p)}" title="Unlink ${escapeHtml(PROVIDER_LABELS[p] || p)}" style="color: var(--negative); text-decoration:none;">×</a></span>`
+      );
+    });
+    const signinCell = signins.length ? signins.join(' ') : '<span style="color: var(--text-muted); font-size:11px;">—</span>';
+
+    const roleAction = u.role === 'admin'
+      ? `<button class="secondary" data-action="make-user" data-id="${escapeHtml(u.id)}" style="font-size:11px; padding:4px 8px;">Make user</button>`
+      : `<button class="secondary" data-action="make-admin" data-id="${escapeHtml(u.id)}" style="font-size:11px; padding:4px 8px;">Make admin</button>`;
+    const statusAction = u.status === 'active'
+      ? `<button class="secondary" data-action="disable" data-id="${escapeHtml(u.id)}" style="font-size:11px; padding:4px 8px;">Disable</button>`
+      : `<button class="secondary" data-action="enable" data-id="${escapeHtml(u.id)}" style="font-size:11px; padding:4px 8px;">Enable</button>`;
+
+    return `
+      <tr data-id="${escapeHtml(u.id)}">
+        <td style="font-size:12px;">${escapeHtml(u.email)}</td>
+        <td style="font-size:12px;">${escapeHtml(u.name) || '—'}</td>
+        <td>${roleBadge}</td>
+        <td>${statusBadge}</td>
+        <td>${signinCell}</td>
+        <td style="white-space:nowrap; display:flex; gap:4px; flex-wrap:wrap;">
+          <button class="secondary" data-action="regenerate" data-id="${escapeHtml(u.id)}" data-email="${escapeHtml(u.email)}" style="font-size:11px; padding:4px 8px;">🔑 Password</button>
+          ${roleAction}
+          ${statusAction}
+          <button data-action="delete" data-id="${escapeHtml(u.id)}" data-email="${escapeHtml(u.email)}" class="danger-link" style="font-size:11px; padding:4px 8px;">Delete</button>
+        </td>
+      </tr>`;
+  }).join('');
+};
+
+// Load users from the server
+const loadUsers = async () => {
+  if (!usersTable) return;
+  usersTable.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">Loading...</td></tr>';
+  try {
+    const res = await fetch('/api/users');
+    if (!res.ok) {
+      if (res.status === 403) {
+        usersTable.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">Admin access required</td></tr>';
+        return;
+      }
+      throw new Error('Failed to load users');
+    }
+    const data = await res.json();
+    renderUsers(data.users || []);
+  } catch (e) {
+    console.error('Failed to load users:', e);
+    usersTable.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--negative);">Failed to load users</td></tr>';
+  }
+};
+
+// Show a generated password in the modal
+const showPassword = (password) => {
+  if (generatedPassword) generatedPassword.value = password;
+  openModal(passwordModal);
+};
+
+// Add user modal open/close
+if (addUserBtn) addUserBtn.addEventListener('click', () => {
+  addUserForm.reset();
+  addUserError.style.display = 'none';
+  openModal(addUserModal);
+});
+if (closeAddUser) closeAddUser.addEventListener('click', () => closeModal(addUserModal));
+if (cancelAddUser) cancelAddUser.addEventListener('click', () => closeModal(addUserModal));
+
+// Create user
+if (addUserForm) addUserForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  addUserError.style.display = 'none';
+  const email = document.getElementById('newUserEmail').value.trim();
+  const name = document.getElementById('newUserName').value.trim();
+  const role = document.getElementById('newUserRole').value;
+  try {
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name, role })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      addUserError.textContent = data.error || 'Failed to create user';
+      addUserError.style.display = 'block';
+      return;
+    }
+    closeModal(addUserModal);
+    await loadUsers();
+    showPassword(data.password);
+  } catch (err) {
+    addUserError.textContent = 'Connection error. Please try again.';
+    addUserError.style.display = 'block';
+  }
+});
+
+// Password modal actions
+if (copyPasswordBtn) copyPasswordBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(generatedPassword.value);
+    copyPasswordBtn.textContent = 'Copied!';
+    setTimeout(() => { copyPasswordBtn.textContent = 'Copy'; }, 1500);
+  } catch {
+    generatedPassword.select();
+  }
+});
+if (closePasswordModal) closePasswordModal.addEventListener('click', () => closeModal(passwordModal));
+if (donePasswordModal) donePasswordModal.addEventListener('click', () => closeModal(passwordModal));
+
+// Row actions (event delegation)
+if (usersTable) usersTable.addEventListener('click', async (e) => {
+  const trigger = e.target.closest('[data-action]');
+  if (!trigger) return;
+  e.preventDefault();
+  const action = trigger.dataset.action;
+  const id = trigger.dataset.id;
+  const email = trigger.dataset.email || '';
+
+  try {
+    if (action === 'regenerate') {
+      if (!confirm(`Generate a new password for ${email}? The old one stops working immediately.`)) return;
+      const res = await fetch(`/api/users/${id}/regenerate-password`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Failed to regenerate password');
+      showPassword(data.password);
+    } else if (action === 'make-admin' || action === 'make-user') {
+      const role = action === 'make-admin' ? 'admin' : 'user';
+      const res = await fetch(`/api/users/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role })
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Failed to update role');
+      await loadUsers();
+    } else if (action === 'disable' || action === 'enable') {
+      const status = action === 'disable' ? 'disabled' : 'active';
+      const res = await fetch(`/api/users/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Failed to update status');
+      await loadUsers();
+    } else if (action === 'delete') {
+      if (!confirm(`Delete ${email}? This cannot be undone.`)) return;
+      const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Failed to delete user');
+      await loadUsers();
+    } else if (action === 'unlink') {
+      const provider = trigger.dataset.provider;
+      if (!confirm(`Unlink ${PROVIDER_LABELS[provider] || provider} sign-in from this user?`)) return;
+      const res = await fetch(`/api/users/${id}/identities/${provider}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Failed to unlink');
+      await loadUsers();
+    }
+  } catch (err) {
+    console.error('User action error:', err);
+    alert('Something went wrong. Please try again.');
+  }
+});
+
+// Close modals when clicking the overlay
+[addUserModal, passwordModal].forEach((m) => {
+  if (m) m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); });
+});
+
+// Load users on page load
+loadUsers();

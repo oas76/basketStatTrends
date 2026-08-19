@@ -183,6 +183,33 @@
 
         <section class="settings-card">
           <div class="settings-card-header">
+            <h2>🔐 User Access (<span id="userCount">0</span>)</h2>
+            <button id="addUserBtn" class="secondary" style="font-size: 12px; padding: 6px 12px;">+ Add User</button>
+          </div>
+          <p class="settings-description">
+            Manage who can sign in. Create accounts with generated passwords, regenerate passwords, change roles, and unlink social sign-ins.
+          </p>
+          <div class="data-table" style="max-height: 420px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Name</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Sign-in</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="usersTable">
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="settings-card">
+          <div class="settings-card-header">
             <h2>📋 Audit Log</h2>
             <button id="refreshAuditLog" class="secondary" style="font-size: 12px; padding: 6px 12px;">Refresh</button>
           </div>
@@ -263,6 +290,63 @@
         </div>
         <div class="modal-actions">
           <button type="button" class="secondary" id="closeStatsBtn">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add User Modal -->
+    <div class="modal-overlay" id="addUserModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Add User</h3>
+          <button class="modal-close" id="closeAddUser">&times;</button>
+        </div>
+        <form id="addUserForm" class="modal-body">
+          <div class="field">
+            <label for="newUserEmail">Email</label>
+            <input type="email" id="newUserEmail" placeholder="coach@club.no" required />
+          </div>
+          <div class="field">
+            <label for="newUserName">Name (optional)</label>
+            <input type="text" id="newUserName" placeholder="Full name" />
+          </div>
+          <div class="field">
+            <label for="newUserRole">Role</label>
+            <select id="newUserRole">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="login-error" id="addUserError" style="display:none; background: rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); color:#f87171; padding:10px 14px; border-radius:8px; font-size:13px;"></div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" id="cancelAddUser">Cancel</button>
+            <button type="submit">Create User</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Generated Password Modal -->
+    <div class="modal-overlay" id="passwordModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>One-Time Password</h3>
+          <button class="modal-close" id="closePasswordModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="settings-description" id="passwordModalDesc">
+            Share this password securely with the user. It is shown only once and cannot be retrieved later.
+          </p>
+          <div class="field">
+            <label>Password</label>
+            <div style="display:flex; gap:8px;">
+              <input type="text" id="generatedPassword" readonly style="font-family: monospace; letter-spacing: 0.03em;" />
+              <button type="button" class="secondary" id="copyPasswordBtn">Copy</button>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="donePasswordModal">Done</button>
+          </div>
         </div>
       </div>
     </div>
