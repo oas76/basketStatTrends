@@ -700,11 +700,12 @@ function requireSameOrigin(req, res, next) {
   next();
 }
 
-// List all users (never exposes password hashes)
+// List all users (never exposes password hashes). Includes storage diagnostics
+// so the admin UI can warn when persistence isn't configured.
 app.get('/api/users', async (req, res) => {
   try {
     const users = await userStore.listUsers();
-    res.json({ users });
+    res.json({ users, storage: userStore.getStorageInfo() });
   } catch (e) {
     console.error('List users error:', e);
     res.status(500).json({ error: 'Failed to list users' });
@@ -736,6 +737,11 @@ app.post('/api/users', requireSameOrigin, async (req, res) => {
       return res.status(400).json({ error: 'A valid email is required' });
     }
     console.error('Create user error:', e);
+    // Surface persistence-configuration problems so they aren't mistaken for
+    // "it didn't save" — e.g. missing Vercel Blob store.
+    if (/cannot persist/i.test(e.message || '')) {
+      return res.status(503).json({ error: e.message });
+    }
     res.status(500).json({ error: 'Failed to create user' });
   }
 });

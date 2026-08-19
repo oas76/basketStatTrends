@@ -901,10 +901,33 @@ const loadUsers = async () => {
     }
     const data = await res.json();
     renderUsers(data.users || []);
+    renderStorageWarning(data.storage);
   } catch (e) {
     console.error('Failed to load users:', e);
     usersTable.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--negative);">Failed to load users</td></tr>';
   }
+};
+
+// Warn the admin when accounts cannot be persisted (e.g. no Vercel Blob store)
+const renderStorageWarning = (storage) => {
+  const card = usersTable && usersTable.closest('.settings-card');
+  if (!card) return;
+  let banner = card.querySelector('#userStorageWarning');
+  if (!storage || storage.configured) {
+    if (banner) banner.remove();
+    return;
+  }
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'userStorageWarning';
+    banner.style.cssText = 'margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; font-size: 13px; background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); color: #f87171;';
+    const header = card.querySelector('.settings-card-header');
+    if (header && header.nextSibling) card.insertBefore(banner, header.nextSibling);
+    else card.appendChild(banner);
+  }
+  banner.textContent =
+    '⚠️ Accounts will NOT persist: no durable user store is configured (' +
+    (storage.mode || 'unknown') + '). Attach a Vercel Blob store and redeploy.';
 };
 
 // Show a generated password in the modal
