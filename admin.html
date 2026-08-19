@@ -181,6 +181,63 @@
           </div>
         </section>
 
+        <section class="settings-card" id="teamsCard" style="display:none;">
+          <div class="settings-card-header">
+            <h2>🏀 Teams (<span id="teamCount">0</span>)</h2>
+            <button id="addTeamBtn" class="secondary" style="font-size: 12px; padding: 6px 12px;">+ Add Team</button>
+          </div>
+          <p class="settings-description">
+            Each team has its own players, games, and members. Create teams here; switch the active team using the selector in the header.
+          </p>
+          <div class="data-table" style="max-height: 360px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Team</th>
+                  <th>Created</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="teamsTable">
+                <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="settings-card" id="membersCard" style="display:none;">
+          <div class="settings-card-header">
+            <h2>👥 Members — <span id="membersTeamName">team</span></h2>
+          </div>
+          <p class="settings-description">
+            Give existing users access to this team. Create the account under User Access first, then add them here by email.
+          </p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+            <input type="email" id="memberEmail" placeholder="user@club.no" style="flex:1; min-width:200px;" />
+            <select id="memberRole">
+              <option value="member">Member (view)</option>
+              <option value="admin">Team admin (edit)</option>
+            </select>
+            <button id="addMemberBtn" class="secondary" style="font-size: 12px; padding: 6px 12px;">+ Add Member</button>
+          </div>
+          <div class="login-error" id="memberError" style="display:none; background: rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); color:#f87171; padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:12px;"></div>
+          <div class="data-table" style="max-height: 360px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Name</th>
+                  <th>Team role</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="membersTable">
+                <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <section class="settings-card">
           <div class="settings-card-header">
             <h2>🔐 User Access (<span id="userCount">0</span>)</h2>

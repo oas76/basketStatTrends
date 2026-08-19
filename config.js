@@ -36,35 +36,119 @@ async function logout() {
 window.logout = logout;
 
 // ========================================
-// ROLE-BASED UI
+// TEAM CONTEXT + ROLE-BASED UI
 // ========================================
+// Shared multi-team bootstrap. Resolves the caller's role + accessible teams,
+// picks an active team, and hydrates its data from the server BEFORE any page
+// renders. Pages await `window.basketStatReady` so they render the correct
+// team's data. The result is also used to render the team switcher and to
+// show/hide admin-only nav.
 
-/**
- * Hide settings links for non-admin users.
- * Elements with class "settings-link" are hidden until the role is confirmed as admin.
- */
-async function applyRoleBasedUI() {
-  // Hide immediately to avoid flash of the link for non-admins
-  document.querySelectorAll('.settings-link').forEach(el => {
-    el.style.display = 'none';
-  });
+// NOTE: data.js also defines its own ACTIVE_TEAM_KEY; classic scripts share one
+// global lexical scope, so we use a distinct name here to avoid redeclaration.
+const ACTIVE_TEAM_STORAGE_KEY = 'basketstat-active-team';
 
+// Shared context, populated by bootstrap.
+window.BasketTeams = { role: null, list: [], activeId: null, ready: null };
+
+function readStoredActiveTeam() {
   try {
-    const res = await fetch('/api/auth/check');
-    if (res.ok) {
-      const { role } = await res.json();
-      if (role === 'admin') {
-        document.querySelectorAll('.settings-link').forEach(el => {
-          el.style.display = '';
-        });
-      }
-    }
+    return localStorage.getItem(ACTIVE_TEAM_STORAGE_KEY) || null;
   } catch (e) {
-    console.error('Auth check error:', e);
+    return null;
   }
 }
 
-document.addEventListener('DOMContentLoaded', applyRoleBasedUI);
+async function bootstrapTeamContext() {
+  let info = null;
+  try {
+    const res = await fetch('/api/auth/check');
+    if (res.ok) info = await res.json();
+  } catch (e) {
+    console.error('Auth check error:', e);
+  }
+  if (!info || !info.authenticated) return info;
+
+  window.BasketTeams.role = info.role;
+  const teams = Array.isArray(info.teams) ? info.teams : [];
+  window.BasketTeams.list = teams;
+
+  if (teams.length > 0) {
+    const stored = readStoredActiveTeam();
+    const active = teams.some(t => t.id === stored) ? stored : teams[0].id;
+    window.BasketTeams.activeId = active;
+    // Hydrate the active team's data from the server (source of truth).
+    if (window.basketStatData && window.basketStatData.hydrateTeam) {
+      await window.basketStatData.hydrateTeam(active);
+    } else {
+      try { localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, active); } catch (e) { /* ignore */ }
+    }
+  } else {
+    window.BasketTeams.activeId = null;
+    if (window.basketStatData && window.basketStatData.setActiveTeam) {
+      window.basketStatData.setActiveTeam(null);
+    }
+  }
+  return info;
+}
+
+// Start immediately so hydration overlaps with page parsing. Pages await this.
+window.basketStatReady = bootstrapTeamContext();
+
+/**
+ * Render the team switcher into the page header and toggle admin-only links.
+ * Runs after the DOM is ready and the context has resolved.
+ */
+async function applyTeamUI() {
+  // Hide settings links until confirmed admin (avoids flash for non-admins).
+  document.querySelectorAll('.settings-link').forEach(el => { el.style.display = 'none'; });
+
+  await window.basketStatReady;
+
+  if (window.BasketTeams.role === 'admin') {
+    document.querySelectorAll('.settings-link').forEach(el => { el.style.display = ''; });
+  }
+
+  renderTeamSwitcher();
+}
+
+function renderTeamSwitcher() {
+  const nav = document.querySelector('.app-header nav');
+  if (!nav) return;
+  const teams = window.BasketTeams.list || [];
+
+  // Nothing to switch between and not an admin -> no control.
+  if (teams.length === 0) return;
+
+  let wrap = document.getElementById('teamSwitcher');
+  if (!wrap) {
+    wrap = document.createElement('select');
+    wrap.id = 'teamSwitcher';
+    wrap.title = 'Active team';
+    wrap.style.cssText =
+      'background: var(--panel, #1b2233); color: var(--text, #e6e9f0); ' +
+      'border: 1px solid var(--border, #2b3348); border-radius: 8px; ' +
+      'padding: 6px 10px; font-size: 13px; font-weight: 500; cursor: pointer; margin-right: 4px;';
+    nav.insertBefore(wrap, nav.firstChild);
+    wrap.addEventListener('change', () => {
+      const id = wrap.value;
+      try { localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, id); } catch (e) { /* ignore */ }
+      // Reload so every page re-hydrates from the newly active team.
+      window.location.reload();
+    });
+  }
+
+  wrap.innerHTML = '';
+  teams.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name + (t.role === 'admin' ? ' (admin)' : '');
+    if (t.id === window.BasketTeams.activeId) opt.selected = true;
+    wrap.appendChild(opt);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', applyTeamUI);
 
 // ========================================
 // STAT INFO TOOLTIPS

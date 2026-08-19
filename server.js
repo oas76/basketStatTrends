@@ -9,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 
 // Auth libraries
 const userStore = require('./lib/userStore');
+const teamStore = require('./lib/teamStore');
 const { hashPassword, verifyPassword, generatePassword } = require('./lib/passwords');
 const oauth = require('./lib/oauth');
 
@@ -416,15 +417,34 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
   }
 });
 
-// API: Check if authenticated
+// API: Check if authenticated (also returns the teams the caller can access so
+// the client can render a team switcher without a second round-trip).
 app.get('/api/auth/check', async (req, res) => {
   const { authenticated, role, user } = await getAuthStatus(req);
+  let teams = [];
+  try {
+    if (authenticated) {
+      const all = await teamStore.listTeams();
+      if (role === 'admin') {
+        // Platform admin (real or bootstrap) can access every team.
+        teams = all.map(t => ({ id: t.id, name: t.name, role: 'admin' }));
+      } else if (user) {
+        const map = new Map((user.teams || []).map(m => [m.teamId, m.role]));
+        teams = all
+          .filter(t => map.has(t.id))
+          .map(t => ({ id: t.id, name: t.name, role: map.get(t.id) }));
+      }
+    }
+  } catch (e) {
+    console.error('Failed to resolve teams for /api/auth/check:', e);
+  }
   res.json({
     authenticated,
     role,
     email: user ? user.email : null,
     name: user ? user.name : null,
-    mustChange: user ? !!user.mustChange : false
+    mustChange: user ? !!user.mustChange : false,
+    teams
   });
 });
 
@@ -826,6 +846,237 @@ app.delete('/api/users/:id/identities/:provider', requireSameOrigin, async (req,
   }
 });
 
+// ========================================
+// TEAM MANAGEMENT API
+// ========================================
+// Teams are the top-level tenant. Platform admins (global role=admin) manage the
+// set of teams and can access all of them. Regular users get per-team roles
+// ('admin' = manage members + edit data, 'member' = view-only). Every
+// team-scoped request is authorized against membership to prevent IDOR.
+
+/** Resolve a user's role within a specific team (null if not a member). */
+function teamRoleOf(user, teamId) {
+  if (!user || !Array.isArray(user.teams)) return null;
+  const m = user.teams.find(t => t.teamId === teamId);
+  return m ? m.role : null;
+}
+
+/**
+ * Authorize access to a team-scoped resource. Deny-by-default.
+ * Returns { ok, code, error, status, platformAdmin, teamRole }.
+ */
+async function resolveTeamAccess(req, teamId, { write = false } = {}) {
+  const status = await getAuthStatus(req);
+  if (!status.authenticated) {
+    return { ok: false, code: 401, error: 'Authentication required' };
+  }
+  if (status.role === 'admin') {
+    return { ok: true, status, platformAdmin: true, teamRole: 'admin' };
+  }
+  const role = teamRoleOf(status.user, teamId);
+  if (!role) {
+    return { ok: false, code: 403, error: 'You do not have access to this team' };
+  }
+  if (write && role !== 'admin') {
+    return { ok: false, code: 403, error: 'Team admin access required' };
+  }
+  return { ok: true, status, platformAdmin: false, teamRole: role };
+}
+
+// List teams accessible to the caller (platform admin sees all).
+app.get('/api/teams', async (req, res) => {
+  try {
+    const status = await getAuthStatus(req);
+    if (!status.authenticated) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    const all = await teamStore.listTeams();
+    let teams;
+    if (status.role === 'admin') {
+      teams = all.map(t => ({ ...t, role: 'admin' }));
+    } else {
+      const map = new Map((status.user?.teams || []).map(m => [m.teamId, m.role]));
+      teams = all.filter(t => map.has(t.id)).map(t => ({ ...t, role: map.get(t.id) }));
+    }
+    res.json({
+      teams,
+      isPlatformAdmin: status.role === 'admin',
+      storage: teamStore.getStorageInfo()
+    });
+  } catch (e) {
+    console.error('List teams error:', e);
+    res.status(500).json({ error: 'Failed to list teams' });
+  }
+});
+
+// Create a team (platform admin only).
+app.post('/api/teams', requireSameOrigin, async (req, res) => {
+  const status = await getAuthStatus(req);
+  if (!status.authenticated || status.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  try {
+    const team = await teamStore.createTeam({
+      name: req.body?.name,
+      createdBy: status.user ? status.user.id : null
+    });
+    logAudit({ action: 'TEAM_CREATED', email: status.user ? status.user.email : 'bootstrap', ip: req.ip || 'unknown', success: true, reason: team.name });
+    res.status(201).json({ team });
+  } catch (e) {
+    if (e.code === 'INVALID_NAME') return res.status(400).json({ error: 'Team name is required' });
+    if (e.code === 'NAME_EXISTS') return res.status(409).json({ error: 'A team with that name already exists' });
+    console.error('Create team error:', e);
+    if (/cannot persist/i.test(e.message || '')) return res.status(503).json({ error: e.message });
+    res.status(500).json({ error: 'Failed to create team' });
+  }
+});
+
+// Rename a team (platform admin only).
+app.patch('/api/teams/:teamId', requireSameOrigin, async (req, res) => {
+  if (!(await isAdmin(req))) return res.status(403).json({ error: 'Admin access required' });
+  try {
+    const team = await teamStore.updateTeam(req.params.teamId, { name: req.body?.name });
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    logAudit({ action: 'TEAM_UPDATED', email: 'admin', ip: req.ip || 'unknown', success: true, reason: team.name });
+    res.json({ team });
+  } catch (e) {
+    console.error('Update team error:', e);
+    res.status(500).json({ error: 'Failed to update team' });
+  }
+});
+
+// Delete a team, its data document, and all memberships (platform admin only).
+app.delete('/api/teams/:teamId', requireSameOrigin, async (req, res) => {
+  if (!(await isAdmin(req))) return res.status(403).json({ error: 'Admin access required' });
+  try {
+    const team = await teamStore.getTeam(req.params.teamId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    await teamStore.deleteTeam(team.id);
+    await userStore.removeTeamFromAll(team.id);
+    logAudit({ action: 'TEAM_DELETED', email: 'admin', ip: req.ip || 'unknown', success: true, reason: team.name });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Delete team error:', e);
+    res.status(500).json({ error: 'Failed to delete team' });
+  }
+});
+
+// List members of a team (team admin or platform admin).
+app.get('/api/teams/:teamId/members', async (req, res) => {
+  const access = await resolveTeamAccess(req, req.params.teamId, { write: true });
+  if (!access.ok) return res.status(access.code).json({ error: access.error });
+  try {
+    const members = await userStore.listByTeam(req.params.teamId);
+    res.json({ members });
+  } catch (e) {
+    console.error('List members error:', e);
+    res.status(500).json({ error: 'Failed to list members' });
+  }
+});
+
+// Add an existing user to a team by email (invite-only) (team admin or platform admin).
+app.post('/api/teams/:teamId/members', requireSameOrigin, async (req, res) => {
+  const access = await resolveTeamAccess(req, req.params.teamId, { write: true });
+  if (!access.ok) return res.status(access.code).json({ error: access.error });
+  const { email, role } = req.body || {};
+  try {
+    const team = await teamStore.getTeam(req.params.teamId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const target = await userStore.findByEmail(email);
+    if (!target) {
+      return res.status(404).json({ error: 'No user with that email. Create the account first under Users.' });
+    }
+    const teamRole = role === 'admin' ? 'admin' : 'member';
+    await userStore.setMembership(target.id, team.id, teamRole);
+    logAudit({ action: 'MEMBER_ADDED', email: target.email, ip: req.ip || 'unknown', success: true, reason: `${team.name}:${teamRole}` });
+    const updated = await userStore.findById(target.id);
+    res.status(201).json({ member: { ...userStore.toPublic(updated), teamRole } });
+  } catch (e) {
+    console.error('Add member error:', e);
+    if (/cannot persist/i.test(e.message || '')) return res.status(503).json({ error: e.message });
+    res.status(500).json({ error: 'Failed to add member' });
+  }
+});
+
+// Change a member's team role (team admin or platform admin).
+app.patch('/api/teams/:teamId/members/:userId', requireSameOrigin, async (req, res) => {
+  const access = await resolveTeamAccess(req, req.params.teamId, { write: true });
+  if (!access.ok) return res.status(access.code).json({ error: access.error });
+  const teamRole = req.body?.role === 'admin' ? 'admin' : 'member';
+  try {
+    const target = await userStore.findById(req.params.userId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    // Don't strip the last team admin via downgrade.
+    if (teamRole === 'member' && teamRoleOf(target, req.params.teamId) === 'admin') {
+      if ((await userStore.countTeamRole(req.params.teamId, 'admin')) <= 1) {
+        return res.status(400).json({ error: 'Cannot demote the last team admin' });
+      }
+    }
+    await userStore.setMembership(target.id, req.params.teamId, teamRole);
+    const updated = await userStore.findById(target.id);
+    res.json({ member: { ...userStore.toPublic(updated), teamRole } });
+  } catch (e) {
+    console.error('Update member error:', e);
+    res.status(500).json({ error: 'Failed to update member' });
+  }
+});
+
+// Remove a member from a team (team admin or platform admin).
+app.delete('/api/teams/:teamId/members/:userId', requireSameOrigin, async (req, res) => {
+  const access = await resolveTeamAccess(req, req.params.teamId, { write: true });
+  if (!access.ok) return res.status(access.code).json({ error: access.error });
+  try {
+    const target = await userStore.findById(req.params.userId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (teamRoleOf(target, req.params.teamId) === 'admin' &&
+        (await userStore.countTeamRole(req.params.teamId, 'admin')) <= 1) {
+      return res.status(400).json({ error: 'Cannot remove the last team admin' });
+    }
+    await userStore.removeMembership(target.id, req.params.teamId);
+    logAudit({ action: 'MEMBER_REMOVED', email: target.email, ip: req.ip || 'unknown', success: true, reason: req.params.teamId });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Remove member error:', e);
+    res.status(500).json({ error: 'Failed to remove member' });
+  }
+});
+
+// Get a team's stats document (any member or platform admin).
+app.get('/api/teams/:teamId/data', async (req, res) => {
+  const access = await resolveTeamAccess(req, req.params.teamId, { write: false });
+  if (!access.ok) return res.status(access.code).json({ error: access.error });
+  try {
+    const data = await teamStore.getTeamData(req.params.teamId);
+    res.json(data);
+  } catch (e) {
+    console.error('Get team data error:', e);
+    res.status(500).json({ error: 'Failed to load team data' });
+  }
+});
+
+// Save a team's stats document (team admin or platform admin).
+app.put('/api/teams/:teamId/data', requireSameOrigin, async (req, res) => {
+  const access = await resolveTeamAccess(req, req.params.teamId, { write: true });
+  if (!access.ok) return res.status(access.code).json({ error: access.error });
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return res.status(400).json({ error: 'Invalid data format' });
+  }
+  try {
+    const team = await teamStore.getTeam(req.params.teamId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const saved = await teamStore.saveTeamData(req.params.teamId, {
+      players: body.players || {},
+      games: Array.isArray(body.games) ? body.games : []
+    });
+    res.json({ success: true, games: saved.games.length, players: Object.keys(saved.players).length });
+  } catch (e) {
+    console.error('Save team data error:', e);
+    if (/cannot persist/i.test(e.message || '')) return res.status(503).json({ error: e.message });
+    res.status(500).json({ error: 'Failed to save team data' });
+  }
+});
+
 // Ensure csv directory exists (skip on Vercel - read-only)
 const csvDir = path.join(__dirname, 'csv');
 if (!IS_VERCEL && !fs.existsSync(csvDir)) {
@@ -1198,6 +1449,64 @@ app.post('/api/cloud/create', async (req, res) => {
     res.status(500).json({ error: 'Failed to create cloud bin' });
   }
 });
+
+// ========================================
+// ONE-TIME MULTI-TEAM MIGRATION
+// ========================================
+// On first run (no teams yet), create a "Default" team, import any pre-existing
+// single dataset (JSONbin cloud or the local data file) into it, and grant all
+// active platform admins team-admin on it. Idempotent: does nothing once a team
+// exists. Runs on startup / cold start.
+async function ensureTeamMigration() {
+  try {
+    if (!(await teamStore.isEmpty())) return;
+
+    // Best-effort import of the legacy single dataset.
+    let importData = { players: {}, games: [] };
+    try {
+      if (isCloudConfigured()) {
+        const resp = await fetch(`${JSONBIN_API_URL}/${JSONBIN_BIN_ID}/latest`, {
+          headers: { 'X-Master-Key': JSONBIN_API_KEY }
+        });
+        if (resp.ok) {
+          const result = await resp.json();
+          const record = result.record || {};
+          if (record && Array.isArray(record.games)) {
+            importData = { players: record.players || {}, games: record.games };
+          }
+        }
+      } else if (!IS_VERCEL && fs.existsSync(dataFilePath)) {
+        const parsed = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
+        if (parsed && Array.isArray(parsed.games)) {
+          importData = { players: parsed.players || {}, games: parsed.games };
+        }
+      }
+    } catch (e) {
+      console.error('Migration: failed to read legacy dataset (continuing empty):', e.message);
+    }
+
+    const team = await teamStore.createDefaultIfEmpty({ createdBy: 'system', importData });
+    if (!team) return; // Another instance created it first.
+
+    // Grant existing active admins team-admin on the default team.
+    try {
+      const users = await userStore.listUsers();
+      for (const u of users) {
+        if (u.role === 'admin' && u.status === 'active') {
+          await userStore.setMembership(u.id, team.id, 'admin');
+        }
+      }
+    } catch (e) {
+      console.error('Migration: failed to seed admin memberships:', e.message);
+    }
+    console.log(`Migration: created Default team ${team.id} with ${importData.games.length} games`);
+  } catch (e) {
+    console.error('Team migration error:', e);
+  }
+}
+
+// Kick off migration (non-blocking).
+ensureTeamMigration();
 
 // Only start server if running directly (not imported by Vercel)
 if (require.main === module) {

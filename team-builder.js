@@ -1295,11 +1295,14 @@
     refresh();
   }
 
-  // Wait for DOM + data.js
+  // Wait for the active team's data to hydrate (config.js) before rendering.
+  const startTeamBuilder = () => {
+    Promise.resolve(window.basketStatReady).then(init).catch(init);
+  };
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', startTeamBuilder);
   } else {
-    init();
+    startTeamBuilder();
   }
 
 })();

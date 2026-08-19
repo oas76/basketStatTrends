@@ -1,4 +1,5 @@
 const STORAGE_KEY = "basketstat-data";
+const ACTIVE_TEAM_KEY = "basketstat-active-team";
 
 /**
  * Data Structure:
@@ -11,10 +12,102 @@ const STORAGE_KEY = "basketstat-data";
  * - height: number (in meters, e.g., 1.75)
  * - position: string (e.g., "PG", "SG", "SF", "PF", "C")
  * - birthdate: string (ISO date, e.g., "2010-05-15")
+ *
+ * MULTI-TEAM: data is namespaced per team. The active team id is stored under
+ * ACTIVE_TEAM_KEY and the per-team cache lives under `basketstat-data:{teamId}`.
+ * The server (per-team Vercel Blob) is the source of truth; the localStorage
+ * copy is a cache that is hydrated on load and written back to the server on
+ * save. When no team is active we fall back to the legacy single key so the app
+ * still works before migration.
  */
 
+let activeTeamId = null;
+try {
+  activeTeamId = localStorage.getItem(ACTIVE_TEAM_KEY) || null;
+} catch (e) {
+  activeTeamId = null;
+}
+
+// Debounced server write handle.
+let serverSaveTimer = null;
+
+/** The localStorage key backing the currently active team (or legacy key). */
+const storageKey = () => (activeTeamId ? `${STORAGE_KEY}:${activeTeamId}` : STORAGE_KEY);
+
+/** Set (or clear) the active team id used for all subsequent load/save calls. */
+const setActiveTeam = (teamId) => {
+  activeTeamId = teamId || null;
+  try {
+    if (activeTeamId) localStorage.setItem(ACTIVE_TEAM_KEY, activeTeamId);
+    else localStorage.removeItem(ACTIVE_TEAM_KEY);
+  } catch (e) {
+    /* ignore storage errors */
+  }
+};
+
+const getActiveTeam = () => activeTeamId;
+
+/**
+ * Fetch the active team's data from the server and cache it locally. Sets the
+ * active team, replacing any cached copy. Returns the loaded data (or null on
+ * failure / when no team id given).
+ */
+const hydrateTeam = async (teamId) => {
+  if (!teamId) return null;
+  setActiveTeam(teamId);
+  try {
+    const res = await fetch(`/api/teams/${encodeURIComponent(teamId)}/data`);
+    if (!res.ok) {
+      console.warn('Failed to load team data:', res.status);
+      return null;
+    }
+    const data = await res.json();
+    const clean = {
+      players: data && data.players ? data.players : {},
+      games: data && Array.isArray(data.games) ? data.games : []
+    };
+    // Write straight to the cache key (do NOT trigger a server save).
+    localStorage.setItem(storageKey(), JSON.stringify(clean));
+    return clean;
+  } catch (e) {
+    console.warn('Team hydrate error:', e.message);
+    return null;
+  }
+};
+
+/**
+ * Push the active team's cached data to the server immediately.
+ * Returns true on success. No-op when there is no active team.
+ */
+const saveToServer = async () => {
+  if (!activeTeamId) return false;
+  try {
+    const raw = localStorage.getItem(storageKey());
+    const data = raw ? JSON.parse(raw) : { players: {}, games: [] };
+    const res = await fetch(`/api/teams/${encodeURIComponent(activeTeamId)}/data`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn('Team server save error:', e.message);
+    return false;
+  }
+};
+
+/** Debounce server writes so rapid successive saveData() calls coalesce. */
+const scheduleServerSave = () => {
+  if (!activeTeamId) return;
+  if (serverSaveTimer) clearTimeout(serverSaveTimer);
+  serverSaveTimer = setTimeout(() => {
+    serverSaveTimer = null;
+    saveToServer();
+  }, 800);
+};
+
 const loadData = () => {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(storageKey());
   if (!raw) {
     return { players: {}, games: [] };
   }
@@ -73,7 +166,9 @@ const migrateOldFormat = (oldData) => {
 };
 
 const saveData = (data) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  localStorage.setItem(storageKey(), JSON.stringify(data));
+  // Persist to the server (per-team). Debounced to coalesce bursts of edits.
+  scheduleServerSave();
 };
 
 /**
@@ -871,6 +966,10 @@ const calculateAllPlayerStats = (playerRecords, statKeys, windowSize, statsNeste
 window.basketStatData = {
   loadData,
   saveData,
+  setActiveTeam,
+  getActiveTeam,
+  hydrateTeam,
+  saveToServer,
   parseCsv,
   addGame,
   updateGame,

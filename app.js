@@ -2851,18 +2851,21 @@ const hideLoading = () => {
   }
 };
 
-// Initialize the app (with optional cloud load)
+// Initialize the app once the active team's data has been hydrated from the
+// server (see config.js bootstrap). Falls back gracefully if the promise is
+// missing (e.g. standalone use).
 (async () => {
-  // Try to auto-load from cloud first
-  const loadedFromCloud = await autoLoadFromCloud();
-  
-  if (loadedFromCloud) {
-    console.log("Data loaded from cloud, initializing...");
+  try {
+    if (window.basketStatReady) {
+      await window.basketStatReady;
+    }
+  } catch (e) {
+    console.warn('Team bootstrap failed, initializing with local cache:', e);
   }
-  
+
   // Initialize the app
   init();
-  
+
   // Hide loading overlay after init completes
   hideLoading();
 })();

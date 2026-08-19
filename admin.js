@@ -39,32 +39,23 @@ const formatStatValue = (value) => {
  * Sync data to cloud after a change (upload, delete, etc.)
  */
 async function syncToCloudAfterChange() {
+  // Multi-team: persist the active team's data to the server (per-team Blob).
+  // saveData() already schedules a debounced write; this forces it immediately
+  // so the admin sees a confirmed save.
   try {
-    const statusResponse = await fetch('/api/cloud/status');
-    const status = await statusResponse.json();
-    
-    if (!status.configured) {
-      console.log('Cloud not configured, skipping sync');
+    if (!window.basketStatData.getActiveTeam || !window.basketStatData.getActiveTeam()) {
+      console.log('No active team; skipping server sync');
       return;
     }
-    
-    const data = window.basketStatData.loadData();
-    const response = await fetch('/api/cloud/data', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    
-    if (response.ok) {
-      console.log('Data synced to cloud');
-      if (uploadDetails) {
-        uploadDetails.textContent += ' (synced to cloud)';
-      }
+    const ok = await window.basketStatData.saveToServer();
+    if (ok) {
+      console.log('Data saved to team storage');
+      if (uploadDetails) uploadDetails.textContent += ' (saved)';
     } else {
-      console.warn('Cloud sync failed:', await response.text());
+      console.warn('Team server save failed');
     }
   } catch (error) {
-    console.warn('Cloud sync error:', error);
+    console.warn('Team server save error:', error);
   }
 }
 
@@ -486,31 +477,24 @@ const fetchCloudStatus = async () => {
   }
 };
 
-// Update cloud sync UI based on server config
+// Update sync UI. Multi-team: data now persists per-team on the server
+// automatically; the buttons force an explicit push/pull for the active team.
 const updateCloudSyncUI = async () => {
-  await fetchCloudStatus();
-  
-  if (cloudStatus.configured) {
-    if (cloudStatusText) {
-      cloudStatusText.textContent = cloudStatus.hasBin 
-        ? `Connected (${cloudStatus.binIdPrefix})`
-        : "Ready - upload to create bin";
-    }
-    if (cloudBadge) {
-      cloudBadge.textContent = cloudStatus.hasBin ? "Connected" : "Ready";
-      cloudBadge.className = "badge connected";
-    }
-    if (cloudSyncUpBtn) cloudSyncUpBtn.disabled = false;
-    if (cloudSyncDownBtn) cloudSyncDownBtn.disabled = !cloudStatus.hasBin;
-  } else {
-    if (cloudStatusText) cloudStatusText.textContent = "Not configured (set .env)";
-    if (cloudBadge) {
-      cloudBadge.textContent = "Not configured";
-      cloudBadge.className = "badge";
-    }
-    if (cloudSyncUpBtn) cloudSyncUpBtn.disabled = true;
-    if (cloudSyncDownBtn) cloudSyncDownBtn.disabled = true;
+  const ctx = window.BasketTeams || {};
+  const active = (ctx.list || []).find(t => t.id === ctx.activeId);
+  const hasTeam = !!active;
+
+  if (cloudStatusText) {
+    cloudStatusText.textContent = hasTeam
+      ? `Team storage: ${active.name} (auto-saved)`
+      : 'No active team';
   }
+  if (cloudBadge) {
+    cloudBadge.textContent = hasTeam ? 'Auto-saved' : 'No team';
+    cloudBadge.className = hasTeam ? 'badge connected' : 'badge';
+  }
+  if (cloudSyncUpBtn) cloudSyncUpBtn.disabled = !hasTeam;
+  if (cloudSyncDownBtn) cloudSyncDownBtn.disabled = !hasTeam;
 };
 
 // Create a new bin via server proxy
@@ -565,136 +549,88 @@ const readBin = async () => {
   return result.record;
 };
 
-// Upload to cloud
+// Push the active team's data to the server (force save)
 if (cloudSyncUpBtn) {
   cloudSyncUpBtn.addEventListener("click", async () => {
-    await fetchCloudStatus();
-    
-    if (!cloudStatus.configured) {
+    if (!window.basketStatData.getActiveTeam()) {
       uploadStatus.textContent = "Error";
-      uploadDetails.textContent = "Cloud not configured. Set JSONBIN_API_KEY in .env";
+      uploadDetails.textContent = "No active team selected";
       return;
     }
-    
     try {
       cloudSyncUpBtn.disabled = true;
-      cloudSyncUpBtn.textContent = "Uploading...";
-      
+      cloudSyncUpBtn.textContent = "Saving...";
       const localData = window.basketStatData.loadData();
-      
-      if (localData.games.length === 0) {
-        uploadStatus.textContent = "No data";
-        uploadDetails.textContent = "No local data to upload";
-        return;
-      }
-      
-      if (!cloudStatus.hasBin) {
-        // Create new bin
-        const binId = await createBin(localData);
-        console.log("=== NEW BIN CREATED ===");
-        console.log("Update JSONBIN_BIN_ID in .env to:");
-        console.log(binId);
-        console.log("=======================");
-        
-        uploadStatus.textContent = "Uploaded!";
-        uploadDetails.textContent = `New bin created. Update .env with bin ID: ${binId}`;
-        
-        // Also show in alert for easy copying
-        alert(`New bin created!\n\nBin ID: ${binId}\n\nUpdate JSONBIN_BIN_ID in .env and restart server.`);
-      } else {
-        // Update existing bin
-        await updateBin(localData);
-        uploadStatus.textContent = "Uploaded";
-        uploadDetails.textContent = `${localData.games.length} games synced to cloud`;
-      }
-      
+      const ok = await window.basketStatData.saveToServer();
+      if (!ok) throw new Error('Server rejected the save');
+      uploadStatus.textContent = "Saved";
+      uploadDetails.textContent = `${localData.games.length} games saved to team storage`;
       await updateCloudSyncUI();
     } catch (error) {
-      uploadStatus.textContent = "Upload failed";
+      uploadStatus.textContent = "Save failed";
       uploadDetails.textContent = error.message;
     } finally {
       cloudSyncUpBtn.disabled = false;
       cloudSyncUpBtn.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3"/><path d="m6 11 6-8 6 8"/><path d="M19 21H5"/></svg>
-        Upload to Cloud
+        Save to Server
       `;
     }
   });
 }
 
-// Download from cloud
+// Pull the active team's data from the server (reload from source of truth)
 if (cloudSyncDownBtn) {
   cloudSyncDownBtn.addEventListener("click", async () => {
-    await fetchCloudStatus();
-    
-    if (!cloudStatus.configured || !cloudStatus.hasBin) {
+    const teamId = window.basketStatData.getActiveTeam();
+    if (!teamId) {
       uploadStatus.textContent = "Error";
-      uploadDetails.textContent = !cloudStatus.configured 
-        ? "Cloud not configured. Set JSONBIN_API_KEY in .env" 
-        : "No bin configured. Upload data first or set JSONBIN_BIN_ID in .env";
+      uploadDetails.textContent = "No active team selected";
       return;
     }
-    
     try {
       cloudSyncDownBtn.disabled = true;
-      cloudSyncDownBtn.textContent = "Downloading...";
-      
-      const cloudData = await readBin();
-      
-      // Validate data structure
-      if (!cloudData || !cloudData.games || !Array.isArray(cloudData.games)) {
-        throw new Error("Invalid data in cloud");
-      }
-      
-      const localData = window.basketStatData.loadData();
-      const hasLocal = localData.games.length > 0;
-      
-      if (hasLocal) {
-        const action = confirm(
-          `You have ${localData.games.length} local games.\n` +
-          `Cloud has ${cloudData.games.length} games.\n\n` +
-          `OK = Replace local with cloud data\n` +
-          `Cancel = Keep local data`
-        );
-        
-        if (!action) {
-          uploadStatus.textContent = "Cancelled";
-          uploadDetails.textContent = "Local data kept";
-          return;
-        }
-      }
-      
-      window.basketStatData.saveData(cloudData);
+      cloudSyncDownBtn.textContent = "Loading...";
+      const data = await window.basketStatData.hydrateTeam(teamId);
+      if (!data) throw new Error('Failed to load team data');
       renderGames();
       renderPlayers();
-      
-      uploadStatus.textContent = "Downloaded";
-      uploadDetails.textContent = `${cloudData.games.length} games loaded from cloud`;
+      uploadStatus.textContent = "Loaded";
+      uploadDetails.textContent = `${data.games.length} games loaded from team storage`;
     } catch (error) {
-      uploadStatus.textContent = "Download failed";
+      uploadStatus.textContent = "Load failed";
       uploadDetails.textContent = error.message;
     } finally {
       cloudSyncDownBtn.disabled = false;
       cloudSyncDownBtn.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14"/><path d="m6 13 6 8 6-8"/><path d="M19 21H5"/></svg>
-        Download from Cloud
+        Load from Server
       `;
     }
   });
 }
 
-// Initialize cloud sync UI
-updateCloudSyncUI();
+// Initial render — wait until the active team's data is hydrated (config.js)
+// so we render the correct team rather than stale/empty cache.
+(async () => {
+  try {
+    if (window.basketStatReady) await window.basketStatReady;
+  } catch (e) {
+    console.warn('Team bootstrap failed on admin page:', e);
+  }
 
-// Initial render
-// Clean up any existing data with players who have no valid stats
-const removedCount = window.basketStatData.cleanupData();
-if (removedCount > 0) {
-  console.log(`Cleaned up ${removedCount} player entries with no valid stats`);
-}
+  await updateCloudSyncUI();
 
-renderGames();
-renderPlayers();
+  const removedCount = window.basketStatData.cleanupData();
+  if (removedCount > 0) {
+    console.log(`Cleaned up ${removedCount} player entries with no valid stats`);
+  }
+
+  renderGames();
+  renderPlayers();
+  reportPlayerCounts();
+  loadTeamsAdmin();
+})();
 
 // Report player game counts to console
 const reportPlayerCounts = () => {
@@ -1049,3 +985,233 @@ if (usersTable) usersTable.addEventListener('click', async (e) => {
 
 // Load users on page load
 loadUsers();
+
+// ========================================
+// TEAM & MEMBER MANAGEMENT
+// ========================================
+
+const teamsCard = document.getElementById('teamsCard');
+const teamsTable = document.getElementById('teamsTable');
+const teamCountEl = document.getElementById('teamCount');
+const addTeamBtn = document.getElementById('addTeamBtn');
+const membersCard = document.getElementById('membersCard');
+const membersTable = document.getElementById('membersTable');
+const membersTeamName = document.getElementById('membersTeamName');
+const memberEmailInput = document.getElementById('memberEmail');
+const memberRoleInput = document.getElementById('memberRole');
+const addMemberBtn = document.getElementById('addMemberBtn');
+const memberError = document.getElementById('memberError');
+
+let teamsCache = [];
+let isPlatformAdmin = false;
+let manageTeamId = null;
+
+// Load teams + wire member management. Called after team bootstrap resolves.
+async function loadTeamsAdmin() {
+  try {
+    const res = await fetch('/api/teams');
+    if (!res.ok) return;
+    const data = await res.json();
+    teamsCache = data.teams || [];
+    isPlatformAdmin = !!data.isPlatformAdmin;
+
+    if (isPlatformAdmin && teamsCard) {
+      teamsCard.style.display = '';
+      renderTeamsTable(teamsCache);
+    }
+
+    // Manage the active team's members if the caller may (platform or team admin).
+    const activeId = (window.BasketTeams && window.BasketTeams.activeId) || null;
+    const active = teamsCache.find(t => t.id === activeId) || teamsCache[0];
+    if (active && (isPlatformAdmin || active.role === 'admin')) {
+      openMembersFor(active.id, active.name);
+    }
+  } catch (e) {
+    console.error('Failed to load teams:', e);
+  }
+}
+
+function renderTeamsTable(teams) {
+  if (teamCountEl) teamCountEl.textContent = teams.length;
+  if (!teamsTable) return;
+  if (!teams.length) {
+    teamsTable.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted);">No teams yet</td></tr>';
+    return;
+  }
+  teamsTable.innerHTML = teams.map((t) => `
+    <tr data-id="${escapeHtml(t.id)}">
+      <td style="font-size:13px; font-weight:500;">${escapeHtml(t.name)}</td>
+      <td style="font-size:12px; color:var(--text-muted);">${t.createdAt ? escapeHtml(new Date(t.createdAt).toLocaleDateString()) : '—'}</td>
+      <td style="white-space:nowrap; display:flex; gap:4px;">
+        <button class="secondary" data-taction="members" data-id="${escapeHtml(t.id)}" data-name="${escapeHtml(t.name)}" style="font-size:11px; padding:4px 8px;">Members</button>
+        <button class="secondary" data-taction="rename" data-id="${escapeHtml(t.id)}" data-name="${escapeHtml(t.name)}" style="font-size:11px; padding:4px 8px;">Rename</button>
+        <button class="danger-link" data-taction="delete-team" data-id="${escapeHtml(t.id)}" data-name="${escapeHtml(t.name)}" style="font-size:11px; padding:4px 8px;">Delete</button>
+      </td>
+    </tr>`).join('');
+}
+
+function openMembersFor(teamId, teamName) {
+  manageTeamId = teamId;
+  if (membersCard) membersCard.style.display = '';
+  if (membersTeamName) membersTeamName.textContent = teamName || 'team';
+  loadMembers(teamId);
+}
+
+async function loadMembers(teamId) {
+  if (!membersTable) return;
+  membersTable.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>';
+  try {
+    const res = await fetch(`/api/teams/${teamId}/members`);
+    if (!res.ok) {
+      membersTable.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Cannot load members</td></tr>';
+      return;
+    }
+    const data = await res.json();
+    renderMembers(data.members || []);
+  } catch (e) {
+    console.error('Failed to load members:', e);
+    membersTable.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--negative);">Failed to load members</td></tr>';
+  }
+}
+
+function renderMembers(members) {
+  if (!membersTable) return;
+  if (!members.length) {
+    membersTable.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">No members yet</td></tr>';
+    return;
+  }
+  membersTable.innerHTML = members.map((m) => `
+    <tr data-id="${escapeHtml(m.id)}">
+      <td style="font-size:12px;">${escapeHtml(m.email)}</td>
+      <td style="font-size:12px;">${escapeHtml(m.name) || '—'}</td>
+      <td>
+        <select data-maction="role" data-id="${escapeHtml(m.id)}" style="font-size:12px; padding:4px 8px;">
+          <option value="member"${m.teamRole !== 'admin' ? ' selected' : ''}>Member</option>
+          <option value="admin"${m.teamRole === 'admin' ? ' selected' : ''}>Team admin</option>
+        </select>
+      </td>
+      <td><button class="danger-link" data-maction="remove" data-id="${escapeHtml(m.id)}" data-email="${escapeHtml(m.email)}" style="font-size:11px; padding:4px 8px;">Remove</button></td>
+    </tr>`).join('');
+}
+
+// Add team (platform admin)
+if (addTeamBtn) addTeamBtn.addEventListener('click', async () => {
+  const name = prompt('New team name:');
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  try {
+    const res = await fetch('/api/teams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: trimmed })
+    });
+    const data = await res.json();
+    if (!res.ok) return alert(data.error || 'Failed to create team');
+    // Reload so the header team switcher and memberships reflect the new team.
+    window.location.reload();
+  } catch (e) {
+    alert('Failed to create team. Please try again.');
+  }
+});
+
+// Teams table actions
+if (teamsTable) teamsTable.addEventListener('click', async (e) => {
+  const trigger = e.target.closest('[data-taction]');
+  if (!trigger) return;
+  const action = trigger.dataset.taction;
+  const id = trigger.dataset.id;
+  const name = trigger.dataset.name || '';
+
+  if (action === 'members') {
+    openMembersFor(id, name);
+    if (membersCard) membersCard.scrollIntoView({ behavior: 'smooth' });
+  } else if (action === 'rename') {
+    const next = prompt('Rename team:', name);
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === name) return;
+    try {
+      const res = await fetch(`/api/teams/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed })
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Failed to rename team');
+      window.location.reload();
+    } catch (err) {
+      alert('Failed to rename team.');
+    }
+  } else if (action === 'delete-team') {
+    if (!confirm(`Delete team "${name}"? This permanently removes its games and stats and cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/teams/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Failed to delete team');
+      window.location.reload();
+    } catch (err) {
+      alert('Failed to delete team.');
+    }
+  }
+});
+
+// Add member to the currently managed team
+if (addMemberBtn) addMemberBtn.addEventListener('click', async () => {
+  if (!manageTeamId) return;
+  if (memberError) memberError.style.display = 'none';
+  const email = (memberEmailInput.value || '').trim();
+  const role = memberRoleInput.value;
+  if (!email) return;
+  try {
+    const res = await fetch(`/api/teams/${manageTeamId}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, role })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (memberError) { memberError.textContent = data.error || 'Failed to add member'; memberError.style.display = 'block'; }
+      return;
+    }
+    memberEmailInput.value = '';
+    await loadMembers(manageTeamId);
+  } catch (e) {
+    if (memberError) { memberError.textContent = 'Connection error. Please try again.'; memberError.style.display = 'block'; }
+  }
+});
+
+// Member row: role change
+if (membersTable) membersTable.addEventListener('change', async (e) => {
+  const sel = e.target.closest('select[data-maction="role"]');
+  if (!sel || !manageTeamId) return;
+  const id = sel.dataset.id;
+  try {
+    const res = await fetch(`/api/teams/${manageTeamId}/members/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: sel.value })
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Failed to update role'); await loadMembers(manageTeamId); }
+  } catch (err) {
+    alert('Failed to update role.');
+  }
+});
+
+// Member row: remove
+if (membersTable) membersTable.addEventListener('click', async (e) => {
+  const trigger = e.target.closest('[data-maction="remove"]');
+  if (!trigger || !manageTeamId) return;
+  const id = trigger.dataset.id;
+  const email = trigger.dataset.email || '';
+  if (!confirm(`Remove ${email} from this team?`)) return;
+  try {
+    const res = await fetch(`/api/teams/${manageTeamId}/members/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) return alert(data.error || 'Failed to remove member');
+    await loadMembers(manageTeamId);
+  } catch (err) {
+    alert('Failed to remove member.');
+  }
+});

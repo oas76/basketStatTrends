@@ -1478,8 +1478,8 @@
       render();
     };
     
-    // Start initialization
-    init();
+    // Start initialization once the active team's data has hydrated (config.js)
+    Promise.resolve(window.basketStatReady).then(init).catch(init);
     
     // ========================================
     // TEAM AI COACH INTEGRATION

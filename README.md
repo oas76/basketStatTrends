@@ -86,3 +86,64 @@ providers. Register each provider callback URL:
   (falls back to `SESSION_SECRET`). Set it once and keep it stable.
 - Login is rate-limited; OAuth uses state + nonce + PKCE; admin mutations require
   a same-origin request.
+
+## Teams (multi-tenant)
+
+The app is multi-tenant: **team** is the top-level construct. Each team has its
+own players and games, and access is granted per team. Stats are
+**server-authoritative** — the browser keeps a per-team cache
+(`basketstat-data:{teamId}`) that is hydrated from the server on load and
+written back on save (per-team Vercel Blob in production, `data/teams/` locally,
+AES-256-GCM encrypted at rest).
+
+### Roles
+
+There are two layers of roles:
+
+- **Platform admin** — the global `admin` role. Manages the set of teams and all
+  users, and can access every team's data.
+- **Per-team role** on each membership:
+  - **Team admin** — manage the team's members and edit its data.
+  - **Member** — view-only access to the team's data.
+
+Every team-scoped request is authorized against membership on the server
+(deny-by-default), so a user cannot read or write a team they don't belong to.
+
+### Switching teams
+
+A team selector appears in the app header. Picking a team persists it locally,
+validates it against your accessible teams on the server, and re-hydrates that
+team's data. Platform admins see all teams; other users see only teams they are
+a member of.
+
+### Managing teams & members (Settings → admin.html)
+
+- **Teams** (platform admin) — create, rename, and delete teams. Deleting a team
+  permanently removes its games/stats and all memberships.
+- **Members** — for the active team (or any team via its **Members** button),
+  team admins and platform admins can add existing users by email, set their
+  team role (member/team admin), and remove them. The last team admin is
+  protected from removal/demotion. Invites are **existing-account only**: create
+  the account under **User Access** first.
+
+### Migration
+
+On first run (when no teams exist yet) the server creates a **Default** team,
+imports any pre-existing dataset (from JSONbin cloud if configured, otherwise the
+local `data/basketstat-data.json`) into it, and grants every active platform
+admin team-admin on it. This runs once and is a no-op afterwards.
+
+### Team API
+
+All routes are same-origin + auth gated; team-scoped routes enforce membership.
+
+- `GET /api/teams` — teams the caller can access (platform admin sees all).
+- `POST /api/teams`, `PATCH/DELETE /api/teams/:teamId` — platform admin only.
+- `GET /api/teams/:teamId/members`, `POST` (add by email), `PATCH/DELETE
+  /:userId` — team admin or platform admin.
+- `GET /api/teams/:teamId/data` — any member or platform admin.
+- `PUT /api/teams/:teamId/data` — team admin or platform admin.
+- `GET /api/auth/check` also returns the caller's accessible `teams`.
+
+The legacy shared `/api/cloud/*` endpoints are deprecated in favour of the
+per-team data routes above.
