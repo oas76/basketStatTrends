@@ -1156,13 +1156,35 @@ if (teamsTable) teamsTable.addEventListener('click', async (e) => {
   }
 });
 
+// Show a visible message in the members panel (avoids silent no-ops).
+const showMemberError = (msg) => {
+  if (!memberError) { alert(msg); return; }
+  memberError.textContent = msg;
+  memberError.style.display = 'block';
+};
+
 // Add member to the currently managed team
-if (addMemberBtn) addMemberBtn.addEventListener('click', async () => {
-  if (!manageTeamId) return;
+async function submitAddMember() {
   if (memberError) memberError.style.display = 'none';
+
+  // If no team is being managed yet, fall back to the active/first accessible team.
+  if (!manageTeamId) {
+    const activeId = (window.BasketTeams && window.BasketTeams.activeId) || null;
+    const fallback = teamsCache.find(t => t.id === activeId) || teamsCache[0];
+    if (fallback) openMembersFor(fallback.id, fallback.name);
+  }
+  if (!manageTeamId) {
+    showMemberError('No team selected. Create a team first (Teams → Add Team), then try again.');
+    return;
+  }
+
   const email = (memberEmailInput.value || '').trim();
   const role = memberRoleInput.value;
-  if (!email) return;
+  if (!email) {
+    showMemberError('Enter the email of an existing user account.');
+    memberEmailInput.focus();
+    return;
+  }
   try {
     const res = await fetch(`/api/teams/${manageTeamId}/members`, {
       method: 'POST',
@@ -1171,14 +1193,20 @@ if (addMemberBtn) addMemberBtn.addEventListener('click', async () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      if (memberError) { memberError.textContent = data.error || 'Failed to add member'; memberError.style.display = 'block'; }
+      showMemberError(data.error || 'Failed to add member');
       return;
     }
     memberEmailInput.value = '';
     await loadMembers(manageTeamId);
   } catch (e) {
-    if (memberError) { memberError.textContent = 'Connection error. Please try again.'; memberError.style.display = 'block'; }
+    showMemberError('Connection error. Please try again.');
   }
+}
+
+if (addMemberBtn) addMemberBtn.addEventListener('click', submitAddMember);
+// Allow pressing Enter in the email field to submit.
+if (memberEmailInput) memberEmailInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); submitAddMember(); }
 });
 
 // Member row: role change
