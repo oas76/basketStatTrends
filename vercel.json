@@ -19,6 +19,7 @@
           "recorder.css",
           "config.js",
           "data.js",
+          "ai-insights.js",
           "app.js",
           "admin.js",
           "platform-admin.js",

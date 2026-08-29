@@ -786,6 +786,7 @@
           <select id="teamAiProvider">
             <option value="groq">Groq (Recommended - generous free tier)</option>
             <option value="openai">OpenAI / ChatGPT</option>
+            <option value="anthropic">Anthropic / Claude</option>
             <option value="gemini">Google Gemini</option>
           </select>
         </div>
@@ -795,6 +796,11 @@
           <small id="teamApiKeyHelp">
             Get free key at <a href="https://console.groq.com/keys" target="_blank">console.groq.com</a>
           </small>
+        </div>
+        <div class="field">
+          <label for="teamAiModel">Model (advanced)</label>
+          <input type="text" id="teamAiModel" placeholder="Leave blank for default">
+          <small style="font-size: 12px; color: var(--text-muted);">Optional. Override if the default model has been deprecated.</small>
         </div>
         <div class="field" style="flex-direction: row; align-items: center; gap: 8px;">
           <input type="checkbox" id="teamRememberApiKey" style="width: auto; margin: 0;">
@@ -818,6 +824,7 @@
   <script src="config.js"></script>
   <script src="reference-stats.js"></script>
   <script src="data.js"></script>
+  <script src="ai-insights.js"></script>
   <script>
     // Stat categories for filtering
     const STAT_CATEGORIES = {
@@ -1545,38 +1552,9 @@
       }
     };
     
-    /**
-     * Sleep utility for retry backoff
-     */
-    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-    
-    // Provider configurations (same as app.js)
-    const AI_PROVIDERS = {
-      groq: {
-        name: 'Groq',
-        url: 'https://api.groq.com/openai/v1/chat/completions',
-        model: 'llama-3.3-70b-versatile',
-        helpUrl: 'https://console.groq.com/keys',
-        helpText: 'Get free key at console.groq.com',
-        type: 'openai'
-      },
-      openai: {
-        name: 'OpenAI',
-        url: 'https://api.openai.com/v1/chat/completions',
-        model: 'gpt-4o-mini',
-        helpUrl: 'https://platform.openai.com/api-keys',
-        helpText: 'Get key at platform.openai.com',
-        type: 'openai'
-      },
-      gemini: {
-        name: 'Google Gemini',
-        url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
-        model: 'gemini-2.0-flash',
-        helpUrl: 'https://aistudio.google.com/app/apikey',
-        helpText: 'Get free key at aistudio.google.com',
-        type: 'gemini'
-      }
-    };
+    // Provider configurations live in the shared ai-insights.js module so the
+    // team and player pages stay in sync.
+    const AI_PROVIDERS = window.AIInsights.PROVIDERS;
     
     // AI DOM elements
     const teamAiSettingsToggle = document.getElementById('teamAiSettingsToggle');
@@ -1584,68 +1562,30 @@
     const teamAiProviderSelect = document.getElementById('teamAiProvider');
     const teamAiApiKeyInput = document.getElementById('teamAiApiKey');
     const teamApiKeyHelp = document.getElementById('teamApiKeyHelp');
+    const teamAiModelInput = document.getElementById('teamAiModel');
     const teamSaveApiKeyBtn = document.getElementById('teamSaveApiKey');
     const generateTeamAiBtn = document.getElementById('generateTeamAiInsight');
     const teamAiStatusText = document.getElementById('teamAiStatusText');
     const teamAiStatus = document.getElementById('teamAiStatus');
     const teamAiInsightText = document.getElementById('teamAiInsightText');
     
-    /**
-     * Get current provider
-     */
-    const getProvider = () => {
-      return localStorage.getItem(AI_PROVIDER_KEY) || sessionStorage.getItem(AI_PROVIDER_KEY) || 'groq';
-    };
-    
-    /**
-     * Set provider
-     */
+    // Key/provider storage is handled by the shared ai-insights.js module;
+    // these thin wrappers keep the existing call sites working.
+    const getProvider = () => window.AIInsights.getProvider();
+
     const setProvider = (provider) => {
-      sessionStorage.setItem(AI_PROVIDER_KEY, provider);
       const rememberCheckbox = document.getElementById('teamRememberApiKey');
-      if (rememberCheckbox?.checked || localStorage.getItem(`${AI_STORAGE_KEY}-remembered`)) {
-        localStorage.setItem(AI_PROVIDER_KEY, provider);
-      }
+      const remember = rememberCheckbox
+        ? rememberCheckbox.checked
+        : window.AIInsights.isApiKeyRemembered();
+      window.AIInsights.setProvider(provider, remember);
     };
-    
-    /**
-     * Check if API key is remembered
-     */
-    const isApiKeyRemembered = () => {
-      const provider = getProvider();
-      return !!localStorage.getItem(`${AI_STORAGE_KEY}-${provider}`);
-    };
-    
-    /**
-     * Load API key from storage
-     */
-    const loadApiKey = () => {
-      const provider = getProvider();
-      return localStorage.getItem(`${AI_STORAGE_KEY}-${provider}`) || 
-             sessionStorage.getItem(`${AI_STORAGE_KEY}-${provider}`) || '';
-    };
-    
-    /**
-     * Save API key to storage
-     */
-    const saveApiKeyToStorage = (key, remember = false) => {
-      const provider = getProvider();
-      
-      if (key) {
-        if (remember) {
-          localStorage.setItem(`${AI_STORAGE_KEY}-${provider}`, key);
-          localStorage.setItem(`${AI_STORAGE_KEY}-remembered`, 'true');
-          localStorage.setItem(AI_PROVIDER_KEY, provider);
-          sessionStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
-        } else {
-          sessionStorage.setItem(`${AI_STORAGE_KEY}-${provider}`, key);
-          localStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
-        }
-      } else {
-        sessionStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
-        localStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
-      }
-    };
+
+    const isApiKeyRemembered = () => window.AIInsights.isApiKeyRemembered();
+
+    const loadApiKey = () => window.AIInsights.loadApiKey();
+
+    const saveApiKeyToStorage = (key, remember = false) => window.AIInsights.saveApiKey(key, remember);
     
     /**
      * Update provider help text
@@ -1654,6 +1594,17 @@
       if (!teamApiKeyHelp || !teamAiProviderSelect) return;
       const provider = AI_PROVIDERS[teamAiProviderSelect.value];
       teamApiKeyHelp.innerHTML = `Get free key at <a href="${provider.helpUrl}" target="_blank">${provider.helpUrl.replace('https://', '')}</a>`;
+    };
+
+    /**
+     * Sync the optional model override field with the active provider.
+     */
+    const updateModelField = () => {
+      if (!teamAiModelInput) return;
+      const providerKey = teamAiProviderSelect ? teamAiProviderSelect.value : getProvider();
+      const def = (AI_PROVIDERS[providerKey] && AI_PROVIDERS[providerKey].model) || '';
+      teamAiModelInput.placeholder = def ? `Default: ${def}` : 'Leave blank for default';
+      teamAiModelInput.value = window.AIInsights.getModelOverride(providerKey) || '';
     };
     
     /**
@@ -1906,126 +1857,14 @@ Keep the tone professional but encouraging. This is for coaches, so be tactical 
     };
     
     /**
-     * Call OpenAI-compatible API with retry logic
-     */
-    const callOpenAiCompatibleApi = async (prompt, apiKey, config, retryCount = 0) => {
-      const MAX_RETRIES = 3;
-      const BASE_DELAY = 2000;
-      
-      try {
-        const response = await fetch(config.url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: config.model,
-            messages: [
-              { role: 'system', content: 'You are an experienced youth basketball head coach providing strategic team analysis and development recommendations. Be professional, tactical, and specific.' },
-              { role: 'user', content: prompt }
-            ],
-            temperature: 0.7,
-            max_tokens: 1500
-          })
-        });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          const errorMsg = error.error?.message || error.message || '';
-          
-          // Rate limit - retry with exponential backoff
-          if (response.status === 429 && retryCount < MAX_RETRIES) {
-            const retryAfter = parseInt(response.headers.get('retry-after') || '0') * 1000;
-            const delay = Math.max(retryAfter, BASE_DELAY * Math.pow(2, retryCount));
-            console.log(`[AI] Rate limited. Retrying in ${delay/1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`);
-            await sleep(delay);
-            return callOpenAiCompatibleApi(prompt, apiKey, config, retryCount + 1);
-          }
-          
-          if (response.status === 401) throw new Error(`[${config.name}] Invalid API key.`);
-          if (response.status === 429) throw new Error(`[${config.name}] Rate limit exceeded. Wait 1-2 min or switch to Groq.`);
-          if (response.status === 402) throw new Error(`[${config.name}] Billing issue. Try Groq (free tier).`);
-          throw new Error(`[${config.name}] ${errorMsg || `API error: ${response.status}`}`);
-        }
-
-        const data = await response.json();
-        return data.choices?.[0]?.message?.content || 'No response generated';
-      } catch (error) {
-        if (error.name === 'TypeError' && retryCount < MAX_RETRIES) {
-          const delay = BASE_DELAY * Math.pow(2, retryCount);
-          console.log(`[AI] Network error. Retrying in ${delay/1000}s...`);
-          await sleep(delay);
-          return callOpenAiCompatibleApi(prompt, apiKey, config, retryCount + 1);
-        }
-        throw error;
-      }
-    };
-    
-    /**
-     * Call Gemini API with retry logic
-     */
-    const callGeminiApi = async (prompt, apiKey, config, retryCount = 0) => {
-      const MAX_RETRIES = 3;
-      const BASE_DELAY = 2000;
-      
-      try {
-        const response = await fetch(`${config.url}?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 1500 }
-          })
-        });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          const errorMsg = error.error?.message || '';
-          
-          // Rate limit - retry with exponential backoff
-          if (response.status === 429 && retryCount < MAX_RETRIES) {
-            const delay = BASE_DELAY * Math.pow(2, retryCount);
-            console.log(`[AI] Rate limited. Retrying in ${delay/1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`);
-            await sleep(delay);
-            return callGeminiApi(prompt, apiKey, config, retryCount + 1);
-          }
-          
-          if (response.status === 400) throw new Error(`[Gemini] ${errorMsg || 'Bad request'}`);
-          if (response.status === 429) throw new Error('[Gemini] Rate limit. Wait 1-2 min or switch to Groq.');
-          throw new Error(`[Gemini] ${errorMsg || `API error: ${response.status}`}`);
-        }
-
-        const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
-      } catch (error) {
-        if (error.name === 'TypeError' && retryCount < MAX_RETRIES) {
-          const delay = BASE_DELAY * Math.pow(2, retryCount);
-          console.log(`[AI] Network error. Retrying in ${delay/1000}s...`);
-          await sleep(delay);
-          return callGeminiApi(prompt, apiKey, config, retryCount + 1);
-        }
-        throw error;
-      }
-    };
-    
-    /**
-     * Call AI API
+     * Call AI API (delegates to the shared ai-insights.js module).
      */
     const callTeamAiApi = async (prompt) => {
-      const apiKey = loadApiKey();
-      const providerKey = getProvider();
-      const config = AI_PROVIDERS[providerKey];
-      
-      if (!apiKey) throw new Error(`No API key configured.`);
-      if (apiKey.length < 10) throw new Error(`Invalid API key format.`);
-
-      if (config.type === 'openai') {
-        return callOpenAiCompatibleApi(prompt, apiKey, config);
-      } else if (config.type === 'gemini') {
-        return callGeminiApi(prompt, apiKey, config);
-      }
-      throw new Error(`Unknown provider type: ${config.type}`);
+      return window.AIInsights.callAi({
+        prompt,
+        system: 'You are an experienced youth basketball head coach providing strategic team analysis and development recommendations. Be professional, tactical, and specific.',
+        maxTokens: 1500
+      });
     };
     
     /**
@@ -2161,10 +2000,12 @@ Keep the tone professional but encouraging. This is for coaches, so be tactical 
       const savedProvider = getProvider();
       teamAiProviderSelect.value = savedProvider;
       updateProviderHelp();
+      updateModelField();
       
       teamAiProviderSelect.addEventListener('change', () => {
         setProvider(teamAiProviderSelect.value);
         updateProviderHelp();
+        updateModelField();
         updateTeamAiStatus();
         if (teamAiApiKeyInput) {
           const hasKey = loadApiKey();
@@ -2180,6 +2021,9 @@ Keep the tone professional but encouraging. This is for coaches, so be tactical 
         const remember = rememberCheckbox?.checked || false;
         
         saveApiKeyToStorage(key, remember);
+        if (teamAiModelInput) {
+          window.AIInsights.setModelOverride(teamAiModelInput.value.trim(), remember);
+        }
         teamAiApiKeyInput.value = '';
         teamAiSettings.style.display = 'none';
         updateTeamAiStatus();
@@ -2202,6 +2046,7 @@ Keep the tone professional but encouraging. This is for coaches, so be tactical 
         rememberCheckbox.checked = isApiKeyRemembered();
       }
       
+      updateModelField();
       updateTeamAiStatus();
     }
   </script>

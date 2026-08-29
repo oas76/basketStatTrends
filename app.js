@@ -2028,46 +2028,9 @@ const setCachedResponse = (cacheKey, response) => {
   }
 };
 
-/**
- * Sleep utility for retry backoff
- */
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Provider configurations
-const AI_PROVIDERS = {
-  groq: {
-    name: 'Groq',
-    url: 'https://api.groq.com/openai/v1/chat/completions',
-    model: 'llama-3.3-70b-versatile', // Fast, high quality, free
-    helpUrl: 'https://console.groq.com/keys',
-    helpText: 'Get free key at console.groq.com',
-    type: 'openai' // OpenAI-compatible API format
-  },
-  openai: {
-    name: 'OpenAI',
-    url: 'https://api.openai.com/v1/chat/completions',
-    model: 'gpt-4o-mini', // Most cost-effective, great quality
-    helpUrl: 'https://platform.openai.com/api-keys',
-    helpText: 'Get key at platform.openai.com',
-    type: 'openai'
-  },
-  anthropic: {
-    name: 'Anthropic',
-    url: 'https://api.anthropic.com/v1/messages',
-    model: 'claude-sonnet-4-0',
-    helpUrl: 'https://console.anthropic.com/settings/keys',
-    helpText: 'Get key at console.anthropic.com',
-    type: 'anthropic'
-  },
-  gemini: {
-    name: 'Google Gemini',
-    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
-    model: 'gemini-2.0-flash',
-    helpUrl: 'https://aistudio.google.com/app/apikey',
-    helpText: 'Get free key at aistudio.google.com',
-    type: 'gemini'
-  }
-};
+// Provider configurations live in the shared ai-insights.js module so the
+// player and team pages stay in sync.
+const AI_PROVIDERS = window.AIInsights.PROVIDERS;
 
 // AI DOM elements
 const aiSettingsToggle = document.getElementById('aiSettingsToggle');
@@ -2075,6 +2038,7 @@ const aiSettings = document.getElementById('aiSettings');
 const aiProviderSelect = document.getElementById('aiProvider');
 const aiApiKeyInput = document.getElementById('aiApiKey');
 const apiKeyHelp = document.getElementById('apiKeyHelp');
+const aiModelInput = document.getElementById('aiModel');
 const saveApiKeyBtn = document.getElementById('saveApiKey');
 const generateAiBtn = document.getElementById('generateAiInsight');
 const aiStatusText = document.getElementById('aiStatusText');
@@ -2088,83 +2052,25 @@ const printAiHandoutBtn = document.getElementById('printAiHandout');
 const aiHandoutStatus = document.getElementById('aiHandoutStatus');
 const aiHandoutOutput = document.getElementById('aiHandoutOutput');
 
-/**
- * Get current provider
- */
-const getProvider = () => {
-  // Check localStorage first (persisted), then sessionStorage
-  return localStorage.getItem(AI_PROVIDER_KEY) || sessionStorage.getItem(AI_PROVIDER_KEY) || 'groq';
-};
+// Key/provider storage is handled by the shared ai-insights.js module; these
+// thin wrappers keep the existing call sites working.
+const getProvider = () => window.AIInsights.getProvider();
 
-/**
- * Set provider
- */
 const setProvider = (provider) => {
-  // Always save provider to sessionStorage
-  sessionStorage.setItem(AI_PROVIDER_KEY, provider);
-  // If "remember" is checked, also save to localStorage
   const rememberCheckbox = document.getElementById('rememberApiKey');
-  if (rememberCheckbox?.checked || localStorage.getItem(`${AI_STORAGE_KEY}-remembered`)) {
-    localStorage.setItem(AI_PROVIDER_KEY, provider);
-  }
+  const remember = rememberCheckbox
+    ? rememberCheckbox.checked
+    : window.AIInsights.isApiKeyRemembered();
+  window.AIInsights.setProvider(provider, remember);
 };
 
-/**
- * Check if API key is remembered (stored in localStorage)
- */
-const isApiKeyRemembered = () => {
-  const provider = getProvider();
-  return !!localStorage.getItem(`${AI_STORAGE_KEY}-${provider}`);
-};
+const isApiKeyRemembered = () => window.AIInsights.isApiKeyRemembered();
 
-/**
- * Load API key from storage (checks localStorage first, then sessionStorage)
- */
-const loadApiKey = () => {
-  const provider = getProvider();
-  // Check localStorage first (remembered), then sessionStorage (current session)
-  return localStorage.getItem(`${AI_STORAGE_KEY}-${provider}`) || 
-         sessionStorage.getItem(`${AI_STORAGE_KEY}-${provider}`) || '';
-};
+const loadApiKey = () => window.AIInsights.loadApiKey();
 
-/**
- * Save API key to storage
- * @param {string} key - The API key to save
- * @param {boolean} remember - Whether to persist in localStorage
- */
-const saveApiKeyToStorage = (key, remember = false) => {
-  const provider = getProvider();
-  
-  if (key) {
-    if (remember) {
-      // Save to localStorage (persists across sessions)
-      localStorage.setItem(`${AI_STORAGE_KEY}-${provider}`, key);
-      localStorage.setItem(`${AI_STORAGE_KEY}-remembered`, 'true');
-      localStorage.setItem(AI_PROVIDER_KEY, provider);
-      // Clear from sessionStorage to avoid duplication
-      sessionStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
-    } else {
-      // Save to sessionStorage only (cleared on tab close)
-      sessionStorage.setItem(`${AI_STORAGE_KEY}-${provider}`, key);
-      // Clear from localStorage if previously remembered
-      localStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
-    }
-  } else {
-    // Clear from both storages
-    sessionStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
-    localStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
-  }
-};
+const saveApiKeyToStorage = (key, remember = false) => window.AIInsights.saveApiKey(key, remember);
 
-/**
- * Clear remembered API key from localStorage
- */
-const forgetApiKey = () => {
-  const provider = getProvider();
-  localStorage.removeItem(`${AI_STORAGE_KEY}-${provider}`);
-  localStorage.removeItem(`${AI_STORAGE_KEY}-remembered`);
-  localStorage.removeItem(AI_PROVIDER_KEY);
-};
+const forgetApiKey = () => window.AIInsights.forgetApiKey();
 
 /**
  * Update provider help text
@@ -2173,6 +2079,17 @@ const updateProviderHelp = () => {
   if (!apiKeyHelp || !aiProviderSelect) return;
   const provider = AI_PROVIDERS[aiProviderSelect.value];
   apiKeyHelp.innerHTML = `Get free key at <a href="${provider.helpUrl}" target="_blank">${provider.helpUrl.replace('https://', '')}</a>`;
+};
+
+/**
+ * Sync the optional model override field with the active provider.
+ */
+const updateModelField = () => {
+  if (!aiModelInput) return;
+  const providerKey = aiProviderSelect ? aiProviderSelect.value : getProvider();
+  const def = (AI_PROVIDERS[providerKey] && AI_PROVIDERS[providerKey].model) || '';
+  aiModelInput.placeholder = def ? `Default: ${def}` : 'Leave blank for default';
+  aiModelInput.value = window.AIInsights.getModelOverride(providerKey) || '';
 };
 
 /**
@@ -2315,240 +2232,15 @@ Keep the tone positive and age-appropriate. Be specific to the data provided.`;
 };
 
 /**
- * Call OpenAI-compatible API with retry logic
- */
-const callOpenAiCompatibleApi = async (prompt, apiKey, config, retryCount = 0) => {
-  const MAX_RETRIES = 3;
-  const BASE_DELAY = 2000; // 2 seconds
-  
-  try {
-    const response = await fetch(config.url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages: [
-          { role: 'system', content: 'You are a helpful youth basketball coach providing analysis and advice for junior players (ages 14-16). Be encouraging, specific, and age-appropriate.' },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 1024
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      const errorMsg = error.error?.message || error.message || '';
-      
-      console.error(`[AI] ${config.name} error:`, response.status, errorMsg);
-      
-      // Rate limit - retry with exponential backoff
-      if (response.status === 429 && retryCount < MAX_RETRIES) {
-        const retryAfter = parseInt(response.headers.get('retry-after') || '0') * 1000;
-        const delay = Math.max(retryAfter, BASE_DELAY * Math.pow(2, retryCount));
-        console.log(`[AI] Rate limited. Retrying in ${delay/1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`);
-        await sleep(delay);
-        return callOpenAiCompatibleApi(prompt, apiKey, config, retryCount + 1);
-      }
-      
-      if (response.status === 401) {
-        throw new Error(`[${config.name}] Invalid API key. Please check your API key.`);
-      }
-      if (response.status === 429) {
-        throw new Error(`[${config.name}] Rate limit exceeded. Please wait 1-2 minutes or switch to Groq (more generous limits).`);
-      }
-      if (response.status === 402 || errorMsg.includes('billing') || errorMsg.includes('quota')) {
-        throw new Error(`[${config.name}] Billing/quota issue. Check your account balance or try Groq (free tier).`);
-      }
-      if (errorMsg.toLowerCase().includes('token')) {
-        throw new Error(`[${config.name}] Token error: ${errorMsg}`);
-      }
-      throw new Error(`[${config.name}] ${errorMsg || `API error: ${response.status}`}`);
-    }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || 'No response generated';
-  } catch (error) {
-    // Network errors - retry
-    if (error.name === 'TypeError' && retryCount < MAX_RETRIES) {
-      const delay = BASE_DELAY * Math.pow(2, retryCount);
-      console.log(`[AI] Network error. Retrying in ${delay/1000}s...`);
-      await sleep(delay);
-      return callOpenAiCompatibleApi(prompt, apiKey, config, retryCount + 1);
-    }
-    throw error;
-  }
-};
-
-/**
- * Call Gemini API with retry logic
- */
-const callGeminiApi = async (prompt, apiKey, config, retryCount = 0) => {
-  const MAX_RETRIES = 3;
-  const BASE_DELAY = 2000;
-  
-  try {
-    const response = await fetch(`${config.url}?key=${apiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: prompt }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1024,
-        }
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      const errorMsg = error.error?.message || error.message || '';
-      
-      console.error('[AI] Gemini error:', response.status, errorMsg);
-      
-      // Rate limit - retry with exponential backoff
-      if (response.status === 429 && retryCount < MAX_RETRIES) {
-        const delay = BASE_DELAY * Math.pow(2, retryCount);
-        console.log(`[AI] Rate limited. Retrying in ${delay/1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`);
-        await sleep(delay);
-        return callGeminiApi(prompt, apiKey, config, retryCount + 1);
-      }
-      
-      if (response.status === 400) {
-        if (errorMsg.toLowerCase().includes('api key')) {
-          throw new Error('[Gemini] Invalid API key. Please check your API key.');
-        }
-        throw new Error(`[Gemini] Request error: ${errorMsg || 'Bad request'}`);
-      }
-      if (response.status === 404 || errorMsg.includes('not found')) {
-        throw new Error('[Gemini] Model not available. Google may have updated their API.');
-      }
-      if (response.status === 403) {
-        throw new Error('[Gemini] Access denied. Your API key may not have access to this model.');
-      }
-      if (response.status === 429) {
-        throw new Error('[Gemini] Rate limit exceeded. Please wait 1-2 minutes or switch to Groq (more generous limits).');
-      }
-      if (errorMsg.toLowerCase().includes('token')) {
-        throw new Error(`[Gemini] Token error: ${errorMsg}`);
-      }
-      throw new Error(`[Gemini] ${errorMsg || `API error: ${response.status}`}`);
-    }
-
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
-  } catch (error) {
-    // Network errors - retry
-    if (error.name === 'TypeError' && retryCount < MAX_RETRIES) {
-      const delay = BASE_DELAY * Math.pow(2, retryCount);
-      console.log(`[AI] Network error. Retrying in ${delay/1000}s...`);
-      await sleep(delay);
-      return callGeminiApi(prompt, apiKey, config, retryCount + 1);
-    }
-    throw error;
-  }
-};
-
-const callAnthropicApi = async (prompt, apiKey, config, retryCount = 0) => {
-  const MAX_RETRIES = 3;
-  const BASE_DELAY = 2000;
-
-  try {
-    const response = await fetch(config.url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: config.model,
-        max_tokens: 1024,
-        temperature: 0.7,
-        messages: [
-          { role: 'user', content: prompt }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      const errorMsg = error.error?.message || error.message || '';
-
-      console.error('[AI] Anthropic error:', response.status, errorMsg);
-
-      if (response.status === 429 && retryCount < MAX_RETRIES) {
-        const retryAfter = parseInt(response.headers.get('retry-after') || '0', 10) * 1000;
-        const delay = Math.max(retryAfter, BASE_DELAY * Math.pow(2, retryCount));
-        console.log(`[AI] Rate limited. Retrying in ${delay / 1000}s (attempt ${retryCount + 1}/${MAX_RETRIES})`);
-        await sleep(delay);
-        return callAnthropicApi(prompt, apiKey, config, retryCount + 1);
-      }
-
-      if (response.status === 401) {
-        throw new Error('[Anthropic] Invalid API key. Please check your API key.');
-      }
-      if (response.status === 403) {
-        throw new Error('[Anthropic] Access denied. Check workspace access and API key permissions.');
-      }
-      if (response.status === 429) {
-        throw new Error('[Anthropic] Rate limit exceeded. Please wait a minute and try again.');
-      }
-      if (errorMsg.toLowerCase().includes('credit') || errorMsg.toLowerCase().includes('billing')) {
-        throw new Error(`[Anthropic] Billing/quota issue. ${errorMsg}`);
-      }
-      throw new Error(`[Anthropic] ${errorMsg || `API error: ${response.status}`}`);
-    }
-
-    const data = await response.json();
-    return data.content?.map(part => part.text || '').join('\n').trim() || 'No response generated';
-  } catch (error) {
-    if (error.name === 'TypeError' && retryCount < MAX_RETRIES) {
-      const delay = BASE_DELAY * Math.pow(2, retryCount);
-      console.log(`[AI] Network error. Retrying in ${delay / 1000}s...`);
-      await sleep(delay);
-      return callAnthropicApi(prompt, apiKey, config, retryCount + 1);
-    }
-    throw error;
-  }
-};
-
-/**
- * Call AI API (routes to correct provider based on type)
+ * Call AI API (delegates to the shared ai-insights.js module, which resolves
+ * the provider, key, and model, and handles retries/error mapping).
  */
 const callAiApi = async (prompt) => {
-  const apiKey = loadApiKey();
-  const providerKey = getProvider();
-  const config = AI_PROVIDERS[providerKey];
-  
-  if (!apiKey) {
-    throw new Error(`[${config.name}] No API key configured. Click the gear icon to add your key.`);
-  }
-  
-  // Basic key validation
-  if (apiKey.length < 10) {
-    throw new Error(`[${config.name}] Invalid API key format. Please re-enter your API key.`);
-  }
-
-  console.log(`[AI] Calling ${config.name} API...`);
-
-  // Route based on API type
-  if (config.type === 'openai') {
-    return callOpenAiCompatibleApi(prompt, apiKey, config);
-  } else if (config.type === 'anthropic') {
-    return callAnthropicApi(prompt, apiKey, config);
-  } else if (config.type === 'gemini') {
-    return callGeminiApi(prompt, apiKey, config);
-  } else {
-    throw new Error(`Unknown provider type: ${config.type}`);
-  }
+  return window.AIInsights.callAi({
+    prompt,
+    system: 'You are a helpful youth basketball coach providing analysis and advice for junior players (ages 14-16). Be encouraging, specific, and age-appropriate.',
+    maxTokens: 1024
+  });
 };
 
 /**
@@ -2731,11 +2423,13 @@ if (aiProviderSelect) {
   const savedProvider = getProvider();
   aiProviderSelect.value = savedProvider;
   updateProviderHelp();
+  updateModelField();
   
   // Handle provider change
   aiProviderSelect.addEventListener('change', () => {
     setProvider(aiProviderSelect.value);
     updateProviderHelp();
+    updateModelField();
     updateAiStatus();
     // Clear the input since keys are per-provider
     if (aiApiKeyInput) {
@@ -2752,6 +2446,9 @@ if (saveApiKeyBtn) {
     const remember = rememberCheckbox?.checked || false;
     
     saveApiKeyToStorage(key, remember);
+    if (aiModelInput) {
+      window.AIInsights.setModelOverride(aiModelInput.value.trim(), remember);
+    }
     aiApiKeyInput.value = '';
     aiSettings.style.display = 'none';
     updateAiStatus();
@@ -2793,6 +2490,7 @@ if (aiApiKeyInput) {
     rememberCheckbox.checked = isApiKeyRemembered();
   }
   
+  updateModelField();
   updateAiStatus();
 }
 

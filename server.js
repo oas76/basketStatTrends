@@ -611,6 +611,7 @@ app.get('/api/audit-log', async (req, res) => {
 app.use('/style.css', express.static(path.join(__dirname, 'style.css')));
 app.use('/config.js', express.static(path.join(__dirname, 'config.js')));
 app.use('/data.js', express.static(path.join(__dirname, 'data.js')));
+app.use('/ai-insights.js', express.static(path.join(__dirname, 'ai-insights.js')));
 app.use('/app.js', express.static(path.join(__dirname, 'app.js')));
 app.use('/admin.js', express.static(path.join(__dirname, 'admin.js')));
 app.use('/platform-admin.js', express.static(path.join(__dirname, 'platform-admin.js')));
@@ -639,6 +640,7 @@ const authMiddleware = async (req, res, next) => {
     '/style.css',
     '/config.js',
     '/data.js',
+    '/ai-insights.js',
     '/app.js',
     '/admin.js',
     '/platform-admin.js',
