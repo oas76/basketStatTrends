@@ -58,7 +58,7 @@
     oreb: 'Off reb', dreb: 'Def reb', ast: 'Assist',
     stl: 'Steal', blk: 'Block', to: 'Turnover', foul: 'Foul',
     sub_in: 'Sub in', sub_out: 'Sub out', opp_pts: 'Opp points', opp_foul: 'Opp foul',
-    finish: 'Finish'
+    period_end: 'Period end', finish: 'Finish'
   };
 
   const MADE_2_3 = new Set(['2pt_made', '3pt_made']);
@@ -410,7 +410,11 @@
     });
     // Resume: position clock at the last recorded event.
     const last = state.draft.events[state.draft.events.length - 1];
-    if (last && typeof last.period === 'number') {
+    if (last && last.type === 'period_end' && typeof last.period === 'number') {
+      // The last thing recorded was the end of a period: resume at the tip-off of
+      // the next period (setPeriod resets the clock to that period's full length).
+      state.clock.setPeriod(last.period + 1);
+    } else if (last && typeof last.period === 'number') {
       state.clock.setPeriod(last.period);
       if (typeof last.clockMs === 'number') state.clock.setRemaining(last.clockMs);
     } else {
@@ -498,6 +502,22 @@
       ]));
     });
     if (!onCourt.size) grid.appendChild(el('div', { class: 'rec-empty', text: 'No players on court. Use Subs to add players.' }));
+  }
+
+  // End the current period on confirmation: stop the clock, drop a `period_end`
+  // anchor at the exact game time so the just-completed period's minutes are
+  // credited to every on-court player, then advance to the next period. addEvent
+  // recomputes the box score, so it's up to date the moment the period ends.
+  function endPeriod() {
+    if (!confirm('End this period and advance to the next?')) return;
+    if (state.clock) state.clock.stop('period-end');
+    addEvent({ type: 'period_end' });
+    state.clock.nextPeriod();
+    renderClock();
+    updateClockButton();
+    renderLive();
+    // New period: clock is stopped awaiting the tip-off — nudge to restart.
+    state.clock.remindRestart();
   }
 
   // ---------- events ----------
@@ -1026,15 +1046,7 @@
     $('#recToSquad').addEventListener('click', toSquad);
     $('#recStartGame').addEventListener('click', startGame);
     $('#recClockToggle').addEventListener('click', () => { state.clock.toggle(); });
-    $('#recNextPeriod').addEventListener('click', () => {
-      if (confirm('Advance to the next period?')) {
-        state.clock.nextPeriod();
-        renderClock();
-        updateClockButton();
-        // New period: clock is stopped awaiting the tip-off — nudge to restart.
-        state.clock.remindRestart();
-      }
-    });
+    $('#recNextPeriod').addEventListener('click', endPeriod);
     document.querySelectorAll('[data-opp-menu]').forEach((b) => b.addEventListener('click', openOppPointsSheet));
     document.querySelectorAll('[data-opp-foul]').forEach((b) => b.addEventListener('click', () => {
       addEvent({ type: 'opp_foul' });

@@ -173,6 +173,24 @@ describe('eventsToPerformances', () => {
     expect(Object.keys(p).sort()).toEqual(['A', 'B', 'C', 'D', 'E', 'F']);
   });
 
+  test('a period_end anchor credits on-court minutes to the period boundary', () => {
+    const d = scenarioDraft();
+    // Without an anchor, minutes end at the last recorded stat (8:00 elapsed).
+    expect(AGG.eventsToPerformances(d).A.min).toBe(8);
+    // Ending the period drops a period_end anchor at 0:00 remaining (full 10:00),
+    // so on-court players are credited right to the buzzer the moment the period
+    // ends (this is what refreshes the box score on "end period" confirmation).
+    d.events.push({ id: 'pe1', seq: 11, period: 1, clockMs: 0, type: 'period_end', player: null });
+    const p = AGG.eventsToPerformances(d);
+    expect(p.A.min).toBe(10); // starter on court the whole period -> to the buzzer
+    expect(p.D.min).toBe(10); // never subbed -> full period
+    expect(p.E.min).toBe(5);  // subbed out at 5:00, unaffected
+    expect(p.F.min).toBe(5);  // subbed in at 5:00, now plays to the buzzer
+    // The anchor is team-level: it creates no player performance line.
+    expect(p.period_end).toBeUndefined();
+    expect(Object.keys(p).sort()).toEqual(['A', 'B', 'C', 'D', 'E', 'F']);
+  });
+
   test('opponent fouls never create a player performance line', () => {
     // opp_foul is a recorder-only, team-level event with no player subject; it
     // must not add a performance entry or otherwise perturb player stats.
