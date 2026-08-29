@@ -84,7 +84,7 @@ const saveToServer = async () => {
   if (!activeTeamId) return false;
   try {
     const raw = localStorage.getItem(storageKey());
-    const data = raw ? JSON.parse(raw) : { players: {}, games: [] };
+    const data = raw ? JSON.parse(raw) : { players: {}, games: [], leagues: [] };
     const res = await fetch(`/api/teams/${encodeURIComponent(activeTeamId)}/data`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -170,10 +170,17 @@ const migrateOldFormat = (oldData) => {
   return { players, games, leagues: [] };
 };
 
-const saveData = (data) => {
+const saveData = (data, opts = {}) => {
   localStorage.setItem(storageKey(), JSON.stringify(data));
-  // Persist to the server (per-team). Debounced to coalesce bursts of edits.
+  // Persist to the server (per-team). By default writes are debounced to
+  // coalesce bursts of edits. Pass { immediate: true } to force an explicit,
+  // awaitable upload right away (used when adding to the team's registries).
+  if (opts && opts.immediate) {
+    if (serverSaveTimer) { clearTimeout(serverSaveTimer); serverSaveTimer = null; }
+    return saveToServer();
+  }
   scheduleServerSave();
+  return Promise.resolve(true);
 };
 
 /**
@@ -441,7 +448,7 @@ const updatePlayer = (playerName, updates) => {
     data.players[playerName] = { number: null, active: true };
   }
   data.players[playerName] = { ...data.players[playerName], ...updates };
-  saveData(data);
+  return saveData(data, { immediate: true });
 };
 
 /**
@@ -450,7 +457,7 @@ const updatePlayer = (playerName, updates) => {
  */
 const addPlayer = (playerName, number = null) => {
   const name = String(playerName || '').trim();
-  if (!name) return;
+  if (!name) return Promise.resolve(false);
   const data = loadData();
   if (!data.players) data.players = {};
   const num = (number === 0 || number) ? number : null;
@@ -463,18 +470,18 @@ const addPlayer = (playerName, number = null) => {
       active: true
     };
   }
-  saveData(data);
+  return saveData(data, { immediate: true });
 };
 
 /** Activate or deactivate a roster player (kept in past stats when inactive). */
 const setPlayerActive = (playerName, active) => {
   const name = String(playerName || '').trim();
-  if (!name) return;
+  if (!name) return Promise.resolve(false);
   const data = loadData();
   if (!data.players) data.players = {};
   if (!data.players[name]) data.players[name] = { number: null, active: !!active };
   else data.players[name] = { ...data.players[name], active: !!active };
-  saveData(data);
+  return saveData(data, { immediate: true });
 };
 
 /** Get the team's registered competitions (leagues). */
@@ -486,22 +493,23 @@ const getLeagues = () => {
 /** Register a competition (league). Case-insensitive de-duplication. */
 const addLeague = (name) => {
   const n = String(name || '').trim();
-  if (!n) return;
+  if (!n) return Promise.resolve(false);
   const data = loadData();
   if (!Array.isArray(data.leagues)) data.leagues = [];
   if (!data.leagues.some((l) => l.toLowerCase() === n.toLowerCase())) {
     data.leagues.push(n);
-    saveData(data);
+    return saveData(data, { immediate: true });
   }
+  return Promise.resolve(true);
 };
 
 /** Remove a competition from the registry (existing games are unaffected). */
 const removeLeague = (name) => {
   const n = String(name || '').trim();
-  if (!n) return;
+  if (!n) return Promise.resolve(false);
   const data = loadData();
   data.leagues = (Array.isArray(data.leagues) ? data.leagues : []).filter((l) => l !== n);
-  saveData(data);
+  return saveData(data, { immediate: true });
 };
 
 /**

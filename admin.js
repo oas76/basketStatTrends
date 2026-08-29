@@ -57,6 +57,20 @@ const escapeHtml = (s) =>
  * schedules a debounced write; this forces it immediately so the admin sees a
  * confirmed save.
  */
+/**
+ * Reflect the result of an explicit (immediate) team-registry upload in the UI.
+ * `ok` is the boolean resolved by the data-layer mutator's immediate save.
+ */
+function reportTeamSave(ok, message) {
+  if (uploadStatus) uploadStatus.textContent = ok ? 'Saved' : 'Save failed';
+  if (uploadDetails) {
+    uploadDetails.textContent = ok
+      ? `${message} — uploaded`
+      : `${message} locally, but the upload failed. Check your connection and try again.`;
+  }
+  if (!ok) console.warn('Team registry upload failed:', message);
+}
+
 async function syncToCloudAfterChange() {
   try {
     if (!window.basketStatData.getActiveTeam || !window.basketStatData.getActiveTeam()) {
@@ -418,13 +432,11 @@ async function submitAddPlayer() {
 
   const rawNum = (newPlayerNumber.value || '').trim();
   const number = rawNum === '' ? null : parseInt(rawNum, 10);
-  window.basketStatData.addPlayer(name, number);
+  const ok = await window.basketStatData.addPlayer(name, number);
   newPlayerName.value = '';
   newPlayerNumber.value = '';
   renderPlayers();
-  uploadStatus.textContent = 'Added';
-  uploadDetails.textContent = `Player ${name} added to roster`;
-  await syncToCloudAfterChange();
+  reportTeamSave(ok, `Player ${name} added to roster`);
 }
 
 if (addPlayerBtn) addPlayerBtn.addEventListener('click', submitAddPlayer);
@@ -438,6 +450,8 @@ if (playersGrid) playersGrid.addEventListener('click', async (e) => {
   const name = btn.dataset.name;
   const action = btn.dataset.paction;
 
+  let ok = true;
+  let msg = '';
   if (action === 'edit-number') {
     const profile = window.basketStatData.getPlayerProfile(name);
     const current = (profile.number === 0 || profile.number) ? String(profile.number) : '';
@@ -446,16 +460,19 @@ if (playersGrid) playersGrid.addEventListener('click', async (e) => {
     const trimmed = next.trim();
     const number = trimmed === '' ? null : parseInt(trimmed, 10);
     if (trimmed !== '' && Number.isNaN(number)) { alert('Enter a valid number.'); return; }
-    window.basketStatData.updatePlayer(name, { number });
+    ok = await window.basketStatData.updatePlayer(name, { number });
+    msg = `Updated ${name}`;
   } else if (action === 'activate' || action === 'deactivate') {
-    window.basketStatData.setPlayerActive(name, action === 'activate');
+    ok = await window.basketStatData.setPlayerActive(name, action === 'activate');
+    msg = `${name} ${action === 'activate' ? 'activated' : 'deactivated'}`;
   } else if (action === 'add-to-roster') {
-    window.basketStatData.addPlayer(name, null);
+    ok = await window.basketStatData.addPlayer(name, null);
+    msg = `Player ${name} added to roster`;
   } else {
     return;
   }
   renderPlayers();
-  await syncToCloudAfterChange();
+  reportTeamSave(ok, msg);
 });
 
 // ========================================
@@ -482,12 +499,10 @@ async function submitAddLeague() {
     showLeagueError(`${name} is already registered.`);
     return;
   }
-  window.basketStatData.addLeague(name);
+  const ok = await window.basketStatData.addLeague(name);
   newLeagueName.value = '';
   renderLeagues();
-  uploadStatus.textContent = 'Added';
-  uploadDetails.textContent = `Competition ${name} added`;
-  await syncToCloudAfterChange();
+  reportTeamSave(ok, `Competition ${name} added`);
 }
 
 if (addLeagueBtn) addLeagueBtn.addEventListener('click', submitAddLeague);
@@ -500,16 +515,20 @@ if (leaguesGrid) leaguesGrid.addEventListener('click', async (e) => {
   if (!btn) return;
   const name = btn.dataset.name;
   const action = btn.dataset.laction;
+  let ok = true;
+  let msg = '';
   if (action === 'add') {
-    window.basketStatData.addLeague(name);
+    ok = await window.basketStatData.addLeague(name);
+    msg = `Competition ${name} added`;
   } else if (action === 'remove') {
     if (!confirm(`Remove competition "${name}" from the registry? Games already tagged with it are unaffected.`)) return;
-    window.basketStatData.removeLeague(name);
+    ok = await window.basketStatData.removeLeague(name);
+    msg = `Competition ${name} removed`;
   } else {
     return;
   }
   renderLeagues();
-  await syncToCloudAfterChange();
+  reportTeamSave(ok, msg);
 });
 
 // ========================================
