@@ -629,21 +629,12 @@ const cleanupData = () => {
       removedCount++;
     });
   });
-  
-  // Also clean up player registry - remove players who have no games
-  const playersWithGames = new Set();
-  data.games.forEach((game) => {
-    Object.keys(game.performances || {}).forEach((name) => {
-      playersWithGames.add(name);
-    });
-  });
-  
-  Object.keys(data.players || {}).forEach((name) => {
-    if (!playersWithGames.has(name)) {
-      delete data.players[name];
-    }
-  });
-  
+
+  // NOTE: We intentionally do NOT prune the player registry here. Players are an
+  // explicit roster (added in Team Admin) and a newly added player legitimately
+  // has zero games yet — pruning them would delete freshly added players on the
+  // next page load. Roster removal/deactivation is a manual admin action.
+
   saveData(data);
   return removedCount;
 };

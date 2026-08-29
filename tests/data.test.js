@@ -355,6 +355,18 @@ describe('cleanupData', () => {
     expect(typeof data.games[0].id).toBe('string');
     expect(data.games[0].id).toBe('g_1');
   });
+
+  test('keeps freshly added roster players who have no games yet', () => {
+    localStorage.clear();
+    jest.resetModules();
+    api = loadDataModule();
+
+    api.addPlayer('Rookie', 23); // added to the roster, no games recorded
+    api.cleanupData();
+
+    // The roster entry must survive cleanup (previously it was pruned).
+    expect(api.loadData().players.Rookie).toEqual({ number: 23, active: true });
+  });
 });
 
 // ---------------------------------------------------------------------------
