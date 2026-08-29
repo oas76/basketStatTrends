@@ -514,11 +514,11 @@
   function openOppPointsSheet() {
     const body = el('div', {});
     body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Opponent scored' }));
-    const labels = { 1: '+1  Free throw', 2: '+2  Field goal', 3: '+3  Three' };
+    const labels = { 1: 'Free throw', 2: 'Field goal', 3: 'Three' };
     const grid = el('div', { class: 'rec-oppmenu' }, [1, 2, 3].map((v) =>
       el('button', {
         class: 'rec-btn block',
-        text: labels[v],
+        html: `+${v}<span class="sub">${labels[v]}</span>`,
         onclick: () => { addEvent({ type: 'opp_pts', value: v }); toast('Opponent +' + v); closeSheet(); }
       })
     ));
@@ -657,8 +657,8 @@
   // ---------- assist chooser ----------
   function openAssistSheet(scorer, basketEv) {
     const onCourt = Array.from(computeOnCourt()).filter((n) => n !== scorer);
-    const grid = el('div', { class: 'rec-choose-grid' }, onCourt.map((n) => el('button', {
-      class: 'rec-stat-btn', onclick: () => { addEvent({ type: 'ast', player: n, linkedEventId: basketEv.id }); closeSheet(); toast('Assist \u2014 ' + n); },
+    const grid = el('div', { class: 'rec-assistmenu' }, onCourt.map((n) => el('button', {
+      class: 'rec-btn block', onclick: () => { addEvent({ type: 'ast', player: n, linkedEventId: basketEv.id }); closeSheet(); toast('Assist \u2014 ' + n); },
       html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`
     })));
     const noAssist = el('button', { class: 'rec-btn block', text: 'No assist', style: 'margin-top:12px;', onclick: closeSheet });
@@ -891,8 +891,8 @@
   function chooseAssistFor(basketEv) {
     const scorer = basketEv.player;
     const onCourt = Array.from(computeOnCourt()).filter((n) => n !== scorer);
-    const grid = el('div', { class: 'rec-choose-grid' }, onCourt.map((n) => el('button', {
-      class: 'rec-stat-btn', html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`,
+    const grid = el('div', { class: 'rec-assistmenu' }, onCourt.map((n) => el('button', {
+      class: 'rec-btn block', html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`,
       onclick: () => {
         // Replace any existing linked assist, then add the new one.
         const existing = state.draft.events.find((e) => e.type === 'ast' && e.linkedEventId === basketEv.id);

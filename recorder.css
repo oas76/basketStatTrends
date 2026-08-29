@@ -300,9 +300,17 @@ body.recorder-body {
 .rec-opp-bar { display: flex; gap: 8px; margin-top: 14px; }
 .rec-event-groups .rec-opp-bar { margin-top: 2px; }
 .rec-opp-bar .rec-btn { padding: 12px; min-height: 50px; font-size: 15px; }
-/* Opponent points submenu (+1 / +2 / +3) */
-.rec-oppmenu { display: flex; flex-direction: column; gap: 10px; }
-.rec-oppmenu .rec-btn { min-height: 56px; font-size: 16px; font-weight: 700; }
+/* Opponent points (+1/+2/+3) and assist chooser — laid out in a single row of
+   equal-width buttons: a big value with a small label underneath. */
+.rec-oppmenu, .rec-assistmenu { display: flex; flex-direction: row; gap: 10px; }
+.rec-oppmenu .rec-btn, .rec-assistmenu .rec-btn {
+  flex: 1; min-width: 0; min-height: 64px; font-size: 22px; font-weight: 800; padding: 8px 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+.rec-oppmenu .rec-btn .sub, .rec-assistmenu .rec-btn .sub {
+  font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: none; letter-spacing: 0;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* ---- Bottom action bar ---- */
 .rec-bottombar {

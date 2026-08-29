@@ -119,8 +119,10 @@
 
   /**
    * Aggregate a draft's event log into a { [playerName]: statLine } map.
-   * Only players who actually played (minutes > 0) or recorded a counting stat
-   * are included, matching parseCsv's behavior.
+   * Includes every player who was on the floor: all starters, anyone subbed in,
+   * anyone with a counting stat, and anyone with measured court time. Substitutes
+   * appear even with a scoreless, sub-second stint so the box score reflects who
+   * actually played — not just who scored.
    */
   function eventsToPerformances(draft) {
     const meta = (draft && draft.meta) || {};
@@ -226,11 +228,21 @@
       }
     });
 
-    // Union of everyone who counts as having played. Court time is measured with
-    // second precision, so any player with at least one second on court counts.
+    // Union of everyone who belongs in the box score. A player counts if they:
+    //   1. recorded a counting stat,
+    //   2. logged at least one second of measured court time, OR
+    //   3. were on the floor at any point — every starter, plus anyone subbed in.
+    // Rule 3 is essential: a substitute who played but didn't score (and whose
+    // measured seconds rounded to 0 because the clock was stopped during their
+    // stint) must still appear. The box score reflects who was on the court, not
+    // just who scored.
     const played = new Set(Object.keys(lines));
     Object.keys(minutesMs).forEach((n) => {
       if (Math.round(minutesMs[n] / 1000) > 0) played.add(n);
+    });
+    starters.forEach((n) => { if (n) played.add(n); });
+    rawEvents.forEach((ev) => {
+      if (ev.type === EVENT_TYPES.SUB_IN && ev.player) played.add(ev.player);
     });
 
     const performances = {};

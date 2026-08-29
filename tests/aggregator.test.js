@@ -140,6 +140,24 @@ describe('eventsToPerformances', () => {
     expect(p.E.min).toBeLessThan(6);
   });
 
+  test('a subbed-in player appears even with no stats and no measured minutes', () => {
+    // Real games: a coach subs a player on, the clock is stopped during the
+    // stint (or the sub happens at the very end), so the player records no stat
+    // and accrues ~0 measured seconds. They were still on the floor and must
+    // appear in the box score.
+    const d = scenarioDraft();
+    // Bring G on with the clock frozen at the same instant as the last events,
+    // so G logs no counting stat and no measurable court time.
+    d.roster.push({ name: 'G', number: 10, starter: false });
+    d.events.push({ id: 'so2', seq: 11, period: 1, clockMs: 120000, type: 'sub_out', player: 'D' });
+    d.events.push({ id: 'si2', seq: 12, period: 1, clockMs: 120000, type: 'sub_in', player: 'G' });
+    const p = AGG.eventsToPerformances(d);
+    expect(p.G).toBeDefined();
+    expect(p.G.pts).toBe(0);
+    // And every starter is always present, even with an empty stat line.
+    ['A', 'B', 'C', 'D', 'E'].forEach((n) => expect(p[n]).toBeDefined());
+  });
+
   test('opponent fouls never create a player performance line', () => {
     // opp_foul is a recorder-only, team-level event with no player subject; it
     // must not add a performance entry or otherwise perturb player stats.
