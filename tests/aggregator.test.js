@@ -124,6 +124,34 @@ describe('eventsToPerformances', () => {
     expect(after.D['3pt']).toEqual({ made: 1, attempted: 1 });
     expect(after.D.pts).toBe(3);
   });
+
+  test('minutes are accumulated with second precision (not whole-minute rounding)', () => {
+    const d = scenarioDraft();
+    // Move the substitution to 5:10 elapsed (clock remaining 4:50 = 290000ms).
+    d.events.find((e) => e.id === 'so1').clockMs = 290000;
+    d.events.find((e) => e.id === 'si1').clockMs = 290000;
+    const p = AGG.eventsToPerformances(d);
+    // min is stored as decimal minutes; multiply back to seconds to check.
+    expect(Math.round(p.A.min * 60)).toBe(480); // full 0:00 -> 8:00
+    expect(Math.round(p.E.min * 60)).toBe(310); // 0:00 -> 5:10
+    expect(Math.round(p.F.min * 60)).toBe(170); // 5:10 -> 8:00
+    // And a genuinely sub-minute stint still counts as played.
+    expect(p.E.min).toBeGreaterThan(5);
+    expect(p.E.min).toBeLessThan(6);
+  });
+
+  test('opponent fouls never create a player performance line', () => {
+    // opp_foul is a recorder-only, team-level event with no player subject; it
+    // must not add a performance entry or otherwise perturb player stats.
+    const d = scenarioDraft();
+    const baseline = AGG.eventsToPerformances(d);
+    d.events.push({ id: 'of1', seq: 11, period: 1, clockMs: 90000, type: 'opp_foul', player: null });
+    const withFoul = AGG.eventsToPerformances(d);
+    expect(Object.keys(withFoul).sort()).toEqual(Object.keys(baseline).sort());
+    Object.keys(baseline).forEach((name) => {
+      expect(withFoul[name].pts).toBe(baseline[name].pts);
+    });
+  });
 });
 
 describe('period time helpers', () => {

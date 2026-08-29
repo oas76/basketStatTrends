@@ -57,7 +57,7 @@
     'ft_made': 'FT \u2713', 'ft_miss': 'FT \u2717',
     oreb: 'Off reb', dreb: 'Def reb', ast: 'Assist',
     stl: 'Steal', blk: 'Block', to: 'Turnover', foul: 'Foul',
-    sub_in: 'Sub in', sub_out: 'Sub out', opp_pts: 'Opp points'
+    sub_in: 'Sub in', sub_out: 'Sub out', opp_pts: 'Opp points', opp_foul: 'Opp foul'
   };
 
   const ATTRIBUTABLE = ['2pt_made', '2pt_miss', '3pt_made', '3pt_miss', 'ft_made', 'ft_miss',
@@ -420,6 +420,7 @@
       $('#recReminder').classList.remove('show');
     }
     $('#recPeriodLbl').textContent = s.period > state.draft.meta.periods ? 'OT' + (s.period - state.draft.meta.periods) : 'P' + s.period;
+    updateFouls();
   }
 
   function updateClockButton() {
@@ -451,9 +452,28 @@
     return state.draft.events.reduce((sum, e) => sum + (e.type === 'opp_pts' ? (Number(e.value) || 0) : 0), 0);
   }
 
+  // Team fouls are tracked per period (reset each period, bonus at 5), counting
+  // every foul of the given type in the current period regardless of attribution.
+  function foulsThisPeriod(type) {
+    const p = state.clock.getState().period;
+    return state.draft.events.filter((e) => e.type === type && e.period === p).length;
+  }
+  function updateFouls() {
+    const usEl = $('#recUsFouls');
+    const themEl = $('#recThemFouls');
+    if (!usEl || !themEl) return;
+    const us = foulsThisPeriod('foul');
+    const them = foulsThisPeriod('opp_foul');
+    usEl.textContent = us;
+    themEl.textContent = them;
+    usEl.parentElement.classList.toggle('bonus', us >= 5);
+    themEl.parentElement.classList.toggle('bonus', them >= 5);
+  }
+
   function renderLive() {
     $('#recUsScore').textContent = usScore();
     $('#recThemScore').textContent = themScore();
+    updateFouls();
     const grid = $('#recOnCourt');
     grid.innerHTML = '';
     const onCourt = computeOnCourt();
@@ -594,17 +614,14 @@
 
   // Tapping an event opens the player picker; the player is chosen next.
   function openPlayerPickerForType(type) {
+    // Only on-court players can be credited with an event. Bench players must be
+    // subbed in first, so they are intentionally not offered here.
     const onCourt = Array.from(computeOnCourt());
-    const bench = state.draft.roster.map((r) => r.name).filter((n) => !onCourt.includes(n));
     const body = el('div', {});
     body.appendChild(el('div', { class: 'rec-sheet-section', text: 'On court' }));
     const onGrid = el('div', { class: 'rec-oncourt' }, onCourt.map((n) => pickerTile(n, () => recordEventFor(type, n))));
     if (!onCourt.length) onGrid.appendChild(el('div', { class: 'rec-empty', text: 'No players on court. Use Subs first.' }));
     body.appendChild(onGrid);
-    if (bench.length) {
-      body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Bench' }));
-      body.appendChild(el('div', { class: 'rec-oncourt' }, bench.map((n) => pickerTile(n, () => recordEventFor(type, n)))));
-    }
     body.appendChild(el('button', {
       class: 'rec-btn ghost block', text: 'Assign later', style: 'margin-top:14px;',
       onclick: () => recordEventFor(type, null)
@@ -637,6 +654,12 @@
 
   // ---------- substitutions ----------
   function openSubSheet(preselectOff) {
+    // Stop the clock the moment the Subs UI opens (models the whistle), not when
+    // the sub is finalized. Covers both the bottom-bar Subs button and the
+    // per-player "Sub out" entry point.
+    if (state.clock) state.clock.stop('substitution');
+    renderClock();
+    updateClockButton();
     const render = () => {
       const onCourt = Array.from(computeOnCourt());
       const bench = state.draft.roster.map((r) => r.name).filter((n) => !onCourt.includes(n));
@@ -683,6 +706,7 @@
   // ---------- play log + editing ----------
   function eventDescription(ev) {
     if (ev.type === 'opp_pts') return `Opponent +${ev.value}`;
+    if (ev.type === 'opp_foul') return 'Opponent foul';
     const label = TYPE_LABELS[ev.type] || ev.type;
     const num = ev.player ? rosterNumber(ev.player) : '';
     if (ev.player) return `${label} \u2014 #${num} ${ev.player}`;
@@ -701,7 +725,7 @@
       const unassigned = AGG.SUBJECT_STAT_TYPES.has(ev.type) && !ev.player;
       let tagCls = '';
       if (AGG.POINT_VALUES[ev.type]) tagCls = ' pos';
-      else if (ev.type === 'opp_pts' || ev.type === 'to' || ev.type === 'foul') tagCls = ' neg';
+      else if (ev.type === 'opp_pts' || ev.type === 'opp_foul' || ev.type === 'to' || ev.type === 'foul') tagCls = ' neg';
       list.appendChild(el('div', { class: 'rec-log-item' + (unassigned ? ' unassigned' : ''), onclick: () => openEditSheet(ev.id) }, [
         el('div', { class: 'rec-log-time', text: eventTimeLabel(ev) }),
         el('div', { class: 'rec-log-main', text: eventDescription(ev) }),
@@ -817,6 +841,7 @@
       const v = s[c];
       if (v == null) return '-';
       if (typeof v === 'object' && 'made' in v) return `${v.made}-${v.attempted}`;
+      if (c === 'min') return fmtClock((Number(v) || 0) * 60000);
       return String(v);
     };
     Object.keys(perf).sort((a, b) => (perf[b].pts || 0) - (perf[a].pts || 0)).forEach((name) => {
@@ -894,6 +919,10 @@
     document.querySelectorAll('.rec-opp-bar [data-opp]').forEach((b) => b.addEventListener('click', () => {
       addEvent({ type: 'opp_pts', value: parseInt(b.dataset.opp, 10) });
       toast('Opponent +' + b.dataset.opp);
+    }));
+    document.querySelectorAll('[data-opp-foul]').forEach((b) => b.addEventListener('click', () => {
+      addEvent({ type: 'opp_foul' });
+      toast('Opponent foul');
     }));
     document.querySelectorAll('.rec-ev[data-ev]').forEach((b) => b.addEventListener('click', () => openPlayerPickerForType(b.dataset.ev)));
     $('#recUndo').addEventListener('click', undo);

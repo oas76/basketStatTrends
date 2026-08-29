@@ -166,6 +166,24 @@ body.recorder-body {
 .rec-score-side .lbl { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
 .rec-score-side .val { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .rec-clock-center { text-align: center; flex: 1.2; }
+
+/* ---- Per-period foul status ---- */
+.rec-foulbar {
+  display: flex; gap: 8px; margin: -4px 0 12px;
+}
+.rec-foulbar .fb-cell {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.rec-foulbar .fb-lbl {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary);
+}
+.rec-foulbar .fb-cell b { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.rec-foulbar .fb-cell.bonus {
+  border-color: rgba(248,113,113,0.5); background: rgba(248,113,113,0.14);
+}
+.rec-foulbar .fb-cell.bonus b, .rec-foulbar .fb-cell.bonus .fb-lbl { color: var(--negative); }
 .rec-clock-time {
   font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700;
   font-variant-numeric: tabular-nums; letter-spacing: 0.02em;

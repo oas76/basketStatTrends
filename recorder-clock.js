@@ -65,7 +65,7 @@
     if (!event || !event.type) return { stop: false, reason: null };
     const type = event.type;
 
-    if (type === 'foul' && r.autoStopOnFoul) {
+    if ((type === 'foul' || type === 'opp_foul') && r.autoStopOnFoul) {
       return { stop: true, reason: 'foul' };
     }
     if ((type === 'sub_in' || type === 'sub_out') && r.autoStopOnSub) {

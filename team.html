@@ -923,6 +923,9 @@
       if (stat === 'a/to') {
         return value.toFixed(2);
       }
+      if (stat === 'min') {
+        return window.basketStatData.formatMinutes(value);
+      }
       return value.toFixed(1);
     };
     

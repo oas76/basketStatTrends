@@ -41,6 +41,7 @@
     SUB_IN: 'sub_in',
     SUB_OUT: 'sub_out',
     OPP_PTS: 'opp_pts',
+    OPP_FOUL: 'opp_foul',
     PERIOD_START: 'period_start',
     PERIOD_END: 'period_end'
   };
@@ -225,10 +226,11 @@
       }
     });
 
-    // Union of everyone who counts as having played.
+    // Union of everyone who counts as having played. Court time is measured with
+    // second precision, so any player with at least one second on court counts.
     const played = new Set(Object.keys(lines));
     Object.keys(minutesMs).forEach((n) => {
-      if (Math.round(minutesMs[n] / 60000) > 0) played.add(n);
+      if (Math.round(minutesMs[n] / 1000) > 0) played.add(n);
     });
 
     const performances = {};
@@ -238,7 +240,9 @@
       s['3pt%'] = pct(s['3pt'].made, s['3pt'].attempted);
       s['ft%'] = pct(s.ft.made, s.ft.attempted);
       s['+/-'] = plusMinus[name] || 0;
-      s.min = Math.round((minutesMs[name] || 0) / 60000);
+      // Store minutes with second precision (e.g. 8.4 => 8:24) instead of
+      // rounding to whole minutes, so accumulated court time keeps its seconds.
+      s.min = Math.round((minutesMs[name] || 0) / 1000) / 60;
       performances[name] = s;
     });
 

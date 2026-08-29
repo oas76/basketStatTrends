@@ -34,10 +34,14 @@ const closeStatsBtn = document.getElementById("closeStatsBtn");
 const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString();
 
 // Format stat value for display
-const formatStatValue = (value) => {
+const formatStatValue = (value, stat) => {
   if (value === null || value === undefined) return "—";
   if (typeof value === "object" && "made" in value && "attempted" in value) {
     return `${value.made}-${value.attempted}`;
+  }
+  if (stat && String(stat).toLowerCase() === 'min' &&
+      window.basketStatData && window.basketStatData.formatMinutes) {
+    return window.basketStatData.formatMinutes(value);
   }
   return String(value);
 };
@@ -244,7 +248,7 @@ gamesTable.addEventListener("click", async (e) => {
       .map(([name, stats]) => `
         <tr>
           <td><strong>${escapeHtml(name)}</strong></td>
-          ${statKeys.map((key) => `<td>${formatStatValue(stats[key])}</td>`).join("")}
+          ${statKeys.map((key) => `<td>${formatStatValue(stats[key], key)}</td>`).join("")}
         </tr>
       `)
       .join("");
@@ -942,7 +946,7 @@ function openReviewDraft(draft) {
     .map((name) => {
       const s = perf[name];
       const withReb = Object.assign({ reb: (s.oreb || 0) + (s.dreb || 0) }, s);
-      const cells = cols.map((c) => `<td style="text-align:right;">${formatStatValue(withReb[c])}</td>`).join('');
+      const cells = cols.map((c) => `<td style="text-align:right;">${formatStatValue(withReb[c], c)}</td>`).join('');
       return `<tr><td style="text-align:left;">#${escapeHtml(String(numberOf(name)))} ${escapeHtml(name)}</td>${cells}</tr>`;
     }).join('');
   reviewDraftBody.innerHTML = rows || '<tr><td colspan="15" style="text-align:center; color: var(--text-muted);">No players with stats</td></tr>';

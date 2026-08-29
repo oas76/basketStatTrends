@@ -1131,7 +1131,8 @@ app.put('/api/teams/:teamId/data', requireSameOrigin, async (req, res) => {
     if (!team) return res.status(404).json({ error: 'Team not found' });
     const saved = await teamStore.saveTeamData(req.params.teamId, {
       players: body.players || {},
-      games: Array.isArray(body.games) ? body.games : []
+      games: Array.isArray(body.games) ? body.games : [],
+      leagues: Array.isArray(body.leagues) ? body.leagues : []
     });
     res.json({ success: true, games: saved.games.length, players: Object.keys(saved.players).length });
   } catch (e) {

@@ -13,6 +13,13 @@ describe('shouldStopClock', () => {
     expect(CLK.shouldStopClock({ type: 'sub_out' }, base).reason).toBe('substitution');
   });
 
+  test('stops on an opponent foul like our own foul', () => {
+    expect(CLK.shouldStopClock({ type: 'opp_foul' }, base).stop).toBe(true);
+    expect(CLK.shouldStopClock({ type: 'opp_foul' }, base).reason).toBe('foul');
+    // Honors the same rule toggle as our fouls.
+    expect(CLK.shouldStopClock({ type: 'opp_foul' }, base, { autoStopOnFoul: false }).stop).toBe(false);
+  });
+
   test('respects autoStop rule toggles', () => {
     const rules = { autoStopOnFoul: false, autoStopOnSub: false };
     expect(CLK.shouldStopClock({ type: 'foul' }, base, rules).stop).toBe(false);

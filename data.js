@@ -1027,9 +1027,25 @@ const calculateAllPlayerStats = (playerRecords, statKeys, windowSize, statsNeste
   return result;
 };
 
+/**
+ * Format a minutes value (which may carry second precision as a decimal, e.g.
+ * 8.4) as a "m:ss" time string (e.g. "8:24"). Whole-minute values from CSV
+ * imports render cleanly too (10 => "10:00"). Returns "—" for missing values.
+ */
+const formatMinutes = (value) => {
+  const n = typeof value === 'number' ? value : parseFloat(value);
+  if (!isFinite(n)) return '—';
+  if (n <= 0) return '0:00';
+  const totalSec = Math.round(n * 60);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
+
 // Export API
 window.basketStatData = {
   loadData,
+  formatMinutes,
   saveData,
   setActiveTeam,
   getActiveTeam,

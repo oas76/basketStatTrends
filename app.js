@@ -77,10 +77,13 @@ const normalizeHintList = (value) => {
  * Format a stat value for display
  * Handles: objects { made, attempted }, numbers, null, strings
  */
-const formatStatValue = (value) => {
+const formatStatValue = (value, stat) => {
   if (value === null || value === undefined) return "—";
   if (typeof value === "object" && "made" in value && "attempted" in value) {
     return `${value.made}-${value.attempted}`;
+  }
+  if (stat && String(stat).toLowerCase() === 'min') {
+    return window.basketStatData.formatMinutes(value);
   }
   return String(value);
 };
@@ -534,12 +537,18 @@ const renderScorecard = (records, player, windowSize) => {
       `;
     }
     
+    const isTimeStat = stat.toLowerCase() === 'min';
+    const fmtMin = (v) => window.basketStatData.formatMinutes(v);
+    const avgText = isTimeStat ? fmtMin(displayAverage) : displayAverage.toFixed(1);
+    const medText = isTimeStat
+      ? (ws && ws.median != null ? fmtMin(ws.median) : '—')
+      : (ws?.median?.toFixed(1) || '—');
     return `
       <div class="stat-scorecard ${stat === selectedStat ? 'active' : ''}" data-stat="${stat}">
         <div class="stat-scorecard-header">
           <span class="stat-scorecard-name">${stat}</span>
           <span class="stat-scorecard-avg perf-${perfLevel}">
-            ${displayAverage.toFixed(1)}
+            ${avgText}
             ${ws?.hasPrevWindow ? `<span class="stat-scorecard-trend ${avgTrendClass}">${avgTrend.icon}</span>` : ''}
           </span>
         </div>
@@ -547,7 +556,7 @@ const renderScorecard = (records, player, windowSize) => {
           <div class="stat-detail">
             <span class="stat-detail-label">Median</span>
             <span class="stat-detail-value">
-              ${ws?.median?.toFixed(1) || '—'}
+              ${medText}
               ${ws?.hasPrevWindow ? `<span class="stat-detail-trend ${medTrendClass}">${medianTrend.icon}</span>` : ''}
             </span>
           </div>
@@ -555,7 +564,7 @@ const renderScorecard = (records, player, windowSize) => {
             <span class="stat-detail-label">Range</span>
             <span class="stat-detail-value">
               <span class="variance-range">
-                <span class="low">${ws?.min ?? '—'}</span> – <span class="high">${ws?.max ?? '—'}</span>
+                <span class="low">${isTimeStat ? (ws?.min != null ? fmtMin(ws.min) : '—') : (ws?.min ?? '—')}</span> – <span class="high">${isTimeStat ? (ws?.max != null ? fmtMin(ws.max) : '—') : (ws?.max ?? '—')}</span>
               </span>
               ${ws?.hasPrevWindow ? `<span class="stat-detail-trend ${varianceTrend.class}">${varianceTrend.icon}</span>` : ''}
             </span>
@@ -597,7 +606,7 @@ const updateGameTable = (records, player, stat) => {
         <tr>
           <td>${formatDate(record.date)}</td>
           <td>${record.opponent}</td>
-            <td>${formatStatValue(record.stats[stat])}</td>
+            <td>${formatStatValue(record.stats[stat], stat)}</td>
         </tr>
       `
     )
