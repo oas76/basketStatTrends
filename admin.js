@@ -103,7 +103,9 @@ const renderGames = () => {
     return;
   }
 
-  gamesTable.innerHTML = games
+  // Show most recent game first. Sort a copy so we never mutate the stored order.
+  gamesTable.innerHTML = [...games]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map((game) => {
       const playerNames = Object.keys(game.performances || {});
       const numPlayers = playerNames.length;
