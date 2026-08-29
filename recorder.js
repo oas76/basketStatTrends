@@ -60,19 +60,15 @@
     sub_in: 'Sub in', sub_out: 'Sub out', opp_pts: 'Opp points', opp_foul: 'Opp foul'
   };
 
-  const ATTRIBUTABLE = ['2pt_made', '2pt_miss', '3pt_made', '3pt_miss', 'ft_made', 'ft_miss',
-    'oreb', 'dreb', 'ast', 'stl', 'blk', 'to', 'foul'];
-  const COMPATIBLE = {
-    '2pt_made': ['2pt_made', '2pt_miss', '3pt_made', '3pt_miss'],
-    '2pt_miss': ['2pt_made', '2pt_miss', '3pt_made', '3pt_miss'],
-    '3pt_made': ['2pt_made', '2pt_miss', '3pt_made', '3pt_miss'],
-    '3pt_miss': ['2pt_made', '2pt_miss', '3pt_made', '3pt_miss'],
-    'ft_made': ['ft_made', 'ft_miss'], 'ft_miss': ['ft_made', 'ft_miss'],
-    oreb: ['oreb', 'dreb'], dreb: ['oreb', 'dreb'],
-    stl: ['stl', 'to', 'blk'], to: ['to', 'stl'], blk: ['blk', 'stl'],
-    foul: ['foul'], ast: ['ast']
-  };
   const MADE_2_3 = new Set(['2pt_made', '3pt_made']);
+  // Every event type the log editor can create/switch to (shots, plays, subs, opponent).
+  const ALL_EVENT_TYPES = [
+    '2pt_made', '2pt_miss', '3pt_made', '3pt_miss', 'ft_made', 'ft_miss',
+    'oreb', 'dreb', 'ast', 'stl', 'blk', 'to', 'foul',
+    'sub_in', 'sub_out', 'opp_pts', 'opp_foul'
+  ];
+  // Opponent events belong to "the other team" and carry no of-our-players attribution.
+  function isAttributableType(type) { return type !== 'opp_pts' && type !== 'opp_foul'; }
 
   // ---------- state ----------
   const state = {
@@ -741,6 +737,10 @@
   function openLogSheet() {
     const events = state.draft.events.slice().reverse();
     const list = el('div', {});
+    list.appendChild(el('button', {
+      class: 'rec-btn primary block', text: '+ Add event', style: 'margin-bottom:12px;',
+      onclick: () => openCreateEventSheet()
+    }));
     if (!events.length) list.appendChild(el('div', { class: 'rec-empty', text: 'No events yet.' }));
     events.forEach((ev) => {
       const unassigned = AGG.SUBJECT_STAT_TYPES.has(ev.type) && !ev.player;
@@ -756,67 +756,83 @@
     openSheet('Play log', list);
   }
 
-  function openEditSheet(eventId) {
-    const ev = state.draft.events.find((e) => e.id === eventId);
-    if (!ev) { closeSheet(); return; }
+  // Shared editor body used by both the edit (existing event) and create (new
+  // event) flows. `mode` is 'edit' or 'create'. In edit mode every change is
+  // applied live via afterChange(); in create mode changes only mutate the draft
+  // object until the user confirms with "Add event". `rerender` reopens the same
+  // sheet so the visible selection/state stays in sync.
+  function buildEventEditorBody(ev, mode, rerender) {
+    const live = mode === 'edit';
     const body = el('div', {});
 
-    // Reassign player (attributable events only)
-    if (ev.player != null || AGG.SUBJECT_STAT_TYPES.has(ev.type) || ev.type === 'sub_in' || ev.type === 'sub_out') {
+    // Event type — any type is allowed.
+    body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Event type' }));
+    const typeGrid = el('div', { class: 'rec-stat-grid three' });
+    ALL_EVENT_TYPES.forEach((t) => typeGrid.appendChild(el('button', {
+      class: 'rec-stat-btn' + (t === ev.type ? ' make' : ''), text: TYPE_LABELS[t],
+      onclick: () => {
+        ev.type = t;
+        if (!isAttributableType(t)) ev.player = null;      // opponent events have no player
+        if (t === 'opp_pts') { if (!ev.value) ev.value = 2; } else { ev.value = null; }
+        if (live) afterChange();
+        rerender();
+      }
+    })));
+    body.appendChild(typeGrid);
+
+    // Player (attributable types only).
+    if (isAttributableType(ev.type)) {
       body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Player' }));
       const grid = el('div', { class: 'rec-choose-grid' });
+      if (AGG.SUBJECT_STAT_TYPES.has(ev.type)) {
+        grid.appendChild(el('button', {
+          class: 'rec-stat-btn' + (ev.player == null ? ' make' : ''), text: 'Unassigned',
+          onclick: () => { ev.player = null; if (live) afterChange(); rerender(); }
+        }));
+      }
       state.draft.roster.forEach((r) => {
         grid.appendChild(el('button', {
           class: 'rec-stat-btn' + (r.name === ev.player ? ' make' : ''),
           html: `#${rosterNumber(r.name)}<span class="sub">${esc(r.name)}</span>`,
-          onclick: () => { ev.player = r.name; afterChange(); openEditSheet(eventId); }
+          onclick: () => { ev.player = r.name; if (live) afterChange(); rerender(); }
         }));
       });
       body.appendChild(grid);
     }
 
-    // Change type
+    // Opponent points value (+1 / +2 / +3).
     if (ev.type === 'opp_pts') {
       body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Opponent points' }));
       const grid = el('div', { class: 'rec-stat-grid three' });
       [1, 2, 3].forEach((v) => grid.appendChild(el('button', {
         class: 'rec-stat-btn' + (Number(ev.value) === v ? ' make' : ''), text: '+' + v,
-        onclick: () => { ev.value = v; afterChange(); openEditSheet(eventId); }
-      })));
-      body.appendChild(grid);
-    } else if (AGG.SUBJECT_STAT_TYPES.has(ev.type)) {
-      body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Change to' }));
-      const options = COMPATIBLE[ev.type] || ATTRIBUTABLE;
-      const grid = el('div', { class: 'rec-stat-grid three' });
-      options.forEach((t) => grid.appendChild(el('button', {
-        class: 'rec-stat-btn' + (t === ev.type ? ' make' : ''), text: TYPE_LABELS[t],
-        onclick: () => { ev.type = t; afterChange(); openEditSheet(eventId); }
+        onclick: () => { ev.value = v; if (live) afterChange(); rerender(); }
       })));
       body.appendChild(grid);
     }
 
-    // Assist management for made 2/3
-    if (MADE_2_3.has(ev.type)) {
+    // Assist management for made 2/3 (edit mode only; create mode chains to the
+    // assist picker after the basket is inserted).
+    if (live && MADE_2_3.has(ev.type)) {
       const linkedAssist = state.draft.events.find((e) => e.type === 'ast' && e.linkedEventId === ev.id);
       body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Assist' }));
       const row = el('div', { class: 'rec-btn-row' }, [
         el('button', { class: 'rec-btn', text: linkedAssist ? 'Change assist' : 'Add assist', onclick: () => chooseAssistFor(ev) }),
-        linkedAssist ? el('button', { class: 'rec-btn danger', text: 'Remove assist', onclick: () => { removeEventById(linkedAssist.id); openEditSheet(eventId); } }) : null
+        linkedAssist ? el('button', { class: 'rec-btn danger', text: 'Remove assist', onclick: () => { removeEventById(linkedAssist.id); rerender(); } }) : null
       ]);
       body.appendChild(row);
       if (linkedAssist) body.appendChild(el('div', { class: 'rec-note', text: 'Assisted by ' + linkedAssist.player }));
     }
 
-    // Adjust clock
+    // Game time (period + mm:ss).
     body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Game time' }));
     const periodInput = el('input', { class: 'rec-num-input', type: 'number', value: ev.period, min: 1 });
     const timeInput = el('input', { class: 'rec-input', type: 'text', value: fmtClock(typeof ev.clockMs === 'number' ? ev.clockMs : 0), placeholder: 'mm:ss', style: 'flex:1;' });
     const applyTime = () => {
-      const p = Math.max(1, parseInt(periodInput.value, 10) || 1);
-      ev.period = p;
+      ev.period = Math.max(1, parseInt(periodInput.value, 10) || 1);
       const m = /^(\d+):(\d{1,2})$/.exec(timeInput.value.trim());
       if (m) ev.clockMs = (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) * 1000;
-      afterChange();
+      if (live) afterChange();
     };
     periodInput.addEventListener('change', applyTime);
     timeInput.addEventListener('change', applyTime);
@@ -825,13 +841,51 @@
       periodInput, timeInput
     ]));
 
-    // Delete
+    return { body, applyTime };
+  }
+
+  function openEditSheet(eventId) {
+    const ev = state.draft.events.find((e) => e.id === eventId);
+    if (!ev) { closeSheet(); return; }
+    const { body } = buildEventEditorBody(ev, 'edit', () => openEditSheet(eventId));
+
     body.appendChild(el('button', {
       class: 'rec-btn danger block', text: 'Delete event', style: 'margin-top:16px;',
       onclick: () => { removeEventById(ev.id); closeSheet(); openLogSheet(); }
     }));
 
     openSheet('Edit \u00b7 ' + eventDescription(ev), body);
+  }
+
+  // Create a brand-new event of any type from the log. `draftEv` is a plain
+  // object (not yet in state.draft.events) that the shared editor mutates.
+  function openCreateEventSheet(draftEv) {
+    if (!draftEv) {
+      const s = state.clock.getState();
+      draftEv = { type: '2pt_made', player: null, value: null, period: s.period, clockMs: s.remainingMs, linkedEventId: null };
+    }
+    const { body, applyTime } = buildEventEditorBody(draftEv, 'create', () => openCreateEventSheet(draftEv));
+
+    body.appendChild(el('button', {
+      class: 'rec-btn primary block', text: 'Add event', style: 'margin-top:16px;',
+      onclick: () => {
+        applyTime(); // capture any typed period/time before inserting
+        const created = addEvent({
+          type: draftEv.type,
+          player: isAttributableType(draftEv.type) ? draftEv.player : null,
+          value: draftEv.type === 'opp_pts' ? (Number(draftEv.value) || 1) : null,
+          period: draftEv.period,
+          clockMs: draftEv.clockMs
+        });
+        closeSheet();
+        if (MADE_2_3.has(created.type) && created.player) { openAssistSheet(created.player, created); return; }
+        openLogSheet();
+        toast('Event added');
+      }
+    }));
+    body.appendChild(el('button', { class: 'rec-btn ghost block', text: 'Cancel', style: 'margin-top:8px;', onclick: openLogSheet }));
+
+    openSheet('Add event', body);
   }
 
   function chooseAssistFor(basketEv) {
@@ -915,7 +969,14 @@
     if (!confirm('Delete this recording? This cannot be undone.')) return;
     try {
       await api('DELETE', `/api/teams/${encodeURIComponent(state.teamId)}/drafts/${encodeURIComponent(state.draft.id)}`);
-      state.draft = null; closeSheet(); renderHome();
+      // Clear the discarded game and reset the UI to the New Game create form for
+      // the same team (the draft is already removed server-side, so Home would no
+      // longer list it either).
+      if (state.clock) { state.clock.destroy(); state.clock = null; }
+      state.draft = null;
+      closeSheet();
+      if (state.teamId) setupNewGame();
+      else renderHome();
     } catch (e) { toast('Delete failed: ' + e.message); }
   }
   async function logout() {

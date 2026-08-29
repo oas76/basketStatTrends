@@ -256,6 +256,46 @@ body.recorder-body {
 }
 .rec-ev.opp:active { transform: scale(0.96); }
 
+/* ---- Live: single-viewport (no-scroll) layout ----
+   The live screen fills the viewport below the sticky top bar and never scrolls.
+   Header rows (score, fouls, clock) are fixed height; the event grid is the
+   flexible region and its buttons resize (grid-auto-rows:1fr) to fit. Tuned for
+   iPhone 15 (393x852) but scales to any height via dvh. */
+#screen-live.active {
+  height: calc(100dvh - 56px);
+  padding: 8px 14px calc(78px + env(safe-area-inset-bottom));
+  gap: 6px;
+  overflow: hidden;
+}
+#screen-live .rec-scoreboard { padding: 8px 12px; margin-bottom: 0; flex: 0 0 auto; }
+#screen-live .rec-score-side .val { font-size: 26px; }
+#screen-live .rec-clock-time { font-size: 26px; }
+#screen-live .rec-foulbar { margin: 0; flex: 0 0 auto; }
+#screen-live .rec-foulbar .fb-cell { padding: 6px 10px; }
+#screen-live .rec-foulbar .fb-cell b { font-size: 16px; }
+#screen-live .rec-reminder-banner { margin: 0; padding: 8px; font-size: 14px; flex: 0 0 auto; }
+#screen-live .rec-clock-controls { margin: 0; flex: 0 0 auto; }
+#screen-live .rec-clock-controls .rec-btn { min-height: 42px; padding: 8px; }
+
+#screen-live .rec-event-groups { flex: 1 1 auto; min-height: 0; gap: 4px; }
+#screen-live .rec-eg-label { margin: 2px 0 0; font-size: 10px; }
+#screen-live .rec-event-grid { gap: 8px; grid-auto-rows: 1fr; min-height: 0; }
+#screen-live .rec-event-grid.shooting { flex: 2 1 0; }
+#screen-live .rec-event-grid.play { flex: 3 1 0; }
+#screen-live .rec-ev { min-height: 0; padding: 6px; font-size: 15px; }
+
+#screen-live .rec-h.oncourt-h { margin: 2px 0 0; font-size: 11px; }
+#recOnCourt {
+  display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  flex: 0 0 auto; padding-bottom: 2px;
+}
+#recOnCourt .rec-player-tile { flex: 0 0 auto; min-width: 70px; padding: 8px; }
+#recOnCourt .rec-player-num { width: 34px; height: 34px; font-size: 16px; }
+#recOnCourt .rec-player-name {
+  font-size: 11px; max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#recOnCourt .rec-empty { padding: 8px; white-space: nowrap; }
+
 /* ---- Opponent quick score ---- */
 .rec-opp-bar { display: flex; gap: 8px; margin-top: 14px; }
 .rec-event-groups .rec-opp-bar { margin-top: 2px; }
