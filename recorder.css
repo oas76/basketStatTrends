@@ -1,0 +1,282 @@
+/* ========================================
+   MOBILE GAME RECORDER — touch-first styles
+   Relies on the CSS variables defined in style.css.
+   ======================================== */
+
+html, body {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body.recorder-body {
+  background: var(--bg);
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.rec-app {
+  max-width: 640px;
+  margin: 0 auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* ---- Top bar ---- */
+.rec-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.rec-topbar .rec-title {
+  font-size: 15px;
+  font-weight: 700;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rec-topbar .rec-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* ---- Screens ---- */
+.rec-screen { display: none; flex: 1; flex-direction: column; padding: 16px 14px 96px; }
+.rec-screen.active { display: flex; }
+
+.rec-h {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  font-weight: 600;
+  margin: 4px 0 12px;
+}
+
+/* ---- Buttons ---- */
+.rec-btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  min-height: 56px;
+  cursor: pointer;
+  transition: transform 0.06s ease, filter 0.15s ease, background 0.15s ease;
+  touch-action: manipulation;
+}
+.rec-btn:active { transform: scale(0.97); }
+.rec-btn.primary { background: var(--accent); color: #04201b; border-color: transparent; }
+.rec-btn.danger { color: var(--negative); border-color: rgba(248,113,113,0.4); }
+.rec-btn.ghost { background: transparent; }
+.rec-btn.block { width: 100%; }
+.rec-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.rec-btn-row { display: flex; gap: 10px; }
+.rec-btn-row > * { flex: 1; }
+
+/* ---- Inputs ---- */
+.rec-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.rec-field label { font-size: 13px; color: var(--text-secondary); font-weight: 600; }
+.rec-input, .rec-select {
+  width: 100%;
+  padding: 14px 14px;
+  font-size: 16px; /* >=16px avoids iOS zoom */
+  font-family: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+}
+.rec-input:focus, .rec-select:focus { outline: none; border-color: var(--accent); }
+
+.rec-seg { display: flex; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.rec-seg button {
+  flex: 1; border: none; background: var(--bg); color: var(--text-secondary);
+  font-family: inherit; font-size: 15px; font-weight: 600; padding: 14px; cursor: pointer;
+}
+.rec-seg button.active { background: var(--accent); color: #04201b; }
+
+/* ---- Team / list tiles ---- */
+.rec-list { display: flex; flex-direction: column; gap: 10px; }
+.rec-tile {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px; background: var(--surface-raised);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  cursor: pointer; text-align: left; width: 100%; color: var(--text);
+  font-family: inherit;
+}
+.rec-tile:active { transform: scale(0.99); }
+.rec-tile .rec-tile-main { flex: 1; }
+.rec-tile .rec-tile-title { font-size: 16px; font-weight: 700; }
+.rec-tile .rec-tile-meta { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+.rec-tile .rec-badge {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 4px 8px; border-radius: 999px; background: var(--accent-dim); color: var(--accent);
+}
+.rec-empty { color: var(--text-muted); font-size: 14px; padding: 24px 8px; text-align: center; }
+
+/* ---- Squad ---- */
+.rec-squad-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface-raised); margin-bottom: 8px;
+}
+.rec-squad-row.excluded { opacity: 0.5; }
+.rec-num-input {
+  width: 58px; text-align: center; font-weight: 700; font-size: 16px;
+  padding: 10px 6px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text);
+}
+.rec-num-input.missing { border-color: var(--negative); }
+.rec-squad-name { flex: 1; font-size: 15px; font-weight: 600; }
+.rec-chip-btn {
+  border: 1px solid var(--border); background: var(--bg); color: var(--text-secondary);
+  font-family: inherit; font-weight: 700; font-size: 13px; border-radius: 999px;
+  padding: 8px 12px; min-width: 44px; cursor: pointer;
+}
+.rec-chip-btn.on { background: var(--accent); color: #04201b; border-color: transparent; }
+.rec-chip-btn.star.on { background: #fbbf24; color: #3a2c00; }
+
+.rec-note { font-size: 13px; color: var(--text-secondary); margin: 8px 0 14px; }
+.rec-note.warn { color: var(--negative); }
+
+/* ---- Live: scoreboard + clock ---- */
+.rec-scoreboard {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 12px 14px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 12px;
+}
+.rec-score-side { text-align: center; flex: 1; }
+.rec-score-side .lbl { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.rec-score-side .val { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.rec-clock-center { text-align: center; flex: 1.2; }
+.rec-clock-time {
+  font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+}
+.rec-clock-time.stopped { color: var(--text-secondary); }
+.rec-clock-time.reminder { color: var(--negative); animation: recPulse 1s ease-in-out infinite; }
+@keyframes recPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+.rec-period { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+
+.rec-clock-controls { display: flex; gap: 8px; margin-bottom: 14px; }
+.rec-clock-controls .rec-btn { padding: 12px; min-height: 48px; font-size: 15px; }
+.rec-clock-controls .start { background: var(--positive); color: #052b12; border-color: transparent; }
+.rec-clock-controls .stop { background: var(--negative); color: #2b0606; border-color: transparent; }
+
+.rec-reminder-banner {
+  display: none; align-items: center; gap: 8px; justify-content: center;
+  background: rgba(248,113,113,0.14); border: 1px solid rgba(248,113,113,0.4);
+  color: var(--negative); padding: 10px; border-radius: var(--radius-md);
+  font-weight: 700; font-size: 14px; margin-bottom: 12px;
+}
+.rec-reminder-banner.show { display: flex; }
+
+/* ---- On-court grid ---- */
+.rec-oncourt { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.rec-player-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 14px 8px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface-raised); cursor: pointer; color: var(--text); font-family: inherit;
+}
+.rec-player-tile:active { transform: scale(0.96); }
+.rec-player-num {
+  font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums;
+  width: 44px; height: 44px; display: grid; place-items: center;
+  border-radius: 50%; background: var(--bg); border: 2px solid var(--accent); color: var(--accent);
+}
+.rec-player-name { font-size: 13px; font-weight: 600; text-align: center; line-height: 1.15; }
+.rec-player-pm { font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+/* ---- Opponent quick score ---- */
+.rec-opp-bar { display: flex; gap: 8px; margin-top: 14px; }
+.rec-opp-bar .rec-btn { padding: 12px; min-height: 50px; font-size: 15px; }
+
+/* ---- Bottom action bar ---- */
+.rec-bottombar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  max-width: 640px; margin: 0 auto;
+  display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  background: var(--surface); border-top: 1px solid var(--border);
+}
+.rec-bottombar .rec-btn { padding: 12px; min-height: 52px; font-size: 14px; }
+.rec-bottombar .rec-btn .ic { font-size: 18px; display: block; }
+
+/* ---- Bottom sheet / modal ---- */
+.rec-sheet-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 40;
+  display: none; align-items: flex-end; justify-content: center;
+}
+.rec-sheet-backdrop.show { display: flex; }
+.rec-sheet {
+  width: 100%; max-width: 640px; background: var(--surface);
+  border-top-left-radius: 18px; border-top-right-radius: 18px;
+  border: 1px solid var(--border); border-bottom: none;
+  max-height: 88vh; overflow-y: auto;
+  padding: 14px 14px calc(18px + env(safe-area-inset-bottom));
+  animation: recSlideUp 0.18s ease;
+}
+@keyframes recSlideUp { from { transform: translateY(24px); opacity: 0.4; } to { transform: translateY(0); opacity: 1; } }
+.rec-sheet-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.rec-sheet-head .rec-sheet-title { flex: 1; font-size: 17px; font-weight: 800; }
+.rec-sheet-close { background: none; border: none; color: var(--text-secondary); font-size: 26px; line-height: 1; cursor: pointer; padding: 0 6px; }
+
+/* Stat action grid inside player sheet */
+.rec-stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.rec-stat-grid.three { grid-template-columns: repeat(3, 1fr); }
+.rec-stat-btn {
+  border: 1px solid var(--border); background: var(--surface-raised); color: var(--text);
+  font-family: inherit; font-weight: 700; font-size: 15px; border-radius: var(--radius-md);
+  padding: 16px 8px; min-height: 60px; cursor: pointer;
+}
+.rec-stat-btn:active { transform: scale(0.96); }
+.rec-stat-btn.make { border-color: rgba(74,222,128,0.5); }
+.rec-stat-btn.miss { border-color: rgba(248,113,113,0.4); }
+.rec-stat-btn .sub { display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-top: 2px; }
+.rec-sheet-section { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); font-weight: 700; }
+
+/* Assist / sub chooser chips */
+.rec-choose-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+
+/* Play log */
+.rec-log-item {
+  display: flex; align-items: center; gap: 10px; padding: 12px 10px;
+  border-bottom: 1px solid var(--border-subtle); cursor: pointer;
+}
+.rec-log-item .rec-log-time { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted); width: 62px; }
+.rec-log-item .rec-log-main { flex: 1; font-size: 14px; }
+.rec-log-item .rec-log-main b { font-weight: 700; }
+.rec-log-item .rec-log-tag { font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 999px; background: var(--surface-raised); color: var(--text-secondary); }
+.rec-log-item .rec-log-tag.pos { color: var(--positive); }
+.rec-log-item .rec-log-tag.neg { color: var(--negative); }
+
+/* Box score preview table */
+.rec-box-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: var(--radius-md); }
+table.rec-box { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.rec-box th, table.rec-box td { padding: 8px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border-subtle); font-variant-numeric: tabular-nums; }
+table.rec-box th:first-child, table.rec-box td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); }
+table.rec-box thead th { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+
+.rec-toast {
+  position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%);
+  background: var(--surface-raised); border: 1px solid var(--border); color: var(--text);
+  padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 600;
+  z-index: 60; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; max-width: 92%;
+}
+.rec-toast.show { opacity: 1; }

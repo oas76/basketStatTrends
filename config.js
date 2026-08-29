@@ -142,7 +142,8 @@ function renderTeamSwitcher() {
   teams.forEach(t => {
     const opt = document.createElement('option');
     opt.value = t.id;
-    opt.textContent = t.name + (t.role === 'admin' ? ' (admin)' : '');
+    const roles = t.roles || (t.role ? [t.role] : []);
+    opt.textContent = t.name + (roles.includes('admin') ? ' (admin)' : '');
     if (t.id === window.BasketTeams.activeId) opt.selected = true;
     wrap.appendChild(opt);
   });

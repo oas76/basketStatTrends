@@ -57,7 +57,17 @@ describe('teamStore', () => {
 
   test('unknown team returns empty data document', async () => {
     const data = await teamStore.getTeamData('does-not-exist');
-    expect(data).toEqual({ players: {}, games: [] });
+    expect(data).toEqual({ players: {}, games: [], leagues: [] });
+  });
+
+  test('normalizes and de-dupes the leagues[] registry', async () => {
+    await teamStore.saveTeamData(teamA.id, {
+      players: { Ola: { number: 7 } },
+      games: [{ id: 'g1', opponent: 'X' }],
+      leagues: ['1. divisjon', '1. divisjon', '  ', 'U16 Elite']
+    });
+    const a = await teamStore.getTeamData(teamA.id);
+    expect(a.leagues).toEqual(['1. divisjon', 'U16 Elite']);
   });
 
   test('renames a team', async () => {
@@ -70,7 +80,7 @@ describe('teamStore', () => {
     expect(await teamStore.deleteTeam(teamB.id)).toBe(true);
     expect(await teamStore.getTeam(teamB.id)).toBeNull();
     // Data document is gone (falls back to empty).
-    expect(await teamStore.getTeamData(teamB.id)).toEqual({ players: {}, games: [] });
+    expect(await teamStore.getTeamData(teamB.id)).toEqual({ players: {}, games: [], leagues: [] });
     const remaining = await teamStore.listTeams();
     expect(remaining.map(t => t.id)).toEqual([teamA.id]);
   });

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Platform Admin | BasketStat</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>🛠️ Platform Admin</h1>
+        <p>Users, audit log, storage &amp; teams</p>
+      </div>
+      <nav style="display: flex; gap: 16px; align-items: center;">
+        <a href="admin.html">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Team Admin
+        </a>
+        <a href="index.html">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          Dashboard
+        </a>
+        <button onclick="logout()" title="Sign Out" style="background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-muted); transition: color 0.2s;" onmouseover="this.style.color='var(--negative)'" onmouseout="this.style.color='var(--text-muted)'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+        </button>
+      </nav>
+    </header>
+
+    <main class="settings-layout">
+      <!-- Left column -->
+      <div class="settings-column">
+        <section class="settings-card">
+          <div class="settings-card-header">
+            <h2>☁️ Storage &amp; Blob Sync</h2>
+            <span class="badge" id="cloudBadge">Not configured</span>
+          </div>
+          <p class="settings-description">
+            Durable storage status for the platform. Team data auto-saves per team; use these to force a push/pull of the active team.
+          </p>
+          <div id="storageDiag" style="font-size:13px; color: var(--text-secondary); margin-bottom:12px;"></div>
+          <div class="button-row">
+            <button id="cloudSyncUp" class="secondary" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3"/><path d="m6 11 6-8 6 8"/><path d="M19 21H5"/></svg>
+              Save to Server
+            </button>
+            <button id="cloudSyncDown" class="secondary" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14"/><path d="m6 13 6 8 6-8"/><path d="M19 21H5"/></svg>
+              Load from Server
+            </button>
+          </div>
+          <div class="upload-status" id="cloudSummary" style="margin-top:12px;">
+            <span class="status-label">Status:</span>
+            <span id="cloudStatus">Ready</span>
+            <span id="cloudDetails" class="status-detail"></span>
+          </div>
+        </section>
+
+        <section class="settings-card" id="teamsCard">
+          <div class="settings-card-header">
+            <h2>🏀 Teams (<span id="teamCount">0</span>)</h2>
+            <button id="addTeamBtn" class="secondary" style="font-size: 12px; padding: 6px 12px;">+ Add Team</button>
+          </div>
+          <p class="settings-description">
+            Each team has its own players, games, and members. Create teams here; manage a team's members and stats from the Team Admin page (switch the active team using the header selector there).
+          </p>
+          <div class="data-table" style="max-height: 360px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Team</th>
+                  <th>Created</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="teamsTable">
+                <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right column -->
+      <div class="settings-column wide">
+        <section class="settings-card">
+          <div class="settings-card-header">
+            <h2>🔐 User Access (<span id="userCount">0</span>)</h2>
+            <button id="addUserBtn" class="secondary" style="font-size: 12px; padding: 6px 12px;">+ Add User</button>
+          </div>
+          <p class="settings-description">
+            Manage who can sign in. Create accounts with generated passwords, regenerate passwords, change platform roles, and unlink social sign-ins.
+          </p>
+          <div class="data-table" style="max-height: 460px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Name</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Sign-in</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="usersTable">
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="settings-card">
+          <div class="settings-card-header">
+            <h2>📋 Audit Log</h2>
+            <button id="refreshAuditLog" class="secondary" style="font-size: 12px; padding: 6px 12px;">Refresh</button>
+          </div>
+          <p class="settings-description">
+            Login activity and security events
+          </p>
+          <div class="data-table" style="max-height: 460px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Action</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>IP</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="auditLogTable">
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Add User Modal -->
+    <div class="modal-overlay" id="addUserModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Add User</h3>
+          <button class="modal-close" id="closeAddUser">&times;</button>
+        </div>
+        <form id="addUserForm" class="modal-body">
+          <div class="field">
+            <label for="newUserEmail">Email</label>
+            <input type="email" id="newUserEmail" placeholder="coach@club.no" required />
+          </div>
+          <div class="field">
+            <label for="newUserName">Name (optional)</label>
+            <input type="text" id="newUserName" placeholder="Full name" />
+          </div>
+          <div class="field">
+            <label for="newUserRole">Role</label>
+            <select id="newUserRole">
+              <option value="user">User</option>
+              <option value="recorder">Recorder</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="login-error" id="addUserError" style="display:none; background: rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); color:#f87171; padding:10px 14px; border-radius:8px; font-size:13px;"></div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" id="cancelAddUser">Cancel</button>
+            <button type="submit">Create User</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Generated Password Modal -->
+    <div class="modal-overlay" id="passwordModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>One-Time Password</h3>
+          <button class="modal-close" id="closePasswordModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="settings-description" id="passwordModalDesc">
+            Share this password securely with the user. It is shown only once and cannot be retrieved later.
+          </p>
+          <div class="field">
+            <label>Password</label>
+            <div style="display:flex; gap:8px;">
+              <input type="text" id="generatedPassword" readonly style="font-family: monospace; letter-spacing: 0.03em;" />
+              <button type="button" class="secondary" id="copyPasswordBtn">Copy</button>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="donePasswordModal">Done</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="data.js"></script>
+    <script src="platform-admin.js"></script>
+  </body>
+</html>

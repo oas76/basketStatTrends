@@ -14,6 +14,10 @@
         <p>Data management & configuration</p>
       </div>
       <nav style="display: flex; gap: 16px; align-items: center;">
+        <a href="platform-admin.html" class="settings-link" style="display:none;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Platform
+        </a>
         <a href="index.html">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           Dashboard
@@ -83,39 +87,6 @@
 
         <section class="settings-card">
           <div class="settings-card-header">
-            <h2>☁️ Cloud Sync</h2>
-            <span class="badge" id="cloudBadge">Not configured</span>
-          </div>
-          <p class="settings-description">
-            Sync data across all users via JSONbin.io. API keys are stored securely server-side.
-          </p>
-          <div class="button-row">
-            <button id="cloudSyncUp" class="secondary" disabled>
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3"/><path d="m6 11 6-8 6 8"/><path d="M19 21H5"/></svg>
-              Upload
-            </button>
-            <button id="cloudSyncDown" class="secondary" disabled>
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14"/><path d="m6 13 6 8 6-8"/><path d="M19 21H5"/></svg>
-              Download
-            </button>
-          </div>
-          <details class="settings-details">
-            <summary>Setup instructions</summary>
-            <ol>
-              <li>Create account at <a href="https://jsonbin.io" target="_blank">jsonbin.io</a></li>
-              <li>Copy your X-Master-Key from <a href="https://jsonbin.io/app/api-keys" target="_blank">API Keys</a></li>
-              <li><strong>Local dev:</strong> Add to <code>.env</code> file:<br>
-                <code style="display:block;margin:4px 0;">JSONBIN_API_KEY=your-key</code>
-                <code style="display:block;margin:4px 0;">JSONBIN_BIN_ID=your-bin-id</code>
-              </li>
-              <li><strong>Vercel:</strong> Add in Dashboard → Settings → Environment Variables</li>
-              <li>First upload creates a bin → update <code>JSONBIN_BIN_ID</code> → redeploy</li>
-            </ol>
-          </details>
-        </section>
-
-        <section class="settings-card">
-          <div class="settings-card-header">
             <h2>💾 Backup & Restore</h2>
           </div>
           <div class="button-row">
@@ -150,6 +121,31 @@
 
       <!-- Right Column: Data Overview -->
       <div class="settings-column wide">
+        <section class="settings-card" id="pendingCard">
+          <div class="settings-card-header">
+            <h2>🎬 Pending Recordings (<span id="pendingCount">0</span>)</h2>
+            <button id="refreshPending" class="secondary" style="font-size: 12px; padding: 6px 12px;">Refresh</button>
+          </div>
+          <p class="rec-admin-hint" style="font-size:13px; color: var(--text-secondary); margin: 0 0 12px;">
+            Games recorded on mobile. Review then import to add them to this team's stats. Nothing enters the data until you import.
+          </p>
+          <div class="data-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Opponent</th>
+                  <th>League</th>
+                  <th>H/A</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="pendingTable"></tbody>
+            </table>
+          </div>
+        </section>
+
         <section class="settings-card">
           <div class="settings-card-header">
             <h2>📊 Games (<span id="gameCount">0</span>)</h2>
@@ -176,32 +172,34 @@
           <div class="settings-card-header">
             <h2>👥 Players (<span id="playerCount">0</span>)</h2>
           </div>
+          <p class="settings-description">
+            The team roster. Add players here so they are available in the recorder and box-score uploads. Deactivated players stay in past stats but are hidden from new recordings.
+          </p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+            <input type="text" id="newPlayerName" placeholder="Player name" style="flex:1; min-width:180px;" />
+            <input type="number" id="newPlayerNumber" placeholder="#" min="0" max="99" style="width:80px;" />
+            <button id="addPlayerBtn" class="secondary" style="font-size: 12px; padding: 6px 12px;">+ Add Player</button>
+          </div>
+          <div class="login-error" id="playerError" style="display:none; background: rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); color:#f87171; padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:12px;"></div>
           <div class="players-grid" id="playersGrid">
             <!-- Populated by JS -->
           </div>
         </section>
 
-        <section class="settings-card" id="teamsCard" style="display:none;">
+        <section class="settings-card">
           <div class="settings-card-header">
-            <h2>🏀 Teams (<span id="teamCount">0</span>)</h2>
-            <button id="addTeamBtn" class="secondary" style="font-size: 12px; padding: 6px 12px;">+ Add Team</button>
+            <h2>🏆 Competitions (<span id="leagueCount">0</span>)</h2>
           </div>
           <p class="settings-description">
-            Each team has its own players, games, and members. Create teams here; switch the active team using the selector in the header.
+            The competitions (leagues) this team plays in. Add them here so they can be selected in the recorder and box-score uploads.
           </p>
-          <div class="data-table" style="max-height: 360px; overflow-y: auto;">
-            <table>
-              <thead>
-                <tr>
-                  <th>Team</th>
-                  <th>Created</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="teamsTable">
-                <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>
-              </tbody>
-            </table>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+            <input type="text" id="newLeagueName" placeholder="e.g. 1. divisjon" style="flex:1; min-width:180px;" />
+            <button id="addLeagueBtn" class="secondary" style="font-size: 12px; padding: 6px 12px;">+ Add Competition</button>
+          </div>
+          <div class="login-error" id="leagueError" style="display:none; background: rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); color:#f87171; padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:12px;"></div>
+          <div class="players-grid" id="leaguesGrid">
+            <!-- Populated by JS -->
           </div>
         </section>
 
@@ -210,14 +208,15 @@
             <h2>👥 Members — <span id="membersTeamName">team</span></h2>
           </div>
           <p class="settings-description">
-            Give existing users access to this team. Create the account under User Access first, then add them here by email.
+            Give existing platform users access to this team and choose their roles. Create the account first on the Platform Admin page, then assign it here.
           </p>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-            <input type="email" id="memberEmail" placeholder="user@club.no" style="flex:1; min-width:200px;" />
-            <select id="memberRole">
-              <option value="member">Member (view)</option>
-              <option value="admin">Team admin (edit)</option>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+            <select id="memberUser" style="flex:1; min-width:220px;">
+              <option value="">Select a user…</option>
             </select>
+            <label style="display:inline-flex; gap:4px; align-items:center; font-size:13px;"><input type="checkbox" class="member-add-role" value="admin" /> Admin</label>
+            <label style="display:inline-flex; gap:4px; align-items:center; font-size:13px;"><input type="checkbox" class="member-add-role" value="member" checked /> Member</label>
+            <label style="display:inline-flex; gap:4px; align-items:center; font-size:13px;"><input type="checkbox" class="member-add-role" value="recorder" /> Recorder</label>
             <button id="addMemberBtn" class="secondary" style="font-size: 12px; padding: 6px 12px;">+ Add Member</button>
           </div>
           <div class="login-error" id="memberError" style="display:none; background: rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); color:#f87171; padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:12px;"></div>
@@ -227,66 +226,12 @@
                 <tr>
                   <th>Email</th>
                   <th>Name</th>
-                  <th>Team role</th>
+                  <th>Team roles</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody id="membersTable">
                 <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="settings-card">
-          <div class="settings-card-header">
-            <h2>🔐 User Access (<span id="userCount">0</span>)</h2>
-            <button id="addUserBtn" class="secondary" style="font-size: 12px; padding: 6px 12px;">+ Add User</button>
-          </div>
-          <p class="settings-description">
-            Manage who can sign in. Create accounts with generated passwords, regenerate passwords, change roles, and unlink social sign-ins.
-          </p>
-          <div class="data-table" style="max-height: 420px; overflow-y: auto;">
-            <table>
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Name</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Sign-in</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="usersTable">
-                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="settings-card">
-          <div class="settings-card-header">
-            <h2>📋 Audit Log</h2>
-            <button id="refreshAuditLog" class="secondary" style="font-size: 12px; padding: 6px 12px;">Refresh</button>
-          </div>
-          <p class="settings-description">
-            Login activity and security events
-          </p>
-          <div class="data-table" style="max-height: 400px; overflow-y: auto;">
-            <table>
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Action</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>IP</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="auditLogTable">
-                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>
               </tbody>
             </table>
           </div>
@@ -351,65 +296,32 @@
       </div>
     </div>
 
-    <!-- Add User Modal -->
-    <div class="modal-overlay" id="addUserModal">
-      <div class="modal">
+    <!-- Review Recording Modal -->
+    <div class="modal-overlay" id="reviewDraftModal">
+      <div class="modal modal-wide">
         <div class="modal-header">
-          <h3>Add User</h3>
-          <button class="modal-close" id="closeAddUser">&times;</button>
-        </div>
-        <form id="addUserForm" class="modal-body">
-          <div class="field">
-            <label for="newUserEmail">Email</label>
-            <input type="email" id="newUserEmail" placeholder="coach@club.no" required />
-          </div>
-          <div class="field">
-            <label for="newUserName">Name (optional)</label>
-            <input type="text" id="newUserName" placeholder="Full name" />
-          </div>
-          <div class="field">
-            <label for="newUserRole">Role</label>
-            <select id="newUserRole">
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <div class="login-error" id="addUserError" style="display:none; background: rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); color:#f87171; padding:10px 14px; border-radius:8px; font-size:13px;"></div>
-          <div class="modal-actions">
-            <button type="button" class="secondary" id="cancelAddUser">Cancel</button>
-            <button type="submit">Create User</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Generated Password Modal -->
-    <div class="modal-overlay" id="passwordModal">
-      <div class="modal">
-        <div class="modal-header">
-          <h3>One-Time Password</h3>
-          <button class="modal-close" id="closePasswordModal">&times;</button>
+          <h3 id="reviewDraftTitle">Review Recording</h3>
+          <button class="modal-close" id="closeReviewDraft">&times;</button>
         </div>
         <div class="modal-body">
-          <p class="settings-description" id="passwordModalDesc">
-            Share this password securely with the user. It is shown only once and cannot be retrieved later.
-          </p>
-          <div class="field">
-            <label>Password</label>
-            <div style="display:flex; gap:8px;">
-              <input type="text" id="generatedPassword" readonly style="font-family: monospace; letter-spacing: 0.03em;" />
-              <button type="button" class="secondary" id="copyPasswordBtn">Copy</button>
-            </div>
+          <p class="settings-description" id="reviewDraftMeta"></p>
+          <div class="data-table">
+            <table id="reviewDraftTable">
+              <thead id="reviewDraftHead"></thead>
+              <tbody id="reviewDraftBody"></tbody>
+            </table>
           </div>
-          <div class="modal-actions">
-            <button type="button" id="donePasswordModal">Done</button>
-          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="cancelReviewDraft">Close</button>
+          <button type="button" id="importDraftBtn">Import into stats</button>
         </div>
       </div>
     </div>
 
     <script src="config.js"></script>
     <script src="data.js"></script>
+    <script src="recorder-aggregator.js"></script>
     <script src="admin.js"></script>
   </body>
 </html>

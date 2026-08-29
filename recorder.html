@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0c10" />
+    <title>Game Recorder | BasketStat</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="recorder.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>" />
+  </head>
+  <body class="recorder-body">
+    <div class="loading-overlay" id="recLoading">
+      <div class="loading-spinner">
+        <div class="spinner-ring"></div>
+        <div>Loading recorder…</div>
+      </div>
+    </div>
+
+    <div class="rec-app">
+      <header class="rec-topbar">
+        <button class="rec-sheet-close" id="recBackBtn" style="display:none;" aria-label="Back">‹</button>
+        <div style="flex:1; min-width:0;">
+          <div class="rec-title" id="recTitle">Game Recorder</div>
+          <div class="rec-sub" id="recSubtitle"></div>
+        </div>
+        <button class="rec-btn ghost" id="recMenuBtn" style="min-height:40px; padding:8px 12px; font-size:13px;">Menu</button>
+      </header>
+
+      <!-- HOME -->
+      <section class="rec-screen" id="screen-home">
+        <div class="rec-h">Your teams</div>
+        <div class="rec-list" id="recTeamList"></div>
+        <div class="rec-h" style="margin-top:24px;">Continue recording</div>
+        <div class="rec-list" id="recDraftList"></div>
+      </section>
+
+      <!-- SETUP -->
+      <section class="rec-screen" id="screen-setup">
+        <div class="rec-h">New game</div>
+        <div class="rec-field">
+          <label for="recDate">Date</label>
+          <input type="date" class="rec-input" id="recDate" />
+        </div>
+        <div class="rec-field">
+          <label for="recLeague">Competition</label>
+          <select class="rec-select" id="recLeague"></select>
+          <small class="rec-note" id="recLeagueNote" style="display:none;">No competitions set up for this team yet. Add one in Team Admin → Competitions first.</small>
+        </div>
+        <div class="rec-field">
+          <label>Home / Away</label>
+          <div class="rec-seg" id="recHomeAway">
+            <button data-val="home" class="active">Home</button>
+            <button data-val="away">Away</button>
+          </div>
+        </div>
+        <div class="rec-field">
+          <label for="recOpponent">Opposition</label>
+          <input type="text" class="rec-input" id="recOpponent" placeholder="Opponent team name" />
+        </div>
+        <div class="rec-btn-row" style="gap:10px;">
+          <div class="rec-field" style="flex:1;">
+            <label for="recPeriods">Periods</label>
+            <input type="number" class="rec-input" id="recPeriods" value="4" min="1" max="8" />
+          </div>
+          <div class="rec-field" style="flex:1;">
+            <label for="recPeriodMin">Min / period</label>
+            <input type="number" class="rec-input" id="recPeriodMin" value="10" min="1" max="20" />
+          </div>
+          <div class="rec-field" style="flex:1;">
+            <label for="recOtMin">OT min</label>
+            <input type="number" class="rec-input" id="recOtMin" value="5" min="1" max="20" />
+          </div>
+        </div>
+        <button class="rec-btn primary block" id="recToSquad">Next: Pick squad</button>
+      </section>
+
+      <!-- SQUAD -->
+      <section class="rec-screen" id="screen-squad">
+        <div class="rec-h">Squad &amp; starting five</div>
+        <div class="rec-note" id="recSquadNote"></div>
+        <div id="recSquadList"></div>
+        <small class="rec-note" style="display:block; margin-top:6px;">Need someone who isn't listed? Add them in Team Admin → Players first — the recorder only uses the team roster.</small>
+        <button class="rec-btn primary block" id="recStartGame" style="margin-top:16px;">Start game</button>
+      </section>
+
+      <!-- LIVE -->
+      <section class="rec-screen" id="screen-live">
+        <div class="rec-scoreboard">
+          <div class="rec-score-side">
+            <div class="lbl" id="recUsLbl">Us</div>
+            <div class="val" id="recUsScore">0</div>
+          </div>
+          <div class="rec-clock-center">
+            <div class="rec-period" id="recPeriodLbl">P1</div>
+            <div class="rec-clock-time stopped" id="recClockTime">10:00</div>
+          </div>
+          <div class="rec-score-side">
+            <div class="lbl" id="recThemLbl">Opp</div>
+            <div class="val" id="recThemScore">0</div>
+          </div>
+        </div>
+
+        <div class="rec-reminder-banner" id="recReminder">⏱ Restart the clock?</div>
+
+        <div class="rec-clock-controls">
+          <button class="rec-btn start" id="recClockToggle" style="flex:2;">Start clock</button>
+          <button class="rec-btn" id="recNextPeriod">Next period ›</button>
+        </div>
+
+        <div class="rec-h">On court</div>
+        <div class="rec-oncourt" id="recOnCourt"></div>
+
+        <div class="rec-opp-bar">
+          <button class="rec-btn" data-opp="1">Opp +1</button>
+          <button class="rec-btn" data-opp="2">Opp +2</button>
+          <button class="rec-btn" data-opp="3">Opp +3</button>
+        </div>
+      </section>
+
+      <!-- REVIEW -->
+      <section class="rec-screen" id="screen-review">
+        <div class="rec-h">Box score preview</div>
+        <div class="rec-box-wrap" id="recBoxPreview"></div>
+        <button class="rec-btn primary block" id="recSaveComplete" style="margin-top:16px;">Save recording as complete</button>
+        <button class="rec-btn ghost block" id="recBackToLive" style="margin-top:8px;">Keep recording</button>
+      </section>
+    </div>
+
+    <!-- Fixed bottom bar (live only) -->
+    <nav class="rec-bottombar" id="recBottomBar" style="display:none;">
+      <button class="rec-btn" id="recUndo"><span class="ic">↶</span>Undo</button>
+      <button class="rec-btn" id="recSubs"><span class="ic">⇄</span>Subs</button>
+      <button class="rec-btn" id="recLog"><span class="ic">≣</span>Log</button>
+      <button class="rec-btn primary" id="recFinish"><span class="ic">✓</span>Finish</button>
+    </nav>
+
+    <!-- Reusable bottom sheet -->
+    <div class="rec-sheet-backdrop" id="recSheetBackdrop">
+      <div class="rec-sheet" id="recSheet" role="dialog" aria-modal="true"></div>
+    </div>
+
+    <div class="rec-toast" id="recToast"></div>
+
+    <script src="recorder-aggregator.js"></script>
+    <script src="recorder-clock.js"></script>
+    <script src="recorder.js"></script>
+  </body>
+</html>

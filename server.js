@@ -427,12 +427,18 @@ app.get('/api/auth/check', async (req, res) => {
       const all = await teamStore.listTeams();
       if (role === 'admin') {
         // Platform admin (real or bootstrap) can access every team.
-        teams = all.map(t => ({ id: t.id, name: t.name, role: 'admin' }));
+        teams = all.map(t => ({ id: t.id, name: t.name, roles: ['admin'], role: 'admin' }));
       } else if (user) {
-        const map = new Map((user.teams || []).map(m => [m.teamId, m.role]));
+        const map = new Map((user.teams || []).map(m => [m.teamId, membershipRolesOf(m)]));
         teams = all
           .filter(t => map.has(t.id))
-          .map(t => ({ id: t.id, name: t.name, role: map.get(t.id) }));
+          .map(t => {
+            const roles = map.get(t.id);
+            return {
+              id: t.id, name: t.name, roles,
+              role: roles.includes('admin') ? 'admin' : (roles[0] || 'member')
+            };
+          });
       }
     }
   } catch (e) {
@@ -607,8 +613,13 @@ app.use('/config.js', express.static(path.join(__dirname, 'config.js')));
 app.use('/data.js', express.static(path.join(__dirname, 'data.js')));
 app.use('/app.js', express.static(path.join(__dirname, 'app.js')));
 app.use('/admin.js', express.static(path.join(__dirname, 'admin.js')));
+app.use('/platform-admin.js', express.static(path.join(__dirname, 'platform-admin.js')));
 app.use('/reference-stats.js', express.static(path.join(__dirname, 'reference-stats.js')));
 app.use('/team-builder.js', express.static(path.join(__dirname, 'team-builder.js')));
+app.use('/recorder.css', express.static(path.join(__dirname, 'recorder.css')));
+app.use('/recorder.js', express.static(path.join(__dirname, 'recorder.js')));
+app.use('/recorder-aggregator.js', express.static(path.join(__dirname, 'recorder-aggregator.js')));
+app.use('/recorder-clock.js', express.static(path.join(__dirname, 'recorder-clock.js')));
 
 // ========================================
 // AUTHENTICATION MIDDLEWARE
@@ -630,14 +641,21 @@ const authMiddleware = async (req, res, next) => {
     '/data.js',
     '/app.js',
     '/admin.js',
+    '/platform-admin.js',
     '/reference-stats.js',
-    '/team-builder.js'
+    '/team-builder.js',
+    '/recorder.css',
+    '/recorder.js',
+    '/recorder-aggregator.js',
+    '/recorder-clock.js'
   ];
 
   // Admin-only paths (require admin role)
   const adminPaths = [
     '/admin.html',
     '/admin',
+    '/platform-admin.html',
+    '/platform-admin',
     '/bulk-import.html',
     '/bulk-import',
     '/reference-admin.html',
@@ -854,16 +872,31 @@ app.delete('/api/users/:id/identities/:provider', requireSameOrigin, async (req,
 // ('admin' = manage members + edit data, 'member' = view-only). Every
 // team-scoped request is authorized against membership to prevent IDOR.
 
-/** Resolve a user's role within a specific team (null if not a member). */
-function teamRoleOf(user, teamId) {
-  if (!user || !Array.isArray(user.teams)) return null;
+/** Roles for a single membership entry, tolerant of legacy { role } shape. */
+function membershipRolesOf(m) {
+  if (!m) return [];
+  if (Array.isArray(m.roles)) return m.roles.filter(Boolean);
+  if (m.role) return [m.role];
+  return [];
+}
+
+/** Resolve a user's roles[] within a specific team ([] if not a member). */
+function teamRolesOf(user, teamId) {
+  if (!user || !Array.isArray(user.teams)) return [];
   const m = user.teams.find(t => t.teamId === teamId);
-  return m ? m.role : null;
+  return membershipRolesOf(m);
+}
+
+/** Normalize a roles[]/role value from a request body into a lowercased array. */
+function rolesFromBody(body) {
+  let raw = body && body.roles !== undefined ? body.roles : (body ? body.role : undefined);
+  if (!Array.isArray(raw)) raw = raw ? [raw] : [];
+  return raw.map(r => String(r || '').trim().toLowerCase()).filter(Boolean);
 }
 
 /**
  * Authorize access to a team-scoped resource. Deny-by-default.
- * Returns { ok, code, error, status, platformAdmin, teamRole }.
+ * Returns { ok, code, error, status, platformAdmin, teamRoles }.
  */
 async function resolveTeamAccess(req, teamId, { write = false } = {}) {
   const status = await getAuthStatus(req);
@@ -871,16 +904,16 @@ async function resolveTeamAccess(req, teamId, { write = false } = {}) {
     return { ok: false, code: 401, error: 'Authentication required' };
   }
   if (status.role === 'admin') {
-    return { ok: true, status, platformAdmin: true, teamRole: 'admin' };
+    return { ok: true, status, platformAdmin: true, teamRoles: ['admin'] };
   }
-  const role = teamRoleOf(status.user, teamId);
-  if (!role) {
+  const roles = teamRolesOf(status.user, teamId);
+  if (!roles.length) {
     return { ok: false, code: 403, error: 'You do not have access to this team' };
   }
-  if (write && role !== 'admin') {
+  if (write && !roles.includes('admin')) {
     return { ok: false, code: 403, error: 'Team admin access required' };
   }
-  return { ok: true, status, platformAdmin: false, teamRole: role };
+  return { ok: true, status, platformAdmin: false, teamRoles: roles };
 }
 
 // List teams accessible to the caller (platform admin sees all).
@@ -893,10 +926,13 @@ app.get('/api/teams', async (req, res) => {
     const all = await teamStore.listTeams();
     let teams;
     if (status.role === 'admin') {
-      teams = all.map(t => ({ ...t, role: 'admin' }));
+      teams = all.map(t => ({ ...t, roles: ['admin'], role: 'admin' }));
     } else {
-      const map = new Map((status.user?.teams || []).map(m => [m.teamId, m.role]));
-      teams = all.filter(t => map.has(t.id)).map(t => ({ ...t, role: map.get(t.id) }));
+      const map = new Map((status.user?.teams || []).map(m => [m.teamId, membershipRolesOf(m)]));
+      teams = all.filter(t => map.has(t.id)).map(t => {
+        const roles = map.get(t.id);
+        return { ...t, roles, role: roles.includes('admin') ? 'admin' : (roles[0] || 'member') };
+      });
     }
     res.json({
       teams,
@@ -974,23 +1010,47 @@ app.get('/api/teams/:teamId/members', async (req, res) => {
   }
 });
 
-// Add an existing user to a team by email (invite-only) (team admin or platform admin).
-app.post('/api/teams/:teamId/members', requireSameOrigin, async (req, res) => {
+// List platform users that can be added to a team (team admin or platform admin).
+// Team-admin-safe: returns only minimal { id, name, email } for active users who
+// are not already members, so team admins never see the full admin-only user list.
+app.get('/api/teams/:teamId/assignable-users', async (req, res) => {
   const access = await resolveTeamAccess(req, req.params.teamId, { write: true });
   if (!access.ok) return res.status(access.code).json({ error: access.error });
-  const { email, role } = req.body || {};
   try {
     const team = await teamStore.getTeam(req.params.teamId);
     if (!team) return res.status(404).json({ error: 'Team not found' });
-    const target = await userStore.findByEmail(email);
+    const all = await userStore.listUsers();
+    const users = all
+      .filter(u => u.status === 'active' &&
+        !(u.teams || []).some(t => t.teamId === req.params.teamId))
+      .map(u => ({ id: u.id, name: u.name || '', email: u.email }));
+    res.json({ users });
+  } catch (e) {
+    console.error('List assignable users error:', e);
+    res.status(500).json({ error: 'Failed to list assignable users' });
+  }
+});
+
+// Add an existing user to a team with one or more roles (team admin or platform admin).
+app.post('/api/teams/:teamId/members', requireSameOrigin, async (req, res) => {
+  const access = await resolveTeamAccess(req, req.params.teamId, { write: true });
+  if (!access.ok) return res.status(access.code).json({ error: access.error });
+  const { userId, email } = req.body || {};
+  let roles = rolesFromBody(req.body);
+  if (!roles.length) roles = ['member'];
+  try {
+    const team = await teamStore.getTeam(req.params.teamId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const target = userId
+      ? await userStore.findById(userId)
+      : await userStore.findByEmail(email);
     if (!target) {
-      return res.status(404).json({ error: 'No user with that email. Create the account first under Users.' });
+      return res.status(404).json({ error: 'No such user. Create the account first on the Platform Admin page.' });
     }
-    const teamRole = role === 'admin' ? 'admin' : 'member';
-    await userStore.setMembership(target.id, team.id, teamRole);
-    logAudit({ action: 'MEMBER_ADDED', email: target.email, ip: req.ip || 'unknown', success: true, reason: `${team.name}:${teamRole}` });
+    const saved = await userStore.setMembership(target.id, team.id, roles);
+    logAudit({ action: 'MEMBER_ADDED', email: target.email, ip: req.ip || 'unknown', success: true, reason: `${team.name}:${saved.roles.join('+')}` });
     const updated = await userStore.findById(target.id);
-    res.status(201).json({ member: { ...userStore.toPublic(updated), teamRole } });
+    res.status(201).json({ member: { ...userStore.toPublic(updated), teamRoles: saved.roles } });
   } catch (e) {
     console.error('Add member error:', e);
     if (/cannot persist/i.test(e.message || '')) return res.status(503).json({ error: e.message });
@@ -998,23 +1058,25 @@ app.post('/api/teams/:teamId/members', requireSameOrigin, async (req, res) => {
   }
 });
 
-// Change a member's team role (team admin or platform admin).
+// Change a member's team roles (team admin or platform admin).
 app.patch('/api/teams/:teamId/members/:userId', requireSameOrigin, async (req, res) => {
   const access = await resolveTeamAccess(req, req.params.teamId, { write: true });
   if (!access.ok) return res.status(access.code).json({ error: access.error });
-  const teamRole = req.body?.role === 'admin' ? 'admin' : 'member';
+  let roles = rolesFromBody(req.body);
+  if (!roles.length) roles = ['member'];
   try {
     const target = await userStore.findById(req.params.userId);
     if (!target) return res.status(404).json({ error: 'User not found' });
-    // Don't strip the last team admin via downgrade.
-    if (teamRole === 'member' && teamRoleOf(target, req.params.teamId) === 'admin') {
+    // Don't strip the last team admin by removing the admin role.
+    const currentRoles = teamRolesOf(target, req.params.teamId);
+    if (currentRoles.includes('admin') && !roles.includes('admin')) {
       if ((await userStore.countTeamRole(req.params.teamId, 'admin')) <= 1) {
         return res.status(400).json({ error: 'Cannot demote the last team admin' });
       }
     }
-    await userStore.setMembership(target.id, req.params.teamId, teamRole);
+    const saved = await userStore.setMembership(target.id, req.params.teamId, roles);
     const updated = await userStore.findById(target.id);
-    res.json({ member: { ...userStore.toPublic(updated), teamRole } });
+    res.json({ member: { ...userStore.toPublic(updated), teamRoles: saved.roles } });
   } catch (e) {
     console.error('Update member error:', e);
     res.status(500).json({ error: 'Failed to update member' });
@@ -1028,7 +1090,7 @@ app.delete('/api/teams/:teamId/members/:userId', requireSameOrigin, async (req, 
   try {
     const target = await userStore.findById(req.params.userId);
     if (!target) return res.status(404).json({ error: 'User not found' });
-    if (teamRoleOf(target, req.params.teamId) === 'admin' &&
+    if (teamRolesOf(target, req.params.teamId).includes('admin') &&
         (await userStore.countTeamRole(req.params.teamId, 'admin')) <= 1) {
       return res.status(400).json({ error: 'Cannot remove the last team admin' });
     }
@@ -1074,6 +1136,97 @@ app.put('/api/teams/:teamId/data', requireSameOrigin, async (req, res) => {
     console.error('Save team data error:', e);
     if (/cannot persist/i.test(e.message || '')) return res.status(503).json({ error: e.message });
     res.status(500).json({ error: 'Failed to save team data' });
+  }
+});
+
+// ---------- Recorder drafts (pending games) ----------
+// Drafts are the mobile recorder's work-in-progress / completed games. They are
+// stored separately from the live { players, games } document and are NOT part
+// of the stats until a platform admin imports them from the Settings portal.
+// Any team member (including the `recorder` platform role, who is added as a
+// team member) may read/write drafts; only platform admins import them into
+// live data via the existing admin-only PUT /api/teams/:teamId/data route.
+
+// List a team's drafts (any team member).
+app.get('/api/teams/:teamId/drafts', async (req, res) => {
+  const access = await resolveTeamAccess(req, req.params.teamId, { write: false });
+  if (!access.ok) return res.status(access.code).json({ error: access.error });
+  try {
+    const drafts = await teamStore.getDrafts(req.params.teamId);
+    res.json({ drafts });
+  } catch (e) {
+    console.error('List drafts error:', e);
+    res.status(500).json({ error: 'Failed to load drafts' });
+  }
+});
+
+// Get a single draft (any team member).
+app.get('/api/teams/:teamId/drafts/:draftId', async (req, res) => {
+  const access = await resolveTeamAccess(req, req.params.teamId, { write: false });
+  if (!access.ok) return res.status(access.code).json({ error: access.error });
+  try {
+    const draft = await teamStore.getDraft(req.params.teamId, req.params.draftId);
+    if (!draft) return res.status(404).json({ error: 'Draft not found' });
+    res.json({ draft });
+  } catch (e) {
+    console.error('Get draft error:', e);
+    res.status(500).json({ error: 'Failed to load draft' });
+  }
+});
+
+// Create or upsert a draft (any team member).
+app.post('/api/teams/:teamId/drafts', requireSameOrigin, async (req, res) => {
+  const access = await resolveTeamAccess(req, req.params.teamId, { write: false });
+  if (!access.ok) return res.status(access.code).json({ error: access.error });
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return res.status(400).json({ error: 'Invalid draft format' });
+  }
+  try {
+    const draft = await teamStore.saveDraft(req.params.teamId, body, {
+      createdBy: access.status.user ? access.status.user.id : null
+    });
+    res.status(201).json({ draft });
+  } catch (e) {
+    console.error('Create draft error:', e);
+    if (/cannot persist/i.test(e.message || '')) return res.status(503).json({ error: e.message });
+    res.status(500).json({ error: 'Failed to save draft' });
+  }
+});
+
+// Update an existing draft (any team member).
+app.put('/api/teams/:teamId/drafts/:draftId', requireSameOrigin, async (req, res) => {
+  const access = await resolveTeamAccess(req, req.params.teamId, { write: false });
+  if (!access.ok) return res.status(access.code).json({ error: access.error });
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return res.status(400).json({ error: 'Invalid draft format' });
+  }
+  try {
+    const draft = await teamStore.saveDraft(
+      req.params.teamId,
+      { ...body, id: req.params.draftId },
+      { createdBy: access.status.user ? access.status.user.id : null }
+    );
+    res.json({ draft });
+  } catch (e) {
+    console.error('Update draft error:', e);
+    if (/cannot persist/i.test(e.message || '')) return res.status(503).json({ error: e.message });
+    res.status(500).json({ error: 'Failed to save draft' });
+  }
+});
+
+// Delete a draft (any team member).
+app.delete('/api/teams/:teamId/drafts/:draftId', requireSameOrigin, async (req, res) => {
+  const access = await resolveTeamAccess(req, req.params.teamId, { write: false });
+  if (!access.ok) return res.status(access.code).json({ error: access.error });
+  try {
+    const removed = await teamStore.deleteDraft(req.params.teamId, req.params.draftId);
+    if (!removed) return res.status(404).json({ error: 'Draft not found' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Delete draft error:', e);
+    res.status(500).json({ error: 'Failed to delete draft' });
   }
 });
 
@@ -1123,8 +1276,23 @@ app.get('/admin.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
+app.get('/platform-admin.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'platform-admin.html'));
+});
+app.get('/platform-admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'platform-admin.html'));
+});
+
 app.get('/team.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'team.html'));
+});
+
+// Mobile game recorder (any authenticated user; recorders are routed here on login).
+app.get('/recorder.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'recorder.html'));
+});
+app.get('/recorder', (req, res) => {
+  res.sendFile(path.join(__dirname, 'recorder.html'));
 });
 
 app.get('/team-builder.html', (req, res) => {

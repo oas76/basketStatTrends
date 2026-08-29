@@ -64,7 +64,8 @@ const hydrateTeam = async (teamId) => {
     const data = await res.json();
     const clean = {
       players: data && data.players ? data.players : {},
-      games: data && Array.isArray(data.games) ? data.games : []
+      games: data && Array.isArray(data.games) ? data.games : [],
+      leagues: data && Array.isArray(data.leagues) ? data.leagues : []
     };
     // Write straight to the cache key (do NOT trigger a server save).
     localStorage.setItem(storageKey(), JSON.stringify(clean));
@@ -109,7 +110,7 @@ const scheduleServerSave = () => {
 const loadData = () => {
   const raw = localStorage.getItem(storageKey());
   if (!raw) {
-    return { players: {}, games: [] };
+    return { players: {}, games: [], leagues: [] };
   }
   try {
     const data = JSON.parse(raw);
@@ -117,7 +118,11 @@ const loadData = () => {
     if (data.games && data.games.length > 0 && data.games[0].entries) {
       return migrateOldFormat(data);
     }
-    const result = { players: data.players || {}, games: data.games || [] };
+    const result = {
+      players: data.players || {},
+      games: data.games || [],
+      leagues: Array.isArray(data.leagues) ? data.leagues : []
+    };
 
     // Ensure every game has a valid string ID
     let repaired = false;
@@ -134,7 +139,7 @@ const loadData = () => {
     return result;
   } catch (error) {
     console.warn("Failed to parse stored data", error);
-    return { players: {}, games: [] };
+    return { players: {}, games: [], leagues: [] };
   }
 };
 
@@ -162,7 +167,7 @@ const migrateOldFormat = (oldData) => {
       performances,
     };
   });
-  return { players, games };
+  return { players, games, leagues: [] };
 };
 
 const saveData = (data) => {
@@ -436,6 +441,66 @@ const updatePlayer = (playerName, updates) => {
     data.players[playerName] = { number: null, active: true };
   }
   data.players[playerName] = { ...data.players[playerName], ...updates };
+  saveData(data);
+};
+
+/**
+ * Add a player to the roster registry. No-op fields are preserved for existing
+ * players; a re-add reactivates the player.
+ */
+const addPlayer = (playerName, number = null) => {
+  const name = String(playerName || '').trim();
+  if (!name) return;
+  const data = loadData();
+  if (!data.players) data.players = {};
+  const num = (number === 0 || number) ? number : null;
+  if (!data.players[name]) {
+    data.players[name] = { number: num, active: true };
+  } else {
+    data.players[name] = {
+      ...data.players[name],
+      number: num !== null ? num : (data.players[name].number ?? null),
+      active: true
+    };
+  }
+  saveData(data);
+};
+
+/** Activate or deactivate a roster player (kept in past stats when inactive). */
+const setPlayerActive = (playerName, active) => {
+  const name = String(playerName || '').trim();
+  if (!name) return;
+  const data = loadData();
+  if (!data.players) data.players = {};
+  if (!data.players[name]) data.players[name] = { number: null, active: !!active };
+  else data.players[name] = { ...data.players[name], active: !!active };
+  saveData(data);
+};
+
+/** Get the team's registered competitions (leagues). */
+const getLeagues = () => {
+  const data = loadData();
+  return Array.isArray(data.leagues) ? data.leagues : [];
+};
+
+/** Register a competition (league). Case-insensitive de-duplication. */
+const addLeague = (name) => {
+  const n = String(name || '').trim();
+  if (!n) return;
+  const data = loadData();
+  if (!Array.isArray(data.leagues)) data.leagues = [];
+  if (!data.leagues.some((l) => l.toLowerCase() === n.toLowerCase())) {
+    data.leagues.push(n);
+    saveData(data);
+  }
+};
+
+/** Remove a competition from the registry (existing games are unaffected). */
+const removeLeague = (name) => {
+  const n = String(name || '').trim();
+  if (!n) return;
+  const data = loadData();
+  data.leagues = (Array.isArray(data.leagues) ? data.leagues : []).filter((l) => l !== n);
   saveData(data);
 };
 
@@ -976,6 +1041,11 @@ window.basketStatData = {
   deleteGame,
   updatePlayerStats,
   updatePlayer,
+  addPlayer,
+  setPlayerActive,
+  getLeagues,
+  addLeague,
+  removeLeague,
   getPlayerProfile,
   calculateAge,
   getAllStatKeys,

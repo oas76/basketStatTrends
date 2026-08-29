@@ -231,6 +231,10 @@
       const urlParams = new URLSearchParams(window.location.search);
       const redirectUrl = urlParams.get('redirect') || '/';
       const requiresAdmin = urlParams.get('error') === 'admin_required';
+
+      // Recorders land on the mobile recorder unless a specific page was requested.
+      const destForRole = (role) =>
+        (role === 'recorder' && redirectUrl === '/') ? '/recorder.html' : redirectUrl;
       
       // Show admin error if redirected due to insufficient permissions
       if (requiresAdmin) {
@@ -306,7 +310,7 @@
             if (requiresAdmin && data.role !== 'admin') {
               return;
             }
-            window.location.href = redirectUrl;
+            window.location.href = destForRole(data.role);
           }
         })
         .catch(() => {});
@@ -359,7 +363,7 @@
             }
 
             // Redirect to requested page or dashboard
-            window.location.href = redirectUrl;
+            window.location.href = destForRole(result.role);
           } else {
             loginError.textContent = result.error || 'Incorrect password. Please try again.';
             loginError.classList.add('visible');

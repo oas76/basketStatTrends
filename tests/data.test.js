@@ -110,7 +110,61 @@ describe('loadData – game ID repair', () => {
 
   test('returns empty structure for empty localStorage', () => {
     const data = api.loadData();
-    expect(data).toEqual({ players: {}, games: [] });
+    expect(data).toEqual({ players: {}, games: [], leagues: [] });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Competition (league) registry
+// ---------------------------------------------------------------------------
+describe('league registry', () => {
+  test('addLeague registers competitions and de-dupes case-insensitively', () => {
+    api.addLeague('1. divisjon');
+    api.addLeague('1. divisjon');
+    api.addLeague('1. DIVISJON');
+    api.addLeague('U16 Elite');
+    expect(api.getLeagues()).toEqual(['1. divisjon', 'U16 Elite']);
+  });
+
+  test('addLeague ignores blank names', () => {
+    api.addLeague('   ');
+    api.addLeague('');
+    expect(api.getLeagues()).toEqual([]);
+  });
+
+  test('removeLeague drops a competition from the registry', () => {
+    api.addLeague('A');
+    api.addLeague('B');
+    api.removeLeague('A');
+    expect(api.getLeagues()).toEqual(['B']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Player roster registry
+// ---------------------------------------------------------------------------
+describe('player roster registry', () => {
+  test('addPlayer creates a roster entry with number + active', () => {
+    api.addPlayer('Alice', 7);
+    const data = api.loadData();
+    expect(data.players.Alice).toEqual({ number: 7, active: true });
+  });
+
+  test('addPlayer without a number stores null and does not duplicate', () => {
+    api.addPlayer('Bob');
+    api.addPlayer('Bob', 12); // re-add updates the number and reactivates
+    const data = api.loadData();
+    expect(data.players.Bob.number).toBe(12);
+    expect(data.players.Bob.active).toBe(true);
+    expect(Object.keys(data.players)).toEqual(['Bob']);
+  });
+
+  test('setPlayerActive toggles the active flag', () => {
+    api.addPlayer('Carol', 3);
+    api.setPlayerActive('Carol', false);
+    expect(api.loadData().players.Carol.active).toBe(false);
+    api.setPlayerActive('Carol', true);
+    expect(api.loadData().players.Carol.active).toBe(true);
   });
 });
 
