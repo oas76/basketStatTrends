@@ -1022,6 +1022,12 @@ async function importDraft(draftId) {
       playersFound: draftPlayersFound(draft),
       csvFile: null
     });
+    // Register the game's competition so it shows in the team's league registry
+    // (Competitions list, recorder new-game dropdown) — not just as a game tag.
+    // Mirrors the CSV import path. addLeague is a no-op for already-known leagues.
+    if (m.league && window.basketStatData.addLeague) {
+      await window.basketStatData.addLeague(m.league);
+    }
     const ok = await window.basketStatData.saveToServer();
     if (!ok) {
       alert('Game added locally but saving to the server failed. Try again.');

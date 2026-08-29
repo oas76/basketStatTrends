@@ -158,6 +158,21 @@ describe('eventsToPerformances', () => {
     ['A', 'B', 'C', 'D', 'E'].forEach((n) => expect(p[n]).toBeDefined());
   });
 
+  test('a finish anchor extends on-court minutes to the whistle', () => {
+    const d = scenarioDraft();
+    // Without a finish, minutes end at the last recorded stat (8:00 elapsed).
+    expect(AGG.eventsToPerformances(d).A.min).toBe(8);
+    // Press Finish at 9:00 elapsed (clock remaining 1:00 = 60000ms).
+    d.events.push({ id: 'fin', seq: 12, period: 1, clockMs: 60000, type: 'finish', player: null });
+    const p = AGG.eventsToPerformances(d);
+    expect(p.A.min).toBe(9); // starter on court the whole time -> to the whistle
+    expect(p.F.min).toBe(4); // subbed in at 5:00, now plays to 9:00
+    expect(p.E.min).toBe(5); // subbed out at 5:00, unaffected
+    // The finish anchor is team-level: it creates no player performance line.
+    expect(p.finish).toBeUndefined();
+    expect(Object.keys(p).sort()).toEqual(['A', 'B', 'C', 'D', 'E', 'F']);
+  });
+
   test('opponent fouls never create a player performance line', () => {
     // opp_foul is a recorder-only, team-level event with no player subject; it
     // must not add a performance entry or otherwise perturb player stats.

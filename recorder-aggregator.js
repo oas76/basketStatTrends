@@ -43,7 +43,11 @@
     OPP_PTS: 'opp_pts',
     OPP_FOUL: 'opp_foul',
     PERIOD_START: 'period_start',
-    PERIOD_END: 'period_end'
+    PERIOD_END: 'period_end',
+    // Anchor dropped when the recorder presses Finish: marks the game-time at
+    // which play ended. It carries no player and no stat — it only extends the
+    // end of the game so on-court players' minutes count up to the whistle.
+    FINISH: 'finish'
   };
 
   // Points contributed by each made-shot event.
@@ -139,6 +143,9 @@
     events.sort((a, b) => (a.t - b.t) || (a.seq - b.seq));
 
     const knownEventIds = new Set(rawEvents.map(e => e.id).filter(Boolean));
+    // End of game = latest event time. A "finish" anchor (added when the recorder
+    // presses Finish) is by construction the last event, so on-court minutes are
+    // credited right up to the whistle even if no stat was logged near the end.
     const endTime = events.length ? events[events.length - 1].t : 0;
 
     const starters = roster.filter(r => r && r.starter && r.name).map(r => r.name);

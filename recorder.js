@@ -57,7 +57,8 @@
     'ft_made': 'FT \u2713', 'ft_miss': 'FT \u2717',
     oreb: 'Off reb', dreb: 'Def reb', ast: 'Assist',
     stl: 'Steal', blk: 'Block', to: 'Turnover', foul: 'Foul',
-    sub_in: 'Sub in', sub_out: 'Sub out', opp_pts: 'Opp points', opp_foul: 'Opp foul'
+    sub_in: 'Sub in', sub_out: 'Sub out', opp_pts: 'Opp points', opp_foul: 'Opp foul',
+    finish: 'Finish'
   };
 
   const MADE_2_3 = new Set(['2pt_made', '3pt_made']);
@@ -81,7 +82,8 @@
     clock: null,
     seq: 0,
     saveTimer: null,
-    screen: 'home'
+    screen: 'home',
+    finishEventId: null
   };
 
   // ---------- API ----------
@@ -163,7 +165,7 @@
     if (state.screen === 'setup') showScreen('home');
     else if (state.screen === 'squad') showScreen('setup');
     else if (state.screen === 'live') showScreen('home');
-    else if (state.screen === 'review') showScreen('live');
+    else if (state.screen === 'review') keepRecording();
   }
 
   // ---------- home ----------
@@ -376,6 +378,10 @@
 
   // ---------- live ----------
   function enterLive() {
+    // A finish anchor only belongs to a completed recording; drop any that were
+    // autosaved before the recorder returned to live so it never lingers.
+    state.draft.events = state.draft.events.filter((e) => e.type !== 'finish');
+    state.finishEventId = null;
     state.seq = state.draft.events.reduce((m, e) => Math.max(m, typeof e.seq === 'number' ? e.seq : 0), 0) + 1;
     initClock();
     $('#recUsLbl').textContent = state.teamName.length > 8 ? state.teamName.slice(0, 8) + '\u2026' : state.teamName;
@@ -394,6 +400,9 @@
       onStateChange: () => { renderClock(); updateClockButton(); },
       onExpire: () => toast('Period ended'),
       onRestartReminder: () => {
+        // Only nudge while actively recording — not on the review screen, where
+        // the clock is intentionally stopped at the finish time.
+        if (state.screen !== 'live') return;
         $('#recReminder').classList.add('show');
         $('#recClockTime').classList.add('reminder');
         if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
@@ -906,6 +915,15 @@
 
   // ---------- review / finish ----------
   function openReview() {
+    // Pressing Finish stops the clock at the current second and drops a "finish"
+    // anchor event at that game time. The aggregator uses it as the end of the
+    // game, so every on-court player's minutes count up to the whistle (not just
+    // to their last recorded stat). Rejecting the finish (Keep recording) deletes
+    // the anchor and restarts the clock at that same time.
+    if (state.clock) state.clock.stop('finish');
+    if (state.finishEventId) { removeEventById(state.finishEventId); state.finishEventId = null; }
+    const fin = addEvent({ type: 'finish' });
+    state.finishEventId = fin.id;
     recompute();
     const perf = state.draft.boxScore.performances || {};
     const cols = ['pts', 'fg', '3pt', 'ft', 'oreb', 'dreb', 'reb', 'asst', 'stl', 'blk', 'to', 'foul', '+/-', 'min'];
@@ -933,12 +951,25 @@
     showScreen('review');
   }
 
+  // Reject the finish: remove the finish anchor and resume the clock at the exact
+  // time the game was stopped, returning to the live recorder.
+  function keepRecording() {
+    if (state.finishEventId) { removeEventById(state.finishEventId); state.finishEventId = null; }
+    showScreen('live');
+    if (state.clock) state.clock.start();
+    renderClock();
+    updateClockButton();
+  }
+
   async function saveComplete() {
+    // Keep the finish anchor — it marks the end of the game for minutes.
+    state.finishEventId = null;
     state.draft.status = 'completed';
     recompute();
     try {
       await api('PUT', `/api/teams/${encodeURIComponent(state.teamId)}/drafts/${encodeURIComponent(state.draft.id)}`, state.draft);
       toast('Saved. An admin can now import it.');
+      if (state.clock) { state.clock.destroy(); state.clock = null; }
       setTimeout(() => { state.draft = null; renderHome(); }, 900);
     } catch (e) {
       toast('Save failed: ' + e.message);
@@ -1015,7 +1046,7 @@
     $('#recLog').addEventListener('click', openLogSheet);
     $('#recFinish').addEventListener('click', openReview);
     $('#recSaveComplete').addEventListener('click', saveComplete);
-    $('#recBackToLive').addEventListener('click', () => showScreen('live'));
+    $('#recBackToLive').addEventListener('click', keepRecording);
   }
 
   // ---------- init ----------
