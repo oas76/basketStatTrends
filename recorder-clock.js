@@ -203,6 +203,16 @@
       setPeriod(state.period + 1);
     }
 
+    /**
+     * Explicitly nudge the recorder to (re)start the clock: fires the reminder
+     * immediately and keeps repeating until the clock is started. Used after
+     * advancing a period, where the clock is stopped awaiting the tip-off.
+     */
+    function remindRestart() {
+      if (opts.onRestartReminder) opts.onRestartReminder();
+      scheduleReminder();
+    }
+
     /** Manually override the remaining time (used by after-the-fact edits). */
     function setRemaining(ms) {
       state.remainingMs = Math.max(0, Number(ms) || 0);
@@ -240,6 +250,7 @@
       toggle,
       setPeriod,
       nextPeriod,
+      remindRestart,
       setRemaining,
       getState,
       handleEvent,

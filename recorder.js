@@ -509,6 +509,22 @@
     return ev;
   }
 
+  // Opponent scoring submenu: +1 / +2 / +3 in one tap-through.
+  function openOppPointsSheet() {
+    const body = el('div', {});
+    body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Opponent scored' }));
+    const labels = { 1: '+1  Free throw', 2: '+2  Field goal', 3: '+3  Three' };
+    const grid = el('div', { class: 'rec-oppmenu' }, [1, 2, 3].map((v) =>
+      el('button', {
+        class: 'rec-btn block',
+        text: labels[v],
+        onclick: () => { addEvent({ type: 'opp_pts', value: v }); toast('Opponent +' + v); closeSheet(); }
+      })
+    ));
+    body.appendChild(grid);
+    openSheet('Opponent point', body);
+  }
+
   function removeEventById(id) {
     // Cascade: also remove assists linked to this event.
     state.draft.events = state.draft.events.filter((e) => e.id !== id && e.linkedEventId !== id);
@@ -914,12 +930,15 @@
     $('#recStartGame').addEventListener('click', startGame);
     $('#recClockToggle').addEventListener('click', () => { state.clock.toggle(); });
     $('#recNextPeriod').addEventListener('click', () => {
-      if (confirm('Advance to the next period?')) { state.clock.nextPeriod(); renderClock(); updateClockButton(); }
+      if (confirm('Advance to the next period?')) {
+        state.clock.nextPeriod();
+        renderClock();
+        updateClockButton();
+        // New period: clock is stopped awaiting the tip-off — nudge to restart.
+        state.clock.remindRestart();
+      }
     });
-    document.querySelectorAll('.rec-opp-bar [data-opp]').forEach((b) => b.addEventListener('click', () => {
-      addEvent({ type: 'opp_pts', value: parseInt(b.dataset.opp, 10) });
-      toast('Opponent +' + b.dataset.opp);
-    }));
+    document.querySelectorAll('[data-opp-menu]').forEach((b) => b.addEventListener('click', openOppPointsSheet));
     document.querySelectorAll('[data-opp-foul]').forEach((b) => b.addEventListener('click', () => {
       addEvent({ type: 'opp_foul' });
       toast('Opponent foul');

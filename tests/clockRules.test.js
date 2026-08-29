@@ -83,6 +83,30 @@ describe('clock controller restart reminder', () => {
     ctrl.destroy();
   });
 
+  test('remindRestart nudges immediately and repeats (used after next period)', () => {
+    const onRestartReminder = jest.fn();
+    const ctrl = CLK.createClockController({
+      meta: { periods: 4, periodLengthMin: 10 },
+      rules: { restartReminderSec: 10 },
+      onRestartReminder
+    });
+
+    ctrl.nextPeriod(); // clock is stopped for the new period
+    expect(ctrl.getState().running).toBe(false);
+    expect(onRestartReminder).not.toHaveBeenCalled();
+
+    ctrl.remindRestart();
+    expect(onRestartReminder).toHaveBeenCalledTimes(1); // fires right away
+
+    jest.advanceTimersByTime(10000);
+    expect(onRestartReminder).toHaveBeenCalledTimes(2); // and keeps nudging
+
+    ctrl.start(); // starting the clock cancels further reminders
+    jest.advanceTimersByTime(30000);
+    expect(onRestartReminder).toHaveBeenCalledTimes(2);
+    ctrl.destroy();
+  });
+
   test('handleEvent auto-stops the running clock on a foul', () => {
     const ctrl = CLK.createClockController({ meta: { periods: 4, periodLengthMin: 10 } });
     ctrl.setPeriod(1);

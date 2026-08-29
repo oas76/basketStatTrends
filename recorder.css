@@ -200,11 +200,22 @@ body.recorder-body {
 
 .rec-reminder-banner {
   display: none; align-items: center; gap: 8px; justify-content: center;
-  background: rgba(248,113,113,0.14); border: 1px solid rgba(248,113,113,0.4);
-  color: var(--negative); padding: 10px; border-radius: var(--radius-md);
-  font-weight: 700; font-size: 14px; margin-bottom: 12px;
+  background: rgba(248,113,113,0.14); border: 2px solid rgba(248,113,113,0.4);
+  color: var(--negative); padding: 12px; border-radius: var(--radius-md);
+  font-weight: 800; font-size: 16px; letter-spacing: 0.01em; margin-bottom: 12px;
+  text-transform: uppercase;
 }
-.rec-reminder-banner.show { display: flex; }
+.rec-reminder-banner.show { display: flex; animation: recFlash 0.85s ease-in-out infinite; }
+@keyframes recFlash {
+  0%, 100% {
+    background: rgba(248,113,113,0.12); border-color: rgba(248,113,113,0.45);
+    transform: scale(1); box-shadow: 0 0 0 0 rgba(248,113,113,0);
+  }
+  50% {
+    background: rgba(248,113,113,0.45); border-color: rgba(248,113,113,1);
+    transform: scale(1.035); box-shadow: 0 0 18px 2px rgba(248,113,113,0.55);
+  }
+}
 
 /* ---- On-court grid ---- */
 .rec-oncourt { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
@@ -238,11 +249,20 @@ body.recorder-body {
 .rec-ev:active { transform: scale(0.96); }
 .rec-ev.make { border-color: rgba(74,222,128,0.5); }
 .rec-ev.miss { border-color: rgba(248,113,113,0.4); }
+/* Opponent actions live in the same Play grid but read as "the other team". */
+.rec-ev.opp {
+  background: rgba(148,163,184,0.10); border-color: rgba(148,163,184,0.45);
+  color: var(--text-secondary);
+}
+.rec-ev.opp:active { transform: scale(0.96); }
 
 /* ---- Opponent quick score ---- */
 .rec-opp-bar { display: flex; gap: 8px; margin-top: 14px; }
 .rec-event-groups .rec-opp-bar { margin-top: 2px; }
 .rec-opp-bar .rec-btn { padding: 12px; min-height: 50px; font-size: 15px; }
+/* Opponent points submenu (+1 / +2 / +3) */
+.rec-oppmenu { display: flex; flex-direction: column; gap: 10px; }
+.rec-oppmenu .rec-btn { min-height: 56px; font-size: 16px; font-weight: 700; }
 
 /* ---- Bottom action bar ---- */
 .rec-bottombar {
