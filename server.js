@@ -1132,7 +1132,8 @@ app.put('/api/teams/:teamId/data', requireSameOrigin, async (req, res) => {
     const saved = await teamStore.saveTeamData(req.params.teamId, {
       players: body.players || {},
       games: Array.isArray(body.games) ? body.games : [],
-      leagues: Array.isArray(body.leagues) ? body.leagues : []
+      leagues: Array.isArray(body.leagues) ? body.leagues : [],
+      finishedLeagues: Array.isArray(body.finishedLeagues) ? body.finishedLeagues : []
     });
     res.json({ success: true, games: saved.games.length, players: Object.keys(saved.players).length });
   } catch (e) {

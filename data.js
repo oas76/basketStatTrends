@@ -65,7 +65,8 @@ const hydrateTeam = async (teamId) => {
     const clean = {
       players: data && data.players ? data.players : {},
       games: data && Array.isArray(data.games) ? data.games : [],
-      leagues: data && Array.isArray(data.leagues) ? data.leagues : []
+      leagues: data && Array.isArray(data.leagues) ? data.leagues : [],
+      finishedLeagues: data && Array.isArray(data.finishedLeagues) ? data.finishedLeagues : []
     };
     // Write straight to the cache key (do NOT trigger a server save).
     localStorage.setItem(storageKey(), JSON.stringify(clean));
@@ -84,7 +85,7 @@ const saveToServer = async () => {
   if (!activeTeamId) return false;
   try {
     const raw = localStorage.getItem(storageKey());
-    const data = raw ? JSON.parse(raw) : { players: {}, games: [], leagues: [] };
+    const data = raw ? JSON.parse(raw) : { players: {}, games: [], leagues: [], finishedLeagues: [] };
     const res = await fetch(`/api/teams/${encodeURIComponent(activeTeamId)}/data`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -110,7 +111,7 @@ const scheduleServerSave = () => {
 const loadData = () => {
   const raw = localStorage.getItem(storageKey());
   if (!raw) {
-    return { players: {}, games: [], leagues: [] };
+    return { players: {}, games: [], leagues: [], finishedLeagues: [] };
   }
   try {
     const data = JSON.parse(raw);
@@ -121,7 +122,8 @@ const loadData = () => {
     const result = {
       players: data.players || {},
       games: data.games || [],
-      leagues: Array.isArray(data.leagues) ? data.leagues : []
+      leagues: Array.isArray(data.leagues) ? data.leagues : [],
+      finishedLeagues: Array.isArray(data.finishedLeagues) ? data.finishedLeagues : []
     };
 
     // Ensure every game has a valid string ID
@@ -139,7 +141,7 @@ const loadData = () => {
     return result;
   } catch (error) {
     console.warn("Failed to parse stored data", error);
-    return { players: {}, games: [], leagues: [] };
+    return { players: {}, games: [], leagues: [], finishedLeagues: [] };
   }
 };
 
@@ -509,7 +511,46 @@ const removeLeague = (name) => {
   if (!n) return Promise.resolve(false);
   const data = loadData();
   data.leagues = (Array.isArray(data.leagues) ? data.leagues : []).filter((l) => l !== n);
+  data.finishedLeagues = (Array.isArray(data.finishedLeagues) ? data.finishedLeagues : []).filter((l) => l !== n);
   return saveData(data, { immediate: true });
+};
+
+/** Names of competitions marked "finished" (kept in stats, hidden from new games). */
+const getFinishedLeagues = () => {
+  const data = loadData();
+  return Array.isArray(data.finishedLeagues) ? data.finishedLeagues : [];
+};
+
+/**
+ * Mark a competition finished or reopen it. Finished competitions still appear in
+ * stats (games remain tagged), but are excluded from the new-game recorder.
+ * Case-insensitive matching; the stored casing is preserved.
+ */
+const setLeagueFinished = (name, finished) => {
+  const n = String(name || '').trim();
+  if (!n) return Promise.resolve(false);
+  const data = loadData();
+  const list = Array.isArray(data.finishedLeagues) ? data.finishedLeagues : [];
+  const without = list.filter((l) => l.toLowerCase() !== n.toLowerCase());
+  data.finishedLeagues = finished ? [...without, n] : without;
+  return saveData(data, { immediate: true });
+};
+
+/** Is a competition marked finished? Case-insensitive. */
+const isLeagueFinished = (name) => {
+  const n = String(name || '').trim().toLowerCase();
+  if (!n) return false;
+  return getFinishedLeagues().some((l) => l.toLowerCase() === n);
+};
+
+/**
+ * Competitions available for a NEW game: the registry minus any finished ones.
+ * (Stats views should keep using getLeagues()/game-derived leagues so finished
+ * competitions stay visible historically.)
+ */
+const getActiveLeagues = () => {
+  const finished = new Set(getFinishedLeagues().map((l) => l.toLowerCase()));
+  return getLeagues().filter((l) => !finished.has(String(l).toLowerCase()));
 };
 
 /**
@@ -1070,6 +1111,10 @@ window.basketStatData = {
   getLeagues,
   addLeague,
   removeLeague,
+  getFinishedLeagues,
+  setLeagueFinished,
+  isLeagueFinished,
+  getActiveLeagues,
   getPlayerProfile,
   calculateAge,
   getAllStatKeys,

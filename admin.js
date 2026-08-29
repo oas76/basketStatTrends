@@ -194,6 +194,8 @@ const renderLeagues = () => {
   if (!leaguesGrid) return;
 
   const registry = (window.basketStatData.getLeagues && window.basketStatData.getLeagues()) || [];
+  const finishedList = (window.basketStatData.getFinishedLeagues && window.basketStatData.getFinishedLeagues()) || [];
+  const finishedSet = new Set(finishedList.map((l) => String(l).toLowerCase()));
   const { games } = window.basketStatData.loadData();
   const fromGames = new Set(games.map((g) => g.league).filter(Boolean));
   const registrySet = new Set(registry);
@@ -209,6 +211,17 @@ const renderLeagues = () => {
   leaguesGrid.innerHTML = all
     .map((name) => {
       const inRegistry = registrySet.has(name);
+      const isFinished = finishedSet.has(String(name).toLowerCase());
+      // Finish/reopen only applies to registered competitions.
+      const finishBtn = !inRegistry
+        ? ''
+        : isFinished
+          ? `<button class="btn-icon" data-laction="reopen" data-name="${escapeHtml(name)}" title="Reopen for new games">
+               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+             </button>`
+          : `<button class="btn-icon" data-laction="finish" data-name="${escapeHtml(name)}" title="Mark finished (hide from new games)">
+               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>
+             </button>`;
       const removeBtn = inRegistry
         ? `<button class="btn-icon danger" data-laction="remove" data-name="${escapeHtml(name)}" title="Remove competition">
              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
@@ -216,10 +229,13 @@ const renderLeagues = () => {
         : `<button class="btn-icon" data-laction="add" data-name="${escapeHtml(name)}" title="Add to registry">
              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
            </button>`;
+      const tag = isFinished
+        ? ' <em style="font-size:11px; color:var(--text-muted);">(finished)</em>'
+        : (inRegistry ? '' : ' <em style="font-size:11px; color:var(--text-muted);">(from games)</em>');
       return `
-        <div class="player-chip">
-          <span class="name">${escapeHtml(name)}${inRegistry ? '' : ' <em style="font-size:11px; color:var(--text-muted);">(from games)</em>'}</span>
-          <span class="actions" style="display:inline-flex; gap:4px; margin-left:auto;">${removeBtn}</span>
+        <div class="player-chip"${isFinished ? ' style="opacity:0.7;"' : ''}>
+          <span class="name">${escapeHtml(name)}${tag}</span>
+          <span class="actions" style="display:inline-flex; gap:4px; margin-left:auto;">${finishBtn}${removeBtn}</span>
         </div>
       `;
     })
@@ -524,6 +540,12 @@ if (leaguesGrid) leaguesGrid.addEventListener('click', async (e) => {
     if (!confirm(`Remove competition "${name}" from the registry? Games already tagged with it are unaffected.`)) return;
     ok = await window.basketStatData.removeLeague(name);
     msg = `Competition ${name} removed`;
+  } else if (action === 'finish') {
+    ok = await window.basketStatData.setLeagueFinished(name, true);
+    msg = `Competition ${name} marked finished`;
+  } else if (action === 'reopen') {
+    ok = await window.basketStatData.setLeagueFinished(name, false);
+    msg = `Competition ${name} reopened`;
   } else {
     return;
   }

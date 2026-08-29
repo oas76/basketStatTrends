@@ -110,7 +110,7 @@ describe('loadData – game ID repair', () => {
 
   test('returns empty structure for empty localStorage', () => {
     const data = api.loadData();
-    expect(data).toEqual({ players: {}, games: [], leagues: [] });
+    expect(data).toEqual({ players: {}, games: [], leagues: [], finishedLeagues: [] });
   });
 });
 
@@ -137,6 +137,33 @@ describe('league registry', () => {
     api.addLeague('B');
     api.removeLeague('A');
     expect(api.getLeagues()).toEqual(['B']);
+  });
+
+  test('setLeagueFinished hides a competition from new games but keeps it registered', () => {
+    api.addLeague('Spring Cup');
+    api.addLeague('Autumn League');
+    api.setLeagueFinished('Spring Cup', true);
+
+    // Still in the registry (so stats keep it), but flagged finished.
+    expect(api.getLeagues()).toEqual(['Spring Cup', 'Autumn League']);
+    expect(api.getFinishedLeagues()).toEqual(['Spring Cup']);
+    expect(api.isLeagueFinished('spring cup')).toBe(true);
+
+    // New-game options exclude finished competitions.
+    expect(api.getActiveLeagues()).toEqual(['Autumn League']);
+
+    // Reopening restores it to the new-game list.
+    api.setLeagueFinished('Spring Cup', false);
+    expect(api.getFinishedLeagues()).toEqual([]);
+    expect(api.getActiveLeagues()).toEqual(['Spring Cup', 'Autumn League']);
+  });
+
+  test('removeLeague also clears any finished flag', () => {
+    api.addLeague('Gone');
+    api.setLeagueFinished('Gone', true);
+    api.removeLeague('Gone');
+    expect(api.getLeagues()).toEqual([]);
+    expect(api.getFinishedLeagues()).toEqual([]);
   });
 });
 

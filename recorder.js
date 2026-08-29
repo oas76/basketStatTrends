@@ -217,7 +217,7 @@
     try {
       state.teamData = await api('GET', `/api/teams/${encodeURIComponent(team.id)}/data`);
     } catch (e) {
-      state.teamData = { players: {}, games: [], leagues: [] };
+      state.teamData = { players: {}, games: [], leagues: [], finishedLeagues: [] };
     }
     setupNewGame();
   }
@@ -238,7 +238,12 @@
     const registry = (state.teamData && Array.isArray(state.teamData.leagues)) ? state.teamData.leagues : [];
     const fromGames = ((state.teamData && state.teamData.games) || [])
       .map((g) => g.league).filter(Boolean);
-    const leagues = Array.from(new Set([...registry, ...fromGames]));
+    // Finished competitions stay in stats but must not be offered for a new game.
+    const finished = new Set(
+      ((state.teamData && state.teamData.finishedLeagues) || []).map((l) => String(l).toLowerCase())
+    );
+    const leagues = Array.from(new Set([...registry, ...fromGames]))
+      .filter((l) => !finished.has(String(l).toLowerCase()));
     const sel = $('#recLeague');
     sel.innerHTML = '';
     leagues.forEach((l) => sel.appendChild(el('option', { value: l, text: l })));
@@ -891,7 +896,7 @@
     state.teamId = team.id;
     state.teamName = team.name;
     try { state.teamData = await api('GET', `/api/teams/${encodeURIComponent(team.id)}/data`); }
-    catch (e) { state.teamData = { players: {}, games: [] }; }
+    catch (e) { state.teamData = { players: {}, games: [], leagues: [], finishedLeagues: [] }; }
     state.draft = normalizeDraft(draft);
     enterLive();
   }
