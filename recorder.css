@@ -204,8 +204,26 @@ body.recorder-body {
 .rec-player-name { font-size: 13px; font-weight: 600; text-align: center; line-height: 1.15; }
 .rec-player-pm { font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
+/* ---- Event-first record grid ---- */
+.rec-event-groups { display: flex; flex-direction: column; gap: 6px; }
+.rec-eg-label {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-secondary); font-weight: 700; margin: 12px 0 2px;
+}
+.rec-event-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.rec-ev {
+  appearance: none; border: 1px solid var(--border); background: var(--surface-raised); color: var(--text);
+  font-family: inherit; font-weight: 700; font-size: 15px; border-radius: var(--radius-md);
+  padding: 16px 8px; min-height: 60px; cursor: pointer; touch-action: manipulation;
+  transition: transform 0.06s ease, filter 0.15s ease;
+}
+.rec-ev:active { transform: scale(0.96); }
+.rec-ev.make { border-color: rgba(74,222,128,0.5); }
+.rec-ev.miss { border-color: rgba(248,113,113,0.4); }
+
 /* ---- Opponent quick score ---- */
 .rec-opp-bar { display: flex; gap: 8px; margin-top: 14px; }
+.rec-event-groups .rec-opp-bar { margin-top: 2px; }
 .rec-opp-bar .rec-btn { padding: 12px; min-height: 50px; font-size: 15px; }
 
 /* ---- Bottom action bar ---- */
@@ -265,6 +283,9 @@ body.recorder-body {
 .rec-log-item .rec-log-tag { font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 999px; background: var(--surface-raised); color: var(--text-secondary); }
 .rec-log-item .rec-log-tag.pos { color: var(--positive); }
 .rec-log-item .rec-log-tag.neg { color: var(--negative); }
+.rec-log-item.unassigned { background: rgba(94,234,212,0.06); }
+.rec-log-item.unassigned .rec-log-main { color: var(--accent); }
+.rec-log-item .rec-log-tag.assign { background: var(--accent); color: #04201b; }
 
 /* Box score preview table */
 .rec-box-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: var(--radius-md); }

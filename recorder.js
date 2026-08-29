@@ -574,6 +574,52 @@
     openAssistSheet(name, basket);
   }
 
+  // ---------- event-first entry: pick player after the event ----------
+  const SHORT_LABEL = { '2pt_made': '2PT', '2pt_miss': '2PT', '3pt_made': '3PT', '3pt_miss': '3PT', 'ft_made': 'FT', 'ft_miss': 'FT' };
+  function pickerTitle(type) {
+    if (MADE_2_3.has(type) || type === 'ft_made') return `Who scored the ${SHORT_LABEL[type]}?`;
+    if (type === '2pt_miss' || type === '3pt_miss' || type === 'ft_miss') return `Who missed the ${SHORT_LABEL[type]}?`;
+    return `${TYPE_LABELS[type] || type} \u2014 who?`;
+  }
+
+  function pickerTile(name, onClick) {
+    const perf = (state.draft.boxScore && state.draft.boxScore.performances) || {};
+    const pm = perf[name] ? perf[name]['+/-'] : 0;
+    return el('button', { class: 'rec-player-tile', onclick: onClick }, [
+      el('div', { class: 'rec-player-num', text: String(rosterNumber(name)) }),
+      el('div', { class: 'rec-player-name', text: name }),
+      el('div', { class: 'rec-player-pm', text: (pm > 0 ? '+' : '') + pm })
+    ]);
+  }
+
+  // Tapping an event opens the player picker; the player is chosen next.
+  function openPlayerPickerForType(type) {
+    const onCourt = Array.from(computeOnCourt());
+    const bench = state.draft.roster.map((r) => r.name).filter((n) => !onCourt.includes(n));
+    const body = el('div', {});
+    body.appendChild(el('div', { class: 'rec-sheet-section', text: 'On court' }));
+    const onGrid = el('div', { class: 'rec-oncourt' }, onCourt.map((n) => pickerTile(n, () => recordEventFor(type, n))));
+    if (!onCourt.length) onGrid.appendChild(el('div', { class: 'rec-empty', text: 'No players on court. Use Subs first.' }));
+    body.appendChild(onGrid);
+    if (bench.length) {
+      body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Bench' }));
+      body.appendChild(el('div', { class: 'rec-oncourt' }, bench.map((n) => pickerTile(n, () => recordEventFor(type, n)))));
+    }
+    body.appendChild(el('button', {
+      class: 'rec-btn ghost block', text: 'Assign later', style: 'margin-top:14px;',
+      onclick: () => recordEventFor(type, null)
+    }));
+    openSheet(pickerTitle(type), body);
+  }
+
+  function recordEventFor(type, player) {
+    const ev = addEvent({ type, player: player || null });
+    closeSheet();
+    if (MADE_2_3.has(type) && player) { openAssistSheet(player, ev); return; }
+    const who = player ? `#${rosterNumber(player)} ${player}` : 'unassigned';
+    toast(`${TYPE_LABELS[type]} \u2014 ${who}`);
+  }
+
   // ---------- assist chooser ----------
   function openAssistSheet(scorer, basketEv) {
     const onCourt = Array.from(computeOnCourt()).filter((n) => n !== scorer);
@@ -582,7 +628,11 @@
       html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`
     })));
     const noAssist = el('button', { class: 'rec-btn block', text: 'No assist', style: 'margin-top:12px;', onclick: closeSheet });
-    openSheet('Assisted by?', el('div', {}, [grid, noAssist]));
+    const later = el('button', {
+      class: 'rec-btn ghost block', text: 'Assign later', style: 'margin-top:8px;',
+      onclick: () => { addEvent({ type: 'ast', player: null, linkedEventId: basketEv.id }); closeSheet(); toast('Assist \u2014 assign later'); }
+    });
+    openSheet('Assisted by?', el('div', {}, [grid, noAssist, later]));
   }
 
   // ---------- substitutions ----------
@@ -635,7 +685,8 @@
     if (ev.type === 'opp_pts') return `Opponent +${ev.value}`;
     const label = TYPE_LABELS[ev.type] || ev.type;
     const num = ev.player ? rosterNumber(ev.player) : '';
-    return ev.player ? `${label} \u2014 #${num} ${ev.player}` : label;
+    if (ev.player) return `${label} \u2014 #${num} ${ev.player}`;
+    return AGG.SUBJECT_STAT_TYPES.has(ev.type) ? `${label} \u2014 Unassigned` : label;
   }
   function eventTimeLabel(ev) {
     const p = ev.period > state.draft.meta.periods ? 'OT' + (ev.period - state.draft.meta.periods) : 'P' + ev.period;
@@ -647,13 +698,14 @@
     const list = el('div', {});
     if (!events.length) list.appendChild(el('div', { class: 'rec-empty', text: 'No events yet.' }));
     events.forEach((ev) => {
+      const unassigned = AGG.SUBJECT_STAT_TYPES.has(ev.type) && !ev.player;
       let tagCls = '';
       if (AGG.POINT_VALUES[ev.type]) tagCls = ' pos';
       else if (ev.type === 'opp_pts' || ev.type === 'to' || ev.type === 'foul') tagCls = ' neg';
-      list.appendChild(el('div', { class: 'rec-log-item', onclick: () => openEditSheet(ev.id) }, [
+      list.appendChild(el('div', { class: 'rec-log-item' + (unassigned ? ' unassigned' : ''), onclick: () => openEditSheet(ev.id) }, [
         el('div', { class: 'rec-log-time', text: eventTimeLabel(ev) }),
         el('div', { class: 'rec-log-main', text: eventDescription(ev) }),
-        el('div', { class: 'rec-log-tag' + tagCls, text: 'Edit' })
+        el('div', { class: 'rec-log-tag' + (unassigned ? ' assign' : tagCls), text: unassigned ? 'Assign' : 'Edit' })
       ]));
     });
     openSheet('Play log', list);
@@ -843,6 +895,7 @@
       addEvent({ type: 'opp_pts', value: parseInt(b.dataset.opp, 10) });
       toast('Opponent +' + b.dataset.opp);
     }));
+    document.querySelectorAll('.rec-ev[data-ev]').forEach((b) => b.addEventListener('click', () => openPlayerPickerForType(b.dataset.ev)));
     $('#recUndo').addEventListener('click', undo);
     $('#recSubs').addEventListener('click', () => openSubSheet(null));
     $('#recLog').addEventListener('click', openLogSheet);

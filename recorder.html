@@ -108,14 +108,37 @@
           <button class="rec-btn" id="recNextPeriod">Next period ›</button>
         </div>
 
-        <div class="rec-h">On court</div>
-        <div class="rec-oncourt" id="recOnCourt"></div>
-
-        <div class="rec-opp-bar">
-          <button class="rec-btn" data-opp="1">Opp +1</button>
-          <button class="rec-btn" data-opp="2">Opp +2</button>
-          <button class="rec-btn" data-opp="3">Opp +3</button>
+        <div class="rec-h">Record event</div>
+        <div class="rec-event-groups">
+          <div class="rec-eg-label">Shooting</div>
+          <div class="rec-event-grid">
+            <button class="rec-ev make" data-ev="2pt_made">2PT &#10003;</button>
+            <button class="rec-ev make" data-ev="3pt_made">3PT &#10003;</button>
+            <button class="rec-ev make" data-ev="ft_made">FT &#10003;</button>
+            <button class="rec-ev miss" data-ev="2pt_miss">2PT &#10007;</button>
+            <button class="rec-ev miss" data-ev="3pt_miss">3PT &#10007;</button>
+            <button class="rec-ev miss" data-ev="ft_miss">FT &#10007;</button>
+          </div>
+          <div class="rec-eg-label">Play</div>
+          <div class="rec-event-grid">
+            <button class="rec-ev" data-ev="oreb">Off reb</button>
+            <button class="rec-ev" data-ev="dreb">Def reb</button>
+            <button class="rec-ev" data-ev="ast">Assist</button>
+            <button class="rec-ev" data-ev="stl">Steal</button>
+            <button class="rec-ev" data-ev="blk">Block</button>
+            <button class="rec-ev" data-ev="to">Turnover</button>
+            <button class="rec-ev" data-ev="foul">Foul</button>
+          </div>
+          <div class="rec-eg-label">Opponent</div>
+          <div class="rec-opp-bar">
+            <button class="rec-btn" data-opp="1">Opp +1</button>
+            <button class="rec-btn" data-opp="2">Opp +2</button>
+            <button class="rec-btn" data-opp="3">Opp +3</button>
+          </div>
         </div>
+
+        <div class="rec-h" style="margin-top:18px;">On court</div>
+        <div class="rec-oncourt info" id="recOnCourt"></div>
       </section>
 
       <!-- REVIEW -->
