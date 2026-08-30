@@ -288,10 +288,11 @@
 
   function buildInitialRoster() {
     const players = (state.teamData && state.teamData.players) || {};
+    // Start from an empty squad: nobody is in until the recorder taps them in.
     return Object.keys(players).map((name) => ({
       name,
       number: players[name] && (players[name].number === 0 || players[name].number) ? players[name].number : null,
-      included: players[name] ? players[name].active !== false : true,
+      included: false,
       starter: false
     }));
   }
@@ -299,41 +300,47 @@
   // ---------- squad ----------
   function renderSquad() {
     const wrap = $('#recSquadList');
+    wrap.className = 'rec-squad-grid';
     wrap.innerHTML = '';
     const roster = state.draft.roster;
-    roster.forEach((r, idx) => {
+    roster.forEach((r) => {
+      const stateCls = r.starter ? 'starter' : (r.included ? 'in' : 'out');
+      // Editable number badge. Its own clicks are swallowed so tapping the number
+      // to fix it doesn't also cycle the tile's in/out/starter state.
       const numInput = el('input', {
-        class: 'rec-num-input' + ((r.included && (r.number === null || r.number === '')) ? ' missing' : ''),
-        type: 'number', inputmode: 'numeric', value: r.number == null ? '' : r.number, 'aria-label': 'Number'
+        class: 'rec-tile-num' + ((r.included && (r.number === null || r.number === '')) ? ' missing' : ''),
+        type: 'number', inputmode: 'numeric', value: r.number == null ? '' : r.number,
+        'aria-label': 'Number for ' + r.name
       });
+      numInput.addEventListener('click', (e) => e.stopPropagation());
       numInput.addEventListener('input', () => {
         const v = numInput.value.trim();
         r.number = v === '' ? null : parseInt(v, 10);
         numInput.classList.toggle('missing', r.included && r.number == null);
         updateSquadNote();
       });
-      const includeBtn = el('button', {
-        class: 'rec-chip-btn' + (r.included ? ' on' : ''), text: r.included ? 'In' : 'Out'
+      const badge = el('span', {
+        class: 'rec-tile-badge', text: r.starter ? '\u2605' : (r.included ? 'IN' : '')
       });
-      includeBtn.addEventListener('click', () => {
-        r.included = !r.included;
-        if (!r.included) r.starter = false;
+      const tile = el('div', {
+        class: 'rec-squad-tile ' + stateCls, role: 'button', tabindex: '0',
+        'aria-pressed': r.included ? 'true' : 'false'
+      }, [
+        el('div', { class: 'rec-tile-top' }, [numInput, badge]),
+        el('div', { class: 'rec-squad-tile-name', text: r.name })
+      ]);
+      const cycle = () => {
+        // out -> in (bench) -> starter -> out
+        if (!r.included) { r.included = true; r.starter = false; }
+        else if (!r.starter) { r.starter = true; }
+        else { r.included = false; r.starter = false; }
         renderSquad();
+      };
+      tile.addEventListener('click', cycle);
+      tile.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cycle(); }
       });
-      const starBtn = el('button', {
-        class: 'rec-chip-btn star' + (r.starter ? ' on' : ''), text: '\u2605'
-      });
-      starBtn.addEventListener('click', () => {
-        if (!r.included) { r.included = true; }
-        r.starter = !r.starter;
-        renderSquad();
-      });
-      wrap.appendChild(el('div', { class: 'rec-squad-row' + (r.included ? '' : ' excluded') }, [
-        numInput,
-        el('div', { class: 'rec-squad-name', text: r.name }),
-        includeBtn,
-        starBtn
-      ]));
+      wrap.appendChild(tile);
     });
     updateSquadNote();
   }
@@ -504,12 +511,30 @@
     if (!onCourt.size) grid.appendChild(el('div', { class: 'rec-empty', text: 'No players on court. Use Subs to add players.' }));
   }
 
-  // End the current period on confirmation: stop the clock, drop a `period_end`
-  // anchor at the exact game time so the just-completed period's minutes are
-  // credited to every on-court player, then advance to the next period. addEvent
-  // recomputes the box score, so it's up to date the moment the period ends.
+  // "Next period ›": for regulation periods this just advances. On the last
+  // configured period (or any OT period), ending it is the natural end of the
+  // game, so offer a choice: finish now (box-score review) or play overtime.
   function endPeriod() {
+    const period = state.clock ? state.clock.getState().period : 1;
+    const periods = (state.draft && state.draft.meta && state.draft.meta.periods) || 4;
+    if (period >= periods) {
+      const otNum = period - periods + 1; // index of the OT we'd start next
+      const body = el('div', {}, [
+        el('button', { class: 'rec-btn primary block', text: 'Finish game', style: 'margin-bottom:10px;', onclick: () => { closeSheet(); openReview(); } }),
+        el('button', { class: 'rec-btn block', text: 'Go to overtime (OT' + otNum + ')', onclick: () => { closeSheet(); advancePeriod(); } })
+      ]);
+      openSheet('End of ' + (period > periods ? 'OT' + (period - periods) : 'P' + period), body);
+      return;
+    }
     if (!confirm('End this period and advance to the next?')) return;
+    advancePeriod();
+  }
+
+  // Stop the clock, drop a `period_end` anchor at the exact game time so the
+  // just-completed period's minutes are credited to every on-court player, then
+  // advance to the next period. addEvent recomputes the box score, so it's up to
+  // date the moment the period ends.
+  function advancePeriod() {
     if (state.clock) state.clock.stop('period-end');
     addEvent({ type: 'period_end' });
     state.clock.nextPeriod();
@@ -945,7 +970,16 @@
     const fin = addEvent({ type: 'finish' });
     state.finishEventId = fin.id;
     recompute();
-    const perf = state.draft.boxScore.performances || {};
+    const wrap = $('#recBoxPreview');
+    wrap.innerHTML = '';
+    wrap.appendChild(buildBoxTable(state.draft.boxScore.performances || {}));
+    showScreen('review');
+  }
+
+  // Build the box-score table from a performances map. Shared by the Finish review
+  // screen and the read-only "Box score" peek.
+  function buildBoxTable(perf) {
+    perf = perf || {};
     const cols = ['pts', 'fg', '3pt', 'ft', 'oreb', 'dreb', 'reb', 'asst', 'stl', 'blk', 'to', 'foul', '+/-', 'min'];
     const table = el('table', { class: 'rec-box' });
     const thead = el('thead', {}, [el('tr', {}, [el('th', { text: 'Player' })].concat(cols.map((c) => el('th', { text: c.toUpperCase() }))))]);
@@ -965,10 +999,16 @@
         .concat(cols.map((c) => el('td', { text: fmtCell(withReb, c) })))));
     });
     table.appendChild(thead); table.appendChild(tbody);
-    const wrap = $('#recBoxPreview');
-    wrap.innerHTML = '';
-    wrap.appendChild(table);
-    showScreen('review');
+    return table;
+  }
+
+  // Read-only peek at the current box score. Unlike Finish, it does NOT stop the
+  // clock or drop a finish anchor — recording continues untouched.
+  function openBoxPeek() {
+    recompute();
+    const wrap = el('div', { class: 'rec-box-wrap' });
+    wrap.appendChild(buildBoxTable(state.draft.boxScore.performances || {}));
+    openSheet('Box score', wrap);
   }
 
   // Reject the finish: remove the finish anchor and resume the clock at the exact
@@ -1009,6 +1049,7 @@
   // ---------- menu ----------
   function openMenu() {
     const body = el('div', {}, [
+      state.screen === 'live' ? el('button', { class: 'rec-btn primary block', text: 'Finish game', style: 'margin-bottom:10px;', onclick: () => { closeSheet(); openReview(); } }) : null,
       el('button', { class: 'rec-btn block', text: 'Open stats app', style: 'margin-bottom:10px;', onclick: () => { window.location.href = '/'; } }),
       state.screen === 'live' ? el('button', { class: 'rec-btn danger block', text: 'Discard this recording', style: 'margin-bottom:10px;', onclick: discardDraft }) : null,
       el('button', { class: 'rec-btn ghost block', text: 'Log out', onclick: logout })
@@ -1056,7 +1097,7 @@
     $('#recUndo').addEventListener('click', undo);
     $('#recSubs').addEventListener('click', () => openSubSheet(null));
     $('#recLog').addEventListener('click', openLogSheet);
-    $('#recFinish').addEventListener('click', openReview);
+    $('#recBoxScore').addEventListener('click', openBoxPeek);
     $('#recSaveComplete').addEventListener('click', saveComplete);
     $('#recBackToLive').addEventListener('click', keepRecording);
   }

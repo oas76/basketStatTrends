@@ -131,27 +131,49 @@ body.recorder-body {
 }
 .rec-empty { color: var(--text-muted); font-size: 14px; padding: 24px 8px; text-align: center; }
 
-/* ---- Squad ---- */
-.rec-squad-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md);
-  background: var(--surface-raised); margin-bottom: 8px;
+/* ---- Squad (empty-start, tap-cycle tiles) ---- */
+.rec-squad-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px; align-content: start;
 }
-.rec-squad-row.excluded { opacity: 0.5; }
+.rec-squad-tile {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface-raised); color: var(--text); cursor: pointer;
+  text-align: left; user-select: none; transition: border-color 0.12s ease, background 0.12s ease, opacity 0.12s ease;
+}
+.rec-squad-tile:active { transform: scale(0.97); }
+.rec-squad-tile .rec-tile-top { display: flex; align-items: center; gap: 6px; }
+.rec-squad-tile .rec-tile-num {
+  width: 44px; text-align: center; font-weight: 800; font-size: 15px;
+  padding: 6px 2px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.rec-squad-tile .rec-tile-num.missing { border-color: var(--negative); }
+.rec-squad-tile .rec-tile-badge {
+  margin-left: auto; font-size: 12px; font-weight: 800; line-height: 1;
+  min-width: 20px; text-align: right; color: var(--text-secondary);
+}
+.rec-squad-tile .rec-squad-tile-name {
+  font-size: 12px; font-weight: 600; line-height: 1.2;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* States: out (dimmed), in (bench, accent border), starter (filled) */
+.rec-squad-tile.out { opacity: 0.55; }
+.rec-squad-tile.in { border-color: var(--accent); }
+.rec-squad-tile.in .rec-tile-badge { color: var(--accent); }
+.rec-squad-tile.starter { border-color: transparent; background: var(--accent); color: #04201b; }
+.rec-squad-tile.starter .rec-tile-num { background: rgba(0,0,0,0.18); border-color: transparent; color: #04201b; }
+.rec-squad-tile.starter .rec-tile-badge { color: #3a2c00; }
+
+/* Numeric input reused by the event editor (period field). */
 .rec-num-input {
   width: 58px; text-align: center; font-weight: 700; font-size: 16px;
   padding: 10px 6px; background: var(--bg); border: 1px solid var(--border);
   border-radius: var(--radius-sm); color: var(--text);
 }
 .rec-num-input.missing { border-color: var(--negative); }
-.rec-squad-name { flex: 1; font-size: 15px; font-weight: 600; }
-.rec-chip-btn {
-  border: 1px solid var(--border); background: var(--bg); color: var(--text-secondary);
-  font-family: inherit; font-weight: 700; font-size: 13px; border-radius: 999px;
-  padding: 8px 12px; min-width: 44px; cursor: pointer;
-}
-.rec-chip-btn.on { background: var(--accent); color: #04201b; border-color: transparent; }
-.rec-chip-btn.star.on { background: #fbbf24; color: #3a2c00; }
 
 .rec-note { font-size: 13px; color: var(--text-secondary); margin: 8px 0 14px; }
 .rec-note.warn { color: var(--negative); }
@@ -295,6 +317,18 @@ body.recorder-body {
   font-size: 11px; max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #recOnCourt .rec-empty { padding: 8px; white-space: nowrap; }
+
+/* ---- No-scroll squad picker (mirrors #screen-live) ---- */
+#screen-squad.active {
+  height: calc(100dvh - 56px);
+  padding: 8px 14px calc(16px + env(safe-area-inset-bottom));
+  gap: 6px; overflow: hidden;
+}
+#screen-squad .rec-h { flex: 0 0 auto; margin: 0; }
+#screen-squad #recSquadNote { flex: 0 0 auto; margin: 2px 0; }
+#screen-squad #recSquadList { flex: 1 1 auto; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
+#screen-squad > small.rec-note { flex: 0 0 auto; margin: 2px 0; }
+#screen-squad #recStartGame { flex: 0 0 auto; margin-top: 0 !important; }
 
 /* ---- Opponent quick score ---- */
 .rec-opp-bar { display: flex; gap: 8px; margin-top: 14px; }
