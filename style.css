@@ -2537,30 +2537,109 @@ button.danger:hover {
 
 .players-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
 }
 
 .player-chip {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 8px 10px;
   background: var(--surface-alt, rgba(255,255,255,0.03));
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   font-size: 13px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.player-chip:hover {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+/* Number badge — quiet circular chip so the name reads as the primary label. */
+.player-chip .pnum {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.player-chip:hover .pnum {
+  background: var(--surface-raised, var(--border));
+}
+
+.player-chip .pnum.empty {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Name + games stacked; name truncates instead of wrapping the whole chip. */
+.player-chip .pinfo {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+/* Direct-child name (competitions chips have no .pinfo wrapper). */
+.player-chip > .name {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .player-chip .name {
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .player-chip .games {
   font-size: 11px;
-  color: var(--text-secondary);
-  background: var(--surface);
-  padding: 2px 6px;
-  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+.player-chip.inactive {
+  opacity: 0.55;
+}
+
+/* Actions stay quiet until the chip is hovered/focused, cutting visual noise. */
+.player-chip .actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+  opacity: 0.45;
+  transition: opacity 0.15s ease;
+}
+
+.player-chip:hover .actions,
+.player-chip:focus-within .actions {
+  opacity: 1;
+}
+
+.player-chip .btn-icon {
+  width: 28px;
+  height: 28px;
+}
+
+/* Touch devices have no hover: keep actions fully visible. */
+@media (hover: none) {
+  .player-chip .actions {
+    opacity: 1;
+  }
 }
 
 .settings-link {

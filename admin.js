@@ -164,8 +164,6 @@ const renderPlayers = () => {
       const inRegistry = !!p;
       const number = p && (p.number === 0 || p.number) ? p.number : '';
       const active = !p || p.active !== false;
-      const numberLabel = number !== '' ? `#${escapeHtml(String(number))} ` : '';
-      const statusStyle = active ? '' : 'opacity:0.55;';
       const roleBtns = inRegistry
         ? `<button class="btn-icon" data-paction="edit-number" data-name="${escapeHtml(name)}" title="Edit number">
              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
@@ -178,11 +176,17 @@ const renderPlayers = () => {
         : `<button class="btn-icon" data-paction="add-to-roster" data-name="${escapeHtml(name)}" title="Add to roster">
              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
            </button>`;
+      const numBadge = number !== ''
+        ? `<span class="pnum">${escapeHtml(String(number))}</span>`
+        : `<span class="pnum empty">–</span>`;
       return `
-        <div class="player-chip" style="${statusStyle}">
-          <span class="name">${numberLabel}${escapeHtml(name)}${active ? '' : ' <em style="font-size:11px; color:var(--text-muted);">(inactive)</em>'}</span>
-          <span class="games">${count} games</span>
-          <span class="actions" style="display:inline-flex; gap:4px; margin-left:auto;">${roleBtns}</span>
+        <div class="player-chip${active ? '' : ' inactive'}">
+          ${numBadge}
+          <span class="pinfo">
+            <span class="name">${escapeHtml(name)}</span>
+            <span class="games">${count} ${count === 1 ? 'game' : 'games'}${active ? '' : ' \u00b7 inactive'}</span>
+          </span>
+          <span class="actions">${roleBtns}</span>
         </div>
       `;
     })
