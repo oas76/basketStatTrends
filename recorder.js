@@ -62,6 +62,14 @@
   };
 
   const MADE_2_3 = new Set(['2pt_made', '3pt_made']);
+  // Live-ball events imply play is in progress. If the clock is stopped when one
+  // is recorded during live play (e.g. the recorder forgot to restart it), the
+  // clock auto-starts. Excludes dead-ball/stoppage events (fouls, subs, free
+  // throws) and markers (period_end, finish).
+  const LIVE_BALL_TYPES = new Set([
+    '2pt_made', '2pt_miss', '3pt_made', '3pt_miss',
+    'oreb', 'dreb', 'stl', 'blk', 'to', 'ast', 'opp_pts'
+  ]);
   // Every event type the log editor can create/switch to (shots, plays, subs, opponent).
   const ALL_EVENT_TYPES = [
     '2pt_made', '2pt_miss', '3pt_made', '3pt_miss', 'ft_made', 'ft_miss',
@@ -83,7 +91,8 @@
     seq: 0,
     saveTimer: null,
     screen: 'home',
-    finishEventId: null
+    finishEventId: null,
+    logFilter: { period: 'all', type: 'all' }
   };
 
   // ---------- API ----------
@@ -402,7 +411,9 @@
     if (state.clock) state.clock.destroy();
     state.clock = CLK.createClockController({
       meta: state.draft.meta,
-      rules: state.draft.meta.clockRules,
+      // Always use the current restart-nag cadence, even for drafts created before
+      // it changed (there's no per-game UI for it).
+      rules: Object.assign({}, state.draft.meta.clockRules, { restartReminderSec: CLK.DEFAULT_CLOCK_RULES.restartReminderSec }),
       onTick: () => renderClock(),
       onStateChange: () => { renderClock(); updateClockButton(); },
       onExpire: () => toast('Period ended'),
@@ -546,7 +557,11 @@
   }
 
   // ---------- events ----------
-  function addEvent(partial) {
+  // opts.autoStart (default true): live-ball events restart a stopped clock.
+  // The log editor passes autoStart:false so after-the-fact edits never move the
+  // live clock.
+  function addEvent(partial, opts) {
+    opts = opts || {};
     const s = state.clock.getState();
     const ev = Object.assign({
       id: uid(),
@@ -559,6 +574,11 @@
       linkedEventId: null
     }, partial);
     state.draft.events.push(ev);
+    // Play resumed: if the clock was stopped, start it. Done before handleEvent so
+    // rule-based auto-stops (e.g. a made basket in the last 2:00) still apply.
+    if (opts.autoStart !== false && !s.running && LIVE_BALL_TYPES.has(ev.type)) {
+      state.clock.start();
+    }
     state.clock.handleEvent(ev);
     afterChange();
     return ev;
@@ -783,19 +803,55 @@
     if (ev.player) return `${label} \u2014 #${num} ${ev.player}`;
     return AGG.SUBJECT_STAT_TYPES.has(ev.type) ? `${label} \u2014 Unassigned` : label;
   }
+  function periodLabel(p) {
+    const periods = state.draft.meta.periods;
+    return p > periods ? 'OT' + (p - periods) : 'P' + p;
+  }
   function eventTimeLabel(ev) {
-    const p = ev.period > state.draft.meta.periods ? 'OT' + (ev.period - state.draft.meta.periods) : 'P' + ev.period;
-    return `${p} ${fmtClock(typeof ev.clockMs === 'number' ? ev.clockMs : 0)}`;
+    return `${periodLabel(ev.period)} ${fmtClock(typeof ev.clockMs === 'number' ? ev.clockMs : 0)}`;
   }
 
   function openLogSheet() {
-    const events = state.draft.events.slice().reverse();
+    const all = state.draft.events;
+    const filter = state.logFilter;
     const list = el('div', {});
     list.appendChild(el('button', {
       class: 'rec-btn primary block', text: '+ Add event', style: 'margin-bottom:12px;',
       onclick: () => openCreateEventSheet()
     }));
-    if (!events.length) list.appendChild(el('div', { class: 'rec-empty', text: 'No events yet.' }));
+
+    // Filters: by period and by event type. Options are derived from the events
+    // actually present so the recorder only ever sees relevant choices.
+    const periodsPresent = Array.from(new Set(all.map((e) => e.period))).sort((a, b) => a - b);
+    // Distinct types present, ordered by ALL_EVENT_TYPES (markers like finish/
+    // period_end fall to the end).
+    const typesPresent = Array.from(new Set(all.map((e) => e.type)))
+      .sort((a, b) => {
+        const ia = ALL_EVENT_TYPES.indexOf(a); const ib = ALL_EVENT_TYPES.indexOf(b);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+      });
+    // Drop a stale selection whose value is no longer present.
+    if (filter.period !== 'all' && !periodsPresent.some((p) => String(p) === filter.period)) filter.period = 'all';
+    if (filter.type !== 'all' && !typesPresent.includes(filter.type)) filter.type = 'all';
+    const periodSel = el('select', { class: 'rec-select', 'aria-label': 'Filter by period' }, [
+      el('option', { value: 'all', text: 'All periods' })
+    ].concat(periodsPresent.map((p) => el('option', { value: String(p), text: periodLabel(p) }))));
+    periodSel.value = filter.period;
+    periodSel.addEventListener('change', () => { filter.period = periodSel.value; openLogSheet(); });
+    const typeSel = el('select', { class: 'rec-select', 'aria-label': 'Filter by event type' }, [
+      el('option', { value: 'all', text: 'All types' })
+    ].concat(typesPresent.map((t) => el('option', { value: t, text: TYPE_LABELS[t] || t }))));
+    typeSel.value = filter.type;
+    typeSel.addEventListener('change', () => { filter.type = typeSel.value; openLogSheet(); });
+    list.appendChild(el('div', { class: 'rec-btn-row', style: 'gap:8px; margin-bottom:12px;' }, [periodSel, typeSel]));
+
+    const events = all.filter((e) =>
+      (filter.period === 'all' || String(e.period) === filter.period) &&
+      (filter.type === 'all' || e.type === filter.type)
+    ).reverse();
+
+    if (!all.length) list.appendChild(el('div', { class: 'rec-empty', text: 'No events yet.' }));
+    else if (!events.length) list.appendChild(el('div', { class: 'rec-empty', text: 'No events match this filter.' }));
     events.forEach((ev) => {
       const unassigned = AGG.SUBJECT_STAT_TYPES.has(ev.type) && !ev.player;
       let tagCls = '';
@@ -930,7 +986,7 @@
           value: draftEv.type === 'opp_pts' ? (Number(draftEv.value) || 1) : null,
           period: draftEv.period,
           clockMs: draftEv.clockMs
-        });
+        }, { autoStart: false });
         closeSheet();
         if (MADE_2_3.has(created.type) && created.player) { openAssistSheet(created.player, created); return; }
         openLogSheet();
@@ -951,7 +1007,7 @@
         // Replace any existing linked assist, then add the new one.
         const existing = state.draft.events.find((e) => e.type === 'ast' && e.linkedEventId === basketEv.id);
         if (existing) state.draft.events = state.draft.events.filter((e) => e.id !== existing.id);
-        addEvent({ type: 'ast', player: n, linkedEventId: basketEv.id });
+        addEvent({ type: 'ast', player: n, linkedEventId: basketEv.id }, { autoStart: false });
         openEditSheet(basketEv.id);
       }
     })));

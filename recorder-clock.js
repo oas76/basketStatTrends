@@ -6,7 +6,7 @@
 //   - stop on a foul
 //   - stop on a substitution
 //   - stop on a made basket in the last 2:00 (final period + OT by default)
-//   - remind the recorder to restart 10s after any stoppage
+//   - remind the recorder to restart 5s after any stoppage
 // Auto-rules only ever STOP the clock; the recorder always restarts manually
 // (models the throw-in).
 //
@@ -31,7 +31,7 @@
     lastTwoMinStopOnMadeBasket: true,
     lastTwoMinScope: 'finalAndOT', // or 'allPeriods'
     lastTwoMinIncludeFT: false,
-    restartReminderSec: 10
+    restartReminderSec: 5
   };
 
   const MADE_BASKET_TYPES = new Set(['2pt_made', '3pt_made']);
