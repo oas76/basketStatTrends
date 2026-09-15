@@ -206,6 +206,18 @@ body.recorder-body {
   border-color: rgba(248,113,113,0.5); background: rgba(248,113,113,0.14);
 }
 .rec-foulbar .fb-cell.bonus b, .rec-foulbar .fb-cell.bonus .fb-lbl { color: var(--negative); }
+/* From the 5th team foul on, outline the count so bonus fouls are unmistakable. */
+.rec-foulbar .fb-cell.bonus b {
+  border: 1.5px solid var(--negative); border-radius: var(--radius-sm);
+  padding: 0 6px; line-height: 1.35;
+}
+/* "Bonus" tag: hidden until the cell enters the bonus. */
+.rec-foulbar .fb-tag {
+  display: none; font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--negative);
+  border: 1px solid rgba(248,113,113,0.5); border-radius: 999px; padding: 1px 6px;
+}
+.rec-foulbar .fb-cell.bonus .fb-tag { display: inline-block; }
 .rec-clock-time {
   font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700;
   font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
@@ -254,6 +266,8 @@ body.recorder-body {
 }
 .rec-player-name { font-size: 13px; font-weight: 600; text-align: center; line-height: 1.15; }
 .rec-player-pm { font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.rec-player-pf { font-size: 10px; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.rec-player-pf.danger { color: var(--negative); }
 
 /* ---- Event-first record grid ---- */
 .rec-event-groups { display: flex; flex-direction: column; gap: 6px; }

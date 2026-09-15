@@ -171,9 +171,11 @@
   }
 
   function goBack() {
-    if (state.screen === 'setup') showScreen('home');
+    // Re-fetch drafts when returning Home so discarded/deleted recordings drop off
+    // the "Continue recording" list (renderHome ends by showing the home screen).
+    if (state.screen === 'setup') renderHome();
     else if (state.screen === 'squad') showScreen('setup');
-    else if (state.screen === 'live') showScreen('home');
+    else if (state.screen === 'live') renderHome();
     else if (state.screen === 'review') keepRecording();
   }
 
@@ -328,6 +330,9 @@
         numInput.classList.toggle('missing', r.included && r.number == null);
         updateSquadNote();
       });
+      // On blur, persist the number back to the team registry so the fix sticks
+      // for future games and stats (not just this draft's snapshot).
+      numInput.addEventListener('change', () => savePlayerNumber(r.name, r.number));
       const badge = el('span', {
         class: 'rec-tile-badge', text: r.starter ? '\u2605' : (r.included ? 'IN' : '')
       });
@@ -352,6 +357,18 @@
       wrap.appendChild(tile);
     });
     updateSquadNote();
+  }
+
+  // Persist an edited squad number to the team player registry. Requires team
+  // admin/owner rights; a pure recorder account gets a 403, surfaced as a toast.
+  async function savePlayerNumber(name, number) {
+    const players = state.teamData && state.teamData.players;
+    if (!players || !players[name]) return;
+    players[name].number = (number === '' || number == null) ? null : number;
+    try {
+      await api('PUT', `/api/teams/${encodeURIComponent(state.teamId)}/data`, state.teamData);
+      toast('Number saved');
+    } catch (e) { toast('Could not save number: ' + e.message); }
   }
 
   function updateSquadNote() {
@@ -502,6 +519,16 @@
     themEl.parentElement.classList.toggle('bonus', them >= 5);
   }
 
+  // Personal fouls are cumulative across the whole game (not per period). A player
+  // fouls out at 5 and is barred from the rest of the game.
+  const FOUL_OUT_LIMIT = 5;
+  function personalFouls(name) {
+    return state.draft.events.filter((e) => e.type === 'foul' && e.player === name).length;
+  }
+  function isFouledOut(name) {
+    return personalFouls(name) >= FOUL_OUT_LIMIT;
+  }
+
   function renderLive() {
     $('#recUsScore').textContent = usScore();
     $('#recThemScore').textContent = themScore();
@@ -513,10 +540,14 @@
     Array.from(onCourt).forEach((name) => {
       const pm = perf[name] ? perf[name]['+/-'] : 0;
       const pmStr = (pm > 0 ? '+' : '') + pm;
+      const pf = personalFouls(name);
+      // Flag players one foul away from fouling out so the recorder sees it coming.
+      const pfEl = el('div', { class: 'rec-player-pf' + (pf >= FOUL_OUT_LIMIT - 1 ? ' danger' : ''), text: 'PF ' + pf });
       grid.appendChild(el('button', { class: 'rec-player-tile', onclick: () => openPlayerSheet(name) }, [
         el('div', { class: 'rec-player-num', text: String(rosterNumber(name)) }),
         el('div', { class: 'rec-player-name', text: name }),
-        el('div', { class: 'rec-player-pm', text: pmStr })
+        el('div', { class: 'rec-player-pm', text: pmStr }),
+        pfEl
       ]));
     });
     if (!onCourt.size) grid.appendChild(el('div', { class: 'rec-empty', text: 'No players on court. Use Subs to add players.' }));
@@ -600,6 +631,69 @@
     openSheet('Opponent point', body);
   }
 
+  // Record a foul on one of our players, then offer the opponent's free-throw
+  // points. The foul already stopped the clock; the FT points are added with
+  // autoStart:false so scoring them never restarts it. After the prompt, check
+  // whether the fouling player just fouled out.
+  function recordFoul(player) {
+    addEvent({ type: 'foul', player: player || null });
+    const who = player ? `#${rosterNumber(player)} ${player}` : 'unassigned';
+    toast(`Foul \u2014 ${who}`);
+    openOppFreeThrowSheet(() => maybeFoulOut(player));
+  }
+
+  // Opponent free throws after a foul: +1/+2/+3 or None. Adds opp_pts WITHOUT
+  // starting the clock, then runs onDone (e.g. the foul-out check).
+  function openOppFreeThrowSheet(onDone) {
+    const done = () => { closeSheet(); if (onDone) onDone(); };
+    const body = el('div', {});
+    body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Opponent free throws made' }));
+    const grid = el('div', { class: 'rec-oppmenu' }, [1, 2, 3].map((v) =>
+      el('button', {
+        class: 'rec-btn block',
+        html: `+${v}<span class="sub">made</span>`,
+        onclick: () => { addEvent({ type: 'opp_pts', value: v }, { autoStart: false }); toast('Opponent +' + v); done(); }
+      })
+    ));
+    body.appendChild(grid);
+    body.appendChild(el('button', {
+      class: 'rec-btn ghost block', text: 'None', style: 'margin-top:12px;', onclick: done
+    }));
+    openSheet('Opponent free throws?', body);
+  }
+
+  // If the fouling player just reached the foul-out limit while on court, take
+  // them off (records a sub_out so minutes stop) and force a replacement. Barring
+  // from further selection is derived from isFouledOut() everywhere players are
+  // offered, so no extra state is needed.
+  function maybeFoulOut(player) {
+    if (!player || !isFouledOut(player) || !computeOnCourt().has(player)) return;
+    toast(`#${rosterNumber(player)} ${player} fouled out (${FOUL_OUT_LIMIT} fouls)`);
+    addEvent({ type: 'sub_out', player }, { autoStart: false });
+    openFoulOutReplacementSheet(player);
+  }
+
+  // Forced replacement after a foul-out: pick who comes on. Fouled-out players are
+  // excluded from the bench so they can't return.
+  function openFoulOutReplacementSheet(offPlayer) {
+    const onCourt = Array.from(computeOnCourt());
+    const bench = state.draft.roster
+      .map((r) => r.name)
+      .filter((n) => !onCourt.includes(n) && !isFouledOut(n));
+    const body = el('div', {});
+    body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Coming on' }));
+    if (bench.length) {
+      body.appendChild(el('div', { class: 'rec-choose-grid' }, bench.map((n) => el('button', {
+        class: 'rec-stat-btn', html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`,
+        onclick: () => { addEvent({ type: 'sub_in', player: n }, { autoStart: false }); toast(`${offPlayer} \u2192 ${n}`); closeSheet(); }
+      }))));
+    } else {
+      body.appendChild(el('div', { class: 'rec-empty', text: 'No bench players available \u2014 playing short.' }));
+    }
+    body.appendChild(el('button', { class: 'rec-btn ghost block', text: 'Play short', style: 'margin-top:14px;', onclick: closeSheet }));
+    openSheet(`#${rosterNumber(offPlayer)} ${offPlayer} fouled out`, body);
+  }
+
   function removeEventById(id) {
     // Cascade: also remove assists linked to this event.
     state.draft.events = state.draft.events.filter((e) => e.id !== id && e.linkedEventId !== id);
@@ -678,7 +772,10 @@
   function simpleStat(label, onClick) {
     return el('button', { class: 'rec-stat-btn', text: label, onclick: onClick });
   }
-  function quick(name, type) { addEvent({ type, player: name }); closeSheet(); toast(`${TYPE_LABELS[type]} \u2014 ${name}`); }
+  function quick(name, type) {
+    if (type === 'foul') { closeSheet(); recordFoul(name); return; }
+    addEvent({ type, player: name }); closeSheet(); toast(`${TYPE_LABELS[type]} \u2014 ${name}`);
+  }
   function shotMake(name, type) {
     const basket = addEvent({ type, player: name });
     closeSheet();
@@ -706,8 +803,9 @@
   // Tapping an event opens the player picker; the player is chosen next.
   function openPlayerPickerForType(type) {
     // Only on-court players can be credited with an event. Bench players must be
-    // subbed in first, so they are intentionally not offered here.
-    const onCourt = Array.from(computeOnCourt());
+    // subbed in first, so they are intentionally not offered here. Fouled-out
+    // players are excluded defensively (they're already off court).
+    const onCourt = Array.from(computeOnCourt()).filter((n) => !isFouledOut(n));
     const body = el('div', {});
     body.appendChild(el('div', { class: 'rec-sheet-section', text: 'On court' }));
     const onGrid = el('div', { class: 'rec-oncourt' }, onCourt.map((n) => pickerTile(n, () => recordEventFor(type, n))));
@@ -721,6 +819,7 @@
   }
 
   function recordEventFor(type, player) {
+    if (type === 'foul') { closeSheet(); recordFoul(player); return; }
     const ev = addEvent({ type, player: player || null });
     closeSheet();
     if (MADE_2_3.has(type) && player) { openAssistSheet(player, ev); return; }
@@ -730,7 +829,7 @@
 
   // ---------- assist chooser ----------
   function openAssistSheet(scorer, basketEv) {
-    const onCourt = Array.from(computeOnCourt()).filter((n) => n !== scorer);
+    const onCourt = Array.from(computeOnCourt()).filter((n) => n !== scorer && !isFouledOut(n));
     const grid = el('div', { class: 'rec-assistmenu' }, onCourt.map((n) => el('button', {
       class: 'rec-btn block', onclick: () => { addEvent({ type: 'ast', player: n, linkedEventId: basketEv.id }); closeSheet(); toast('Assist \u2014 ' + n); },
       html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`
@@ -753,7 +852,7 @@
     updateClockButton();
     const render = () => {
       const onCourt = Array.from(computeOnCourt());
-      const bench = state.draft.roster.map((r) => r.name).filter((n) => !onCourt.includes(n));
+      const bench = state.draft.roster.map((r) => r.name).filter((n) => !onCourt.includes(n) && !isFouledOut(n));
       let pendingOff = preselectOff && onCourt.includes(preselectOff) ? preselectOff : null;
 
       const offGrid = el('div', { class: 'rec-choose-grid' });
@@ -1000,7 +1099,7 @@
 
   function chooseAssistFor(basketEv) {
     const scorer = basketEv.player;
-    const onCourt = Array.from(computeOnCourt()).filter((n) => n !== scorer);
+    const onCourt = Array.from(computeOnCourt()).filter((n) => n !== scorer && !isFouledOut(n));
     const grid = el('div', { class: 'rec-assistmenu' }, onCourt.map((n) => el('button', {
       class: 'rec-btn block', html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`,
       onclick: () => {
