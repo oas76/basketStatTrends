@@ -12,6 +12,8 @@ const userStore = require('./lib/userStore');
 const teamStore = require('./lib/teamStore');
 const { hashPassword, verifyPassword, generatePassword } = require('./lib/passwords');
 const oauth = require('./lib/oauth');
+const { currentDriver } = require('./lib/storageDriver');
+const pgKv = require('./lib/pgKv');
 
 // Polyfill fetch for Node.js < 18 (Vercel compatibility)
 let fetch;
@@ -86,8 +88,23 @@ async function loadBlobModule() {
  */
 async function initAuditLog() {
   if (auditLogInitialized) return;
-  
-  if (IS_VERCEL) {
+
+  const driver = currentDriver();
+  if (driver === 'postgres') {
+    // Load from Postgres (audit log stored as plain JSON string).
+    try {
+      const raw = await pgKv.get(AUDIT_BLOB_NAME);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        auditLog = Array.isArray(parsed) ? parsed : [];
+        console.log(`Loaded ${auditLog.length} audit entries from Postgres`);
+      } else {
+        console.log('No existing audit log in Postgres, starting fresh');
+      }
+    } catch (e) {
+      console.error('Failed to load audit log from Postgres:', e.message);
+    }
+  } else if (IS_VERCEL) {
     // Load from Vercel Blob
     try {
       const blobLoaded = await loadBlobModule();
@@ -125,6 +142,16 @@ async function initAuditLog() {
  * Save audit log to storage
  */
 async function saveAuditLog() {
+  const driver = currentDriver();
+  if (driver === 'postgres') {
+    // Save to Postgres (plain JSON string).
+    try {
+      await pgKv.set(AUDIT_BLOB_NAME, JSON.stringify(auditLog));
+    } catch (e) {
+      console.error('Failed to save audit log to Postgres:', e.message);
+    }
+    return;
+  }
   if (IS_VERCEL) {
     // Save to Vercel Blob
     try {
