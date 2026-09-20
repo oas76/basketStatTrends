@@ -640,6 +640,7 @@ app.use('/config.js', express.static(path.join(__dirname, 'config.js')));
 app.use('/data.js', express.static(path.join(__dirname, 'data.js')));
 app.use('/ai-insights.js', express.static(path.join(__dirname, 'ai-insights.js')));
 app.use('/app.js', express.static(path.join(__dirname, 'app.js')));
+app.use('/games.js', express.static(path.join(__dirname, 'games.js')));
 app.use('/admin.js', express.static(path.join(__dirname, 'admin.js')));
 app.use('/platform-admin.js', express.static(path.join(__dirname, 'platform-admin.js')));
 app.use('/reference-stats.js', express.static(path.join(__dirname, 'reference-stats.js')));
@@ -1316,6 +1317,11 @@ app.get('/platform-admin', (req, res) => {
 
 app.get('/team.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'team.html'));
+});
+
+// Games list + per-game box score (any authenticated user; not admin-gated).
+app.get('/games.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'games.html'));
 });
 
 // Mobile game recorder (any authenticated user; recorders are routed here on login).
