@@ -851,6 +851,9 @@
   }
 
   // ---------- substitutions ----------
+  // Multi-select swap: pick any number of players coming off and the same number
+  // coming on, then confirm all subs at once. Selections persist across
+  // re-renders. Arbitrary lineup-size changes are handled by "Set 5 on court".
   function openSubSheet(preselectOff) {
     // Stop the clock the moment the Subs UI opens (models the whistle), not when
     // the sub is finalized. Covers both the bottom-bar Subs button and the
@@ -858,51 +861,73 @@
     if (state.clock) state.clock.stop('substitution');
     renderClock();
     updateClockButton();
+
+    const offSel = new Set();
+    const onSel = new Set();
+
     const render = () => {
       const onCourt = Array.from(computeOnCourt());
       const bench = state.draft.roster.map((r) => r.name).filter((n) => !onCourt.includes(n) && !isFouledOut(n));
-      let pendingOff = preselectOff && onCourt.includes(preselectOff) ? preselectOff : null;
+      // Seed the "coming off" selection with the pre-picked player (e.g. from a
+      // player tile's "Sub out"), once, if still on court.
+      if (preselectOff && onCourt.includes(preselectOff)) { offSel.add(preselectOff); preselectOff = null; }
+      // Drop any selections that are no longer valid (roster changed).
+      Array.from(offSel).forEach((n) => { if (!onCourt.includes(n)) offSel.delete(n); });
+      Array.from(onSel).forEach((n) => { if (!bench.includes(n)) onSel.delete(n); });
 
-      const offGrid = el('div', { class: 'rec-choose-grid' });
-      const onGrid = el('div', { class: 'rec-choose-grid' });
+      const balanced = offSel.size === onSel.size && offSel.size >= 1;
 
-      const paint = () => {
-        Array.from(offGrid.children).forEach((c) => c.classList.toggle('make', c.dataset.name === pendingOff));
-      };
+      const offGrid = el('div', { class: 'rec-choose-grid' }, onCourt.map((n) => el('button', {
+        class: 'rec-stat-btn' + (offSel.has(n) ? ' make' : ''), html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`,
+        onclick: () => { if (offSel.has(n)) offSel.delete(n); else offSel.add(n); render(); }
+      })));
 
-      onCourt.forEach((n) => {
-        offGrid.appendChild(el('button', {
-          class: 'rec-stat-btn', dataset: { name: n }, html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`,
-          onclick: () => { pendingOff = n; paint(); }
-        }));
+      const onGrid = el('div', { class: 'rec-choose-grid' }, bench.map((n) => el('button', {
+        class: 'rec-stat-btn' + (onSel.has(n) ? ' make' : ''), html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`,
+        onclick: () => { if (onSel.has(n)) onSel.delete(n); else onSel.add(n); render(); }
+      })));
+
+      const counter = el('div', {
+        class: 'rec-note' + (balanced ? '' : ' warn'),
+        text: `${offSel.size} off \u00b7 ${onSel.size} on` +
+          (offSel.size !== onSel.size ? ' \u2014 select the same number on both sides' : '')
       });
-      bench.forEach((n) => {
-        onGrid.appendChild(el('button', {
-          class: 'rec-stat-btn', html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`,
-          onclick: () => {
-            if (!pendingOff) { toast('Pick who comes off first'); return; }
-            addEvent({ type: 'sub_out', player: pendingOff });
-            addEvent({ type: 'sub_in', player: n });
-            toast(`${pendingOff} \u2192 ${n}`);
-            openSubSheet(null); // re-render with fresh state
-          }
-        }));
+
+      const confirmBtn = el('button', {
+        class: 'rec-btn primary block', text: balanced ? `Sub ${offSel.size} player${offSel.size > 1 ? 's' : ''}` : 'Sub',
+        style: 'margin-top:14px;',
+        onclick: () => {
+          if (offSel.size !== onSel.size || offSel.size < 1) { toast('Select the same number coming off and on'); return; }
+          applySubs(Array.from(offSel), Array.from(onSel));
+        }
       });
+      if (!balanced) confirmBtn.disabled = true;
 
       const body = el('div', {}, [
-        el('div', { class: 'rec-sheet-section', text: 'Coming off' }), offGrid,
+        counter,
+        el('div', { class: 'rec-sheet-section', text: 'Coming off' }),
+        onCourt.length ? offGrid : el('div', { class: 'rec-empty', text: 'No players on court.' }),
         el('div', { class: 'rec-sheet-section', text: 'Coming on' }),
         bench.length ? onGrid : el('div', { class: 'rec-empty', text: 'No bench players available.' }),
+        confirmBtn,
         el('button', {
-          class: 'rec-btn block', text: 'Set 5 on court\u2026', style: 'margin-top:14px;',
+          class: 'rec-btn block', text: 'Set 5 on court\u2026', style: 'margin-top:10px;',
           onclick: () => { closeSheet(); openLineupSheet(); }
         }),
-        el('button', { class: 'rec-btn primary block', text: 'Done', style: 'margin-top:10px;', onclick: closeSheet })
+        el('button', { class: 'rec-btn ghost block', text: 'Close', style: 'margin-top:8px;', onclick: closeSheet })
       ]);
       openSheet('Substitution', body);
-      paint();
     };
     render();
+  }
+
+  // Apply a batch of subs: all sub_out then all sub_in. Subs are dead-ball, so
+  // autoStart:false keeps the (already stopped) clock from moving.
+  function applySubs(offList, onList) {
+    offList.forEach((n) => addEvent({ type: 'sub_out', player: n }, { autoStart: false }));
+    onList.forEach((n) => addEvent({ type: 'sub_in', player: n }, { autoStart: false }));
+    closeSheet();
+    toast(`Subbed ${offList.length} player${offList.length > 1 ? 's' : ''}`);
   }
 
   // ---------- set lineup: choose exactly who is on court ----------
