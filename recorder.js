@@ -300,12 +300,16 @@
   function buildInitialRoster() {
     const players = (state.teamData && state.teamData.players) || {};
     // Start from an empty squad: nobody is in until the recorder taps them in.
-    return Object.keys(players).map((name) => ({
-      name,
-      number: players[name] && (players[name].number === 0 || players[name].number) ? players[name].number : null,
-      included: false,
-      starter: false
-    }));
+    // Skip paused (deactivated) players so they can't be picked for a game.
+    // active is true unless explicitly set to false in the team registry.
+    return Object.keys(players)
+      .filter((name) => !players[name] || players[name].active !== false)
+      .map((name) => ({
+        name,
+        number: players[name] && (players[name].number === 0 || players[name].number) ? players[name].number : null,
+        included: false,
+        starter: false
+      }));
   }
 
   // ---------- squad ----------
