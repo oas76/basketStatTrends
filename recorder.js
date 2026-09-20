@@ -690,7 +690,11 @@
     } else {
       body.appendChild(el('div', { class: 'rec-empty', text: 'No bench players available \u2014 playing short.' }));
     }
-    body.appendChild(el('button', { class: 'rec-btn ghost block', text: 'Play short', style: 'margin-top:14px;', onclick: closeSheet }));
+    body.appendChild(el('button', {
+      class: 'rec-btn block', text: 'Set lineup instead\u2026', style: 'margin-top:14px;',
+      onclick: () => { closeSheet(); openLineupSheet(); }
+    }));
+    body.appendChild(el('button', { class: 'rec-btn ghost block', text: 'Play short', style: 'margin-top:10px;', onclick: closeSheet }));
     openSheet(`#${rosterNumber(offPlayer)} ${offPlayer} fouled out`, body);
   }
 
@@ -885,12 +889,82 @@
         el('div', { class: 'rec-sheet-section', text: 'Coming off' }), offGrid,
         el('div', { class: 'rec-sheet-section', text: 'Coming on' }),
         bench.length ? onGrid : el('div', { class: 'rec-empty', text: 'No bench players available.' }),
-        el('button', { class: 'rec-btn primary block', text: 'Done', style: 'margin-top:14px;', onclick: closeSheet })
+        el('button', {
+          class: 'rec-btn block', text: 'Set 5 on court\u2026', style: 'margin-top:14px;',
+          onclick: () => { closeSheet(); openLineupSheet(); }
+        }),
+        el('button', { class: 'rec-btn primary block', text: 'Done', style: 'margin-top:10px;', onclick: closeSheet })
       ]);
       openSheet('Substitution', body);
       paint();
     };
     render();
+  }
+
+  // ---------- set lineup: choose exactly who is on court ----------
+  // A direct editor for the on-court five, independent of the "pick who comes
+  // off first" sub flow. Fixes the foul-out case (already a man down, no natural
+  // off-player) and general lineup drift. Reconciles the chosen set into
+  // sub_in/sub_out events so minutes and box score flow through unchanged.
+  function openLineupSheet() {
+    // Opening the editor models a whistle: stop the clock (like openSubSheet).
+    if (state.clock) state.clock.stop('lineup');
+    renderClock();
+    updateClockButton();
+
+    const LINEUP_MAX = 5;
+    const eligible = state.draft.roster.map((r) => r.name).filter((n) => !isFouledOut(n));
+    // Start from whoever is currently on court (fouled-out defensively excluded).
+    const selected = new Set(Array.from(computeOnCourt()).filter((n) => !isFouledOut(n)));
+
+    const render = () => {
+      const body = el('div', {});
+      const note = el('div', {
+        class: 'rec-note' + (selected.size !== LINEUP_MAX ? ' warn' : ''),
+        text: `${selected.size}/${LINEUP_MAX} on court`
+      });
+      body.appendChild(note);
+
+      const grid = el('div', { class: 'rec-choose-grid' });
+      if (!eligible.length) {
+        grid.appendChild(el('div', { class: 'rec-empty', text: 'No eligible players.' }));
+      }
+      eligible.forEach((n) => {
+        const on = selected.has(n);
+        grid.appendChild(el('button', {
+          class: 'rec-stat-btn' + (on ? ' make' : ''),
+          html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`,
+          onclick: () => {
+            if (selected.has(n)) selected.delete(n);
+            else if (selected.size >= LINEUP_MAX) { toast(`${LINEUP_MAX} on court max \u2014 deselect someone first`); return; }
+            else selected.add(n);
+            render();
+          }
+        }));
+      });
+      body.appendChild(grid);
+
+      body.appendChild(el('button', {
+        class: 'rec-btn primary block', text: 'Confirm lineup', style: 'margin-top:14px;',
+        onclick: () => applyLineup(selected)
+      }));
+      body.appendChild(el('button', { class: 'rec-btn ghost block', text: 'Cancel', style: 'margin-top:8px;', onclick: closeSheet }));
+      openSheet('Set lineup', body);
+    };
+    render();
+  }
+
+  // Reconcile a desired on-court set into sub_out/sub_in events. Subs are added
+  // without auto-starting the clock so the lineup can be fixed during a stoppage.
+  function applyLineup(desired) {
+    const current = computeOnCourt(); // Set of names on court right now
+    const toOff = Array.from(current).filter((n) => !desired.has(n));
+    const toOn = Array.from(desired).filter((n) => !current.has(n));
+    if (!toOff.length && !toOn.length) { closeSheet(); toast('Lineup unchanged'); return; }
+    toOff.forEach((n) => addEvent({ type: 'sub_out', player: n }, { autoStart: false }));
+    toOn.forEach((n) => addEvent({ type: 'sub_in', player: n }, { autoStart: false }));
+    closeSheet();
+    toast(`Lineup set \u2014 ${desired.size} on court`);
   }
 
   // ---------- play log + editing ----------
@@ -1205,6 +1279,7 @@
   function openMenu() {
     const body = el('div', {}, [
       state.screen === 'live' ? el('button', { class: 'rec-btn primary block', text: 'Finish game', style: 'margin-bottom:10px;', onclick: () => { closeSheet(); openReview(); } }) : null,
+      state.screen === 'live' ? el('button', { class: 'rec-btn block', text: 'Set lineup', style: 'margin-bottom:10px;', onclick: () => { closeSheet(); openLineupSheet(); } }) : null,
       el('button', { class: 'rec-btn block', text: 'Open stats app', style: 'margin-bottom:10px;', onclick: () => { window.location.href = '/'; } }),
       state.screen === 'live' ? el('button', { class: 'rec-btn danger block', text: 'Discard this recording', style: 'margin-bottom:10px;', onclick: discardDraft }) : null,
       el('button', { class: 'rec-btn ghost block', text: 'Log out', onclick: logout })
