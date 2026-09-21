@@ -129,6 +129,117 @@ nav a:hover {
   border-color: var(--text-muted);
 }
 
+/* ===== TOP NAV (redesigned segmented menu) ===== */
+.top-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Segmented pill group holding the primary destinations. */
+.nav-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+/* Override the generic `nav a` chrome: links inside the group are borderless
+   pills that only light up on hover / active. */
+.nav-group .nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text-secondary);
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.nav-group .nav-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+.nav-group .nav-link:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: transparent;
+}
+
+.nav-group .nav-link.active {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.nav-group .nav-link.active:hover {
+  background: var(--accent-dim);
+}
+
+.nav-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+  flex: none;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.nav-icon-btn:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.nav-icon-btn.logout:hover {
+  color: var(--negative);
+  border-color: var(--negative);
+}
+
+@media (max-width: 640px) {
+  .top-nav {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+  .nav-group {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .nav-divider {
+    display: none;
+  }
+}
+
 /* ===== LAYOUT ===== */
 .app-shell {
   display: grid;
