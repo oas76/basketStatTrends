@@ -52,11 +52,30 @@ const getActiveTeam = () => activeTeamId;
  * active team, replacing any cached copy. Returns the loaded data (or null on
  * failure / when no team id given).
  */
+const etagStorageKey = (teamId) => `basketstat-data-etag:${teamId}`;
+
 const hydrateTeam = async (teamId) => {
   if (!teamId) return null;
   setActiveTeam(teamId);
   try {
-    const res = await fetch(`/api/teams/${encodeURIComponent(teamId)}/data`);
+    // Conditional GET: if we already have a cached copy + its ETag, ask the
+    // server to revalidate. Unchanged data comes back as 304 (no body), so we
+    // skip re-downloading/re-parsing the full team document on every navigation.
+    const headers = {};
+    let priorEtag = null;
+    let cachedRaw = null;
+    try {
+      priorEtag = localStorage.getItem(etagStorageKey(teamId));
+      cachedRaw = localStorage.getItem(storageKey());
+    } catch (e) { /* ignore storage read errors */ }
+    if (priorEtag && cachedRaw) headers['If-None-Match'] = priorEtag;
+
+    const res = await fetch(`/api/teams/${encodeURIComponent(teamId)}/data`, { headers });
+
+    if (res.status === 304 && cachedRaw) {
+      // Unchanged: reuse the cached copy verbatim.
+      try { return JSON.parse(cachedRaw); } catch (e) { /* fall through to refetch */ }
+    }
     if (!res.ok) {
       console.warn('Failed to load team data:', res.status);
       return null;
@@ -70,6 +89,12 @@ const hydrateTeam = async (teamId) => {
     };
     // Write straight to the cache key (do NOT trigger a server save).
     localStorage.setItem(storageKey(), JSON.stringify(clean));
+    // Remember the ETag so the next load can revalidate.
+    try {
+      const etag = res.headers.get('ETag');
+      if (etag) localStorage.setItem(etagStorageKey(teamId), etag);
+      else localStorage.removeItem(etagStorageKey(teamId));
+    } catch (e) { /* ignore storage write errors */ }
     return clean;
   } catch (e) {
     console.warn('Team hydrate error:', e.message);

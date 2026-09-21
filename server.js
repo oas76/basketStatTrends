@@ -1139,6 +1139,14 @@ app.get('/api/teams/:teamId/data', async (req, res) => {
   if (!access.ok) return res.status(access.code).json({ error: access.error });
   try {
     const data = await teamStore.getTeamData(req.params.teamId);
+    // Content-based ETag so navigation between pages can revalidate cheaply:
+    // when the team document is unchanged the client sends If-None-Match and we
+    // answer 304 (no ~100 KB body re-download / re-parse). Private + no-cache so
+    // the browser always revalidates and shared caches never store team data.
+    const etag = '"' + crypto.createHash('sha1').update(JSON.stringify(data)).digest('base64') + '"';
+    res.set('ETag', etag);
+    res.set('Cache-Control', 'private, no-cache');
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
     res.json(data);
   } catch (e) {
     console.error('Get team data error:', e);
