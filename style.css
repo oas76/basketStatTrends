@@ -3237,3 +3237,42 @@ button.danger:hover {
 .tb-dot:hover {
   opacity: 1 !important;
 }
+
+/* ===== LEAGUE CHIPS (multi-league compare picker) ===== */
+.league-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.league-chip {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.league-chip:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.league-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.league-chip.active {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}

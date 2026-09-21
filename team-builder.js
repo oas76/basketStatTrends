@@ -35,7 +35,8 @@
   let teamNames = ['Team A', 'Team B', 'Team C', 'Team D'];
   let teamCount = 4;
   let windowMonths = 6;     // 3 | 6 | 12 | 'all'
-  let currentLeague = 'all';
+  let selectedLeagues = []; // [] means all leagues
+  let leagueChipsCtrl = null;
   let searchFilter = '';
   let playerAveragesCache = {};  // name -> { stat: value, ... }
   let globalStatRanges = {};     // stat -> { min, max } across all teams+perspectives
@@ -72,7 +73,7 @@
     const data = window.basketStatData.loadData();
     const now = new Date();
     return (data.games || []).filter(game => {
-      if (currentLeague !== 'all' && game.league !== currentLeague) return false;
+      if (selectedLeagues.length > 0 && !selectedLeagues.includes(game.league)) return false;
       if (windowMonths === 'all') return true;
       const gameDate = new Date(game.date);
       const months = typeof windowMonths === 'number' ? windowMonths : parseInt(windowMonths, 10);
@@ -800,13 +801,20 @@
   function populateLeagues() {
     const data = window.basketStatData.loadData();
     const leagues = [...new Set((data.games || []).map(g => g.league).filter(Boolean))].sort();
-    const prev = tbLeague.value;
-    tbLeague.innerHTML = '<option value="all">All leagues</option>' +
-      leagues.map(l => `<option value="${l}"${l === prev ? ' selected' : ''}>${escHtml(l)}</option>`).join('');
-    if (leagues.length === 0 || !leagues.includes(prev)) {
-      currentLeague = 'all';
-      tbLeague.value = 'all';
+    if (!leagueChipsCtrl) {
+      leagueChipsCtrl = window.leagueChips.mount({
+        container: tbLeague,
+        leagues,
+        onChange: (sel) => {
+          selectedLeagues = sel;
+          playerAveragesCache = {};
+          renderAllRadars();
+        }
+      });
+    } else {
+      leagueChipsCtrl.setLeagues(leagues);
     }
+    selectedLeagues = leagueChipsCtrl.getSelected();
   }
 
   function populatePlayers() {
@@ -1155,7 +1163,7 @@
 
     // --- Window + league label ---
     const windowLabel = windowMonths === 'all' ? 'All time' : `Last ${windowMonths} months`;
-    const leagueLabel = currentLeague === 'all' ? 'All leagues' : currentLeague;
+    const leagueLabel = selectedLeagues.length === 0 ? 'All leagues' : selectedLeagues.join(', ');
     const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
     // --- Assemble full HTML ---
@@ -1239,11 +1247,7 @@
     renderLegend();
   });
 
-  tbLeague.addEventListener('change', () => {
-    currentLeague = tbLeague.value;
-    playerAveragesCache = {};
-    renderAllRadars();
-  });
+  // League filtering is handled by the chip picker's onChange (see populateLeagues).
 
   tbTeamCountSel.addEventListener('change', () => {
     const prev = teamCount;

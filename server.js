@@ -639,6 +639,7 @@ app.use('/style.css', express.static(path.join(__dirname, 'style.css')));
 app.use('/config.js', express.static(path.join(__dirname, 'config.js')));
 app.use('/data.js', express.static(path.join(__dirname, 'data.js')));
 app.use('/ai-insights.js', express.static(path.join(__dirname, 'ai-insights.js')));
+app.use('/league-chips.js', express.static(path.join(__dirname, 'league-chips.js')));
 app.use('/app.js', express.static(path.join(__dirname, 'app.js')));
 app.use('/games.js', express.static(path.join(__dirname, 'games.js')));
 app.use('/admin.js', express.static(path.join(__dirname, 'admin.js')));
@@ -669,6 +670,7 @@ const authMiddleware = async (req, res, next) => {
     '/config.js',
     '/data.js',
     '/ai-insights.js',
+    '/league-chips.js',
     '/app.js',
     '/admin.js',
     '/platform-admin.js',

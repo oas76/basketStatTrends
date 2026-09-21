@@ -21,6 +21,7 @@
           "config.js",
           "data.js",
           "ai-insights.js",
+          "league-chips.js",
           "app.js",
           "games.js",
           "admin.js",

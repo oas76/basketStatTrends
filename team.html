@@ -705,9 +705,7 @@
       <div class="team-controls">
         <div class="control-group">
           <span class="control-label">League:</span>
-          <select id="leagueSelect" class="select-input">
-            <option value="all">All Leagues</option>
-          </select>
+          <div id="leagueChips" class="league-chips"></div>
         </div>
         <div class="control-group">
           <span class="control-label">Window:</span>
@@ -829,6 +827,7 @@
   <script src="reference-stats.js"></script>
   <script src="data.js"></script>
   <script src="ai-insights.js"></script>
+  <script src="league-chips.js"></script>
   <script>
     // Stat categories for filtering
     const STAT_CATEGORIES = {
@@ -847,11 +846,12 @@
     let selectedPlayers = [];
     let currentCategory = 'all';
     let currentWindow = 5;
-    let currentLeague = 'all';
+    let selectedLeagues = []; // [] means all leagues
+    let leagueChipsCtrl = null;
     let sortColumn = null;
     let sortDirection = 'desc';
     
-    const leagueSelect = document.getElementById('leagueSelect');
+    const leagueChipsEl = document.getElementById('leagueChips');
     const windowSelect = document.getElementById('windowSelect');
     const categoryTabs = document.getElementById('categoryTabs');
     const tableHead = document.getElementById('tableHead');
@@ -1410,21 +1410,23 @@
         return;
       }
       
-      // Populate league dropdown dynamically
+      // Populate league chips dynamically (mount once, refresh thereafter)
       const leagues = [...new Set(data.games.map(g => g.league).filter(Boolean))].sort();
-      const currentLeagueSelectValue = leagueSelect.value;
-      leagueSelect.innerHTML = '<option value="all">All Leagues</option>' +
-        leagues.map(l => `<option value="${l}"${l === currentLeagueSelectValue ? ' selected' : ''}>${l}</option>`).join('');
-      // Restore or reset currentLeague if it no longer exists
-      if (currentLeague !== 'all' && !leagues.includes(currentLeague)) {
-        currentLeague = 'all';
-        leagueSelect.value = 'all';
+      if (!leagueChipsCtrl) {
+        leagueChipsCtrl = window.leagueChips.mount({
+          container: leagueChipsEl,
+          leagues,
+          onChange: (sel) => { selectedLeagues = sel; render(); }
+        });
+      } else {
+        leagueChipsCtrl.setLeagues(leagues);
       }
+      selectedLeagues = leagueChipsCtrl.getSelected();
       
-      // Filter games by selected league
-      const filteredGames = currentLeague === 'all'
+      // Filter games by selected leagues ([] means all)
+      const filteredGames = selectedLeagues.length === 0
         ? data.games
-        : data.games.filter(g => g.league === currentLeague);
+        : data.games.filter(g => selectedLeagues.includes(g.league));
       
       // Build player data map
       const playerData = {};
@@ -1461,10 +1463,7 @@
     };
     
     // Event listeners
-    leagueSelect.addEventListener('change', () => {
-      currentLeague = leagueSelect.value;
-      render();
-    });
+    // League filtering is handled by the chip picker's onChange (see render()).
     
     windowSelect.addEventListener('change', () => {
       currentWindow = windowSelect.value === 'all' ? 'all' : parseInt(windowSelect.value);
