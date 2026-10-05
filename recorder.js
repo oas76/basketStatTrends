@@ -206,11 +206,25 @@
         (drafts || []).filter((d) => d.status !== 'completed').forEach((d) => {
           anyDraft = true;
           const evs = Array.isArray(d.events) ? d.events.length : 0;
-          draftList.appendChild(el('button', { class: 'rec-tile', onclick: () => resumeDraft(t, d) }, [
+          // A <div> tile (not <button>) so it can host a nested Edit button.
+          const editBtn = el('button', { class: 'rec-btn ghost rec-tile-edit', text: 'Edit', onclick: async (ev) => {
+            ev.stopPropagation();
+            let teamData;
+            try { teamData = await api('GET', `/api/teams/${encodeURIComponent(t.id)}/data`); }
+            catch (e) { teamData = { players: {}, games: [], leagues: [], finishedLeagues: [] }; }
+            openEditGameSheet({ meta: d.meta || {}, teamData, onSave: async (vals) => {
+              const updated = { ...d, meta: { ...(d.meta || {}), ...vals } };
+              await api('PUT', `/api/teams/${encodeURIComponent(t.id)}/drafts/${encodeURIComponent(d.id)}`, updated);
+              toast('Game details updated');
+              renderHome();
+            } });
+          } });
+          draftList.appendChild(el('div', { class: 'rec-tile rec-tile-draft', onclick: () => resumeDraft(t, d) }, [
             el('div', { class: 'rec-tile-main' }, [
               el('div', { class: 'rec-tile-title', text: `${t.name} vs ${d.meta ? d.meta.opponent : '?'}` }),
               el('div', { class: 'rec-tile-meta', text: `${d.meta ? d.meta.league || '' : ''} \u00b7 ${evs} events \u00b7 ${d.meta ? d.meta.date : ''}` })
             ]),
+            editBtn,
             el('span', { class: 'rec-badge', text: 'Resume' })
           ]));
         });
@@ -232,6 +246,32 @@
   }
 
   // ---------- setup ----------
+  // Competition options come only from the team's registered competitions
+  // (union with any leagues already present on past games), minus finished ones.
+  // New competitions must be created in Team Admin — the recorder never creates them.
+  function availableLeagues(teamData) {
+    const registry = (teamData && Array.isArray(teamData.leagues)) ? teamData.leagues : [];
+    const fromGames = ((teamData && teamData.games) || [])
+      .map((g) => g.league).filter(Boolean);
+    const finished = new Set(
+      ((teamData && teamData.finishedLeagues) || []).map((l) => String(l).toLowerCase())
+    );
+    return Array.from(new Set([...registry, ...fromGames]))
+      .filter((l) => !finished.has(String(l).toLowerCase()));
+  }
+
+  // Populate a <select> with competitions, guaranteeing `currentValue` stays
+  // selectable even if it's a finished competition not in the available list
+  // (so editing an existing game never silently drops its division).
+  function fillLeagueSelect(selectEl, leagues, currentValue) {
+    selectEl.innerHTML = '';
+    const list = leagues.slice();
+    if (currentValue && !list.includes(currentValue)) list.unshift(currentValue);
+    list.forEach((l) => selectEl.appendChild(el('option', { value: l, text: l })));
+    if (currentValue) selectEl.value = currentValue;
+    return list;
+  }
+
   function setupNewGame() {
     $('#recDate').value = todayISO();
     $('#recOpponent').value = '';
@@ -241,21 +281,9 @@
     // home/away default home
     document.querySelectorAll('#recHomeAway button').forEach((b) => b.classList.toggle('active', b.dataset.val === 'home'));
 
-    // Competition options come only from the team's registered competitions
-    // (union with any leagues already present on past games). New competitions
-    // must be created in Team Admin — the recorder never creates them.
-    const registry = (state.teamData && Array.isArray(state.teamData.leagues)) ? state.teamData.leagues : [];
-    const fromGames = ((state.teamData && state.teamData.games) || [])
-      .map((g) => g.league).filter(Boolean);
-    // Finished competitions stay in stats but must not be offered for a new game.
-    const finished = new Set(
-      ((state.teamData && state.teamData.finishedLeagues) || []).map((l) => String(l).toLowerCase())
-    );
-    const leagues = Array.from(new Set([...registry, ...fromGames]))
-      .filter((l) => !finished.has(String(l).toLowerCase()));
+    const leagues = availableLeagues(state.teamData);
     const sel = $('#recLeague');
-    sel.innerHTML = '';
-    leagues.forEach((l) => sel.appendChild(el('option', { value: l, text: l })));
+    fillLeagueSelect(sel, leagues, '');
     const note = $('#recLeagueNote');
     if (note) note.style.display = leagues.length ? 'none' : 'block';
     sel.disabled = !leagues.length;
@@ -1304,11 +1332,58 @@
     enterLive();
   }
 
+  // ---------- edit game details ----------
+  // Shared editor for a game's Date / Competition / Opponent. Used both in-session
+  // (from the Menu) and for prepared/future games from the Home list. `onSave`
+  // receives { date, league, opponent } and is responsible for persisting.
+  function openEditGameSheet({ meta, teamData, onSave }) {
+    const m = meta || {};
+    const dateInput = el('input', { type: 'date', class: 'rec-input', id: 'recEditDate' });
+    dateInput.value = m.date || todayISO();
+    const leagueSel = el('select', { class: 'rec-select', id: 'recEditLeague' });
+    fillLeagueSelect(leagueSel, availableLeagues(teamData), m.league || '');
+    const oppInput = el('input', { type: 'text', class: 'rec-input', id: 'recEditOpponent', placeholder: 'Opponent team name' });
+    oppInput.value = m.opponent || '';
+
+    const saveBtn = el('button', { class: 'rec-btn primary block', text: 'Save changes', style: 'margin-top:14px;', onclick: async () => {
+      const opponent = oppInput.value.trim();
+      const league = leagueSel.value;
+      const date = dateInput.value || todayISO();
+      if (!opponent) { toast('Enter the opposition name'); oppInput.focus(); return; }
+      if (!league) { toast('No competition available. Add one in Team Admin → Competitions first.'); return; }
+      saveBtn.disabled = true;
+      try {
+        await onSave({ date, league, opponent });
+        closeSheet();
+      } catch (e) {
+        saveBtn.disabled = false;
+        toast('Could not save: ' + (e && e.message ? e.message : e));
+      }
+    } });
+
+    const body = el('div', {}, [
+      el('div', { class: 'rec-field' }, [ el('label', { for: 'recEditDate', text: 'Date' }), dateInput ]),
+      el('div', { class: 'rec-field' }, [ el('label', { for: 'recEditLeague', text: 'Competition' }), leagueSel ]),
+      el('div', { class: 'rec-field' }, [ el('label', { for: 'recEditOpponent', text: 'Opposition' }), oppInput ]),
+      saveBtn
+    ]);
+    openSheet('Edit game details', body);
+  }
+
   // ---------- menu ----------
   function openMenu() {
     const body = el('div', {}, [
       state.screen === 'live' ? el('button', { class: 'rec-btn primary block', text: 'Finish game', style: 'margin-bottom:10px;', onclick: () => { closeSheet(); openReview(); } }) : null,
       state.screen === 'live' ? el('button', { class: 'rec-btn block', text: 'Set lineup', style: 'margin-bottom:10px;', onclick: () => { closeSheet(); openLineupSheet(); } }) : null,
+      state.draft ? el('button', { class: 'rec-btn block', text: 'Edit game details', style: 'margin-bottom:10px;', onclick: () => {
+        closeSheet();
+        openEditGameSheet({ meta: state.draft.meta, teamData: state.teamData, onSave: async (vals) => {
+          Object.assign(state.draft.meta, vals);
+          await saveDraft();
+          updateTopbar();
+          toast('Game details updated');
+        } });
+      } }) : null,
       el('button', { class: 'rec-btn block', text: 'Open stats app', style: 'margin-bottom:10px;', onclick: () => { window.location.href = '/'; } }),
       state.screen === 'live' ? el('button', { class: 'rec-btn danger block', text: 'Discard this recording', style: 'margin-bottom:10px;', onclick: discardDraft }) : null,
       el('button', { class: 'rec-btn ghost block', text: 'Log out', onclick: logout })
