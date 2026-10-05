@@ -435,3 +435,65 @@ table.rec-box thead th { color: var(--text-secondary); font-size: 11px; text-tra
   z-index: 60; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; max-width: 92%;
 }
 .rec-toast.show { opacity: 1; }
+
+/* =========================================================================
+   Tablet & PC adaptation (landscape / wide screens)
+   The recorder is mobile-first (capped at 640px). On wider screens we widen
+   the shell, keep forms/lists readable, and turn the live screen into a
+   two-column layout: game state on the left, event entry on the right. These
+   rules only augment the mobile base and are scoped to >= 820px.
+   ========================================================================= */
+@media (min-width: 820px) {
+  .rec-app { max-width: 1280px; }
+  .rec-bottombar { max-width: 1280px; }
+  .rec-sheet { max-width: 820px; }
+
+  /* Keep forms/lists comfortable to read instead of stretching edge to edge. */
+  #screen-setup, #screen-home, #screen-review {
+    max-width: 760px; width: 100%; margin-left: auto; margin-right: auto;
+  }
+
+  /* ---- Two-column live layout ----
+     Left: scoreboard, clock controls, fouls, reminder, on-court.
+     Right: the event-entry grids, spanning the full height. */
+  #screen-live.active {
+    display: grid;
+    grid-template-columns: minmax(300px, 410px) 1fr;
+    grid-template-rows: auto auto auto auto auto 1fr;
+    grid-template-areas:
+      "score    events"
+      "controls events"
+      "fouls    events"
+      "remind   events"
+      "oncourtH events"
+      "oncourt  events";
+    gap: 12px 18px;
+    align-content: start;
+    padding: 16px 18px calc(84px + env(safe-area-inset-bottom));
+  }
+  #screen-live .rec-scoreboard { grid-area: score; margin-bottom: 0; }
+  #screen-live .rec-clock-controls { grid-area: controls; margin: 0; }
+  #screen-live .rec-foulbar { grid-area: fouls; margin: 0; }
+  #screen-live .rec-reminder-banner { grid-area: remind; margin: 0; }
+  #screen-live .rec-h.oncourt-h { grid-area: oncourtH; margin: 0; }
+  #screen-live #recOnCourt { grid-area: oncourt; align-self: start; }
+  #screen-live .rec-event-groups { grid-area: events; min-height: 0; gap: 8px; }
+
+  /* Larger, comfortable targets now that there is room. */
+  #screen-live .rec-score-side .val { font-size: 36px; }
+  #screen-live .rec-clock-time { font-size: 36px; }
+  #screen-live .rec-foulbar .fb-cell { padding: 10px 14px; }
+  #screen-live .rec-foulbar .fb-cell b { font-size: 20px; }
+  #screen-live .rec-clock-controls .rec-btn { min-height: 54px; padding: 12px; font-size: 16px; }
+  #screen-live .rec-eg-label { font-size: 12px; margin: 4px 0 2px; }
+  #screen-live .rec-ev { font-size: 17px; padding: 10px; }
+
+  /* On court becomes a wrapping grid (no horizontal scroll) in the left column. */
+  #screen-live #recOnCourt {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    overflow: visible; padding-bottom: 0;
+  }
+  #screen-live #recOnCourt .rec-player-tile { min-width: 0; width: auto; padding: 12px 8px; }
+  #screen-live #recOnCourt .rec-player-num { width: 46px; height: 46px; font-size: 20px; }
+  #screen-live #recOnCourt .rec-player-name { font-size: 13px; max-width: none; }
+}
