@@ -1181,6 +1181,29 @@ button.secondary:hover {
   letter-spacing: 0.04em;
 }
 
+/* Compact, accent-tinted category picker in the Performance Trend header. */
+.trend-stat-select {
+  width: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background-color: var(--accent-dim);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 4px 30px 4px 10px;
+  cursor: pointer;
+}
+.trend-stat-select:not([multiple]) {
+  background-position: right 8px center;
+}
+.trend-stat-select:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.trend-stat-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .scorecard-grid {
   display: flex;
   flex-direction: column;

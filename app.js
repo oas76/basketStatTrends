@@ -6,7 +6,7 @@ let leagueChipsCtrl = null;
 const scorecardGrid = document.getElementById("scorecardGrid");
 const trendingIndexValue = document.getElementById("trendingIndexValue");
 const trendingIndexDetail = document.getElementById("trendingIndexDetail");
-const trendStatIndicator = document.getElementById("trendStatIndicator");
+const trendStatSelect = document.getElementById("trendStatSelect");
 const aggregateStats = document.getElementById("aggregateStats");
 const chart = document.getElementById("chart");
 const gameTable = document.getElementById("gameTable");
@@ -352,6 +352,10 @@ const renderScorecard = (records, player, windowSize) => {
   const playerRecords = records.filter(r => r.player === player);
   const stats = getAvailableStats(playerRecords);
   const selectedStat = statSelect.value || stats[0] || 'pts';
+
+  // Keep the Performance Trend category dropdown in sync with the scorecard grid.
+  // With no player records, stats is empty and the select is cleared/disabled.
+  populateTrendStatSelect(stats, selectedStat);
   
   if (playerRecords.length === 0) {
     scorecardGrid.innerHTML = '<div class="no-data-message">No games recorded for this player</div>';
@@ -1076,6 +1080,26 @@ const getStatDisplayName = (stat) => {
 };
 
 /**
+ * Populate the Performance Trend category dropdown so it mirrors the scorecard
+ * grid for the current player. Empty stats clears and disables the select.
+ */
+const populateTrendStatSelect = (stats, selectedStat) => {
+  if (!trendStatSelect) return;
+  if (!stats || stats.length === 0) {
+    trendStatSelect.innerHTML = '';
+    trendStatSelect.disabled = true;
+    return;
+  }
+  trendStatSelect.disabled = false;
+  trendStatSelect.innerHTML = stats
+    .map(stat => `<option value="${stat}">${getStatDisplayName(stat)}</option>`)
+    .join('');
+  if (selectedStat && stats.includes(selectedStat)) {
+    trendStatSelect.value = selectedStat;
+  }
+};
+
+/**
  * Generate actionable recommendation based on analysis
  */
 const generateRecommendation = (analysis) => {
@@ -1632,9 +1656,10 @@ const updateChartAndTable = () => {
   const records = updateGameTable(data, player, stat);
   renderChart(records, stat);
   
-  // Update the trend stat indicator
-  if (trendStatIndicator) {
-    trendStatIndicator.textContent = getStatDisplayName(stat);
+  // Keep the trend category dropdown in sync (aggregate stats have no matching
+  // option, so leave the select unchanged in that case).
+  if (trendStatSelect && [...trendStatSelect.options].some(o => o.value === stat)) {
+    trendStatSelect.value = stat;
   }
 };
 
@@ -1767,6 +1792,20 @@ playerSelect.addEventListener("change", updateView);
 
 if (windowSizeSelect) {
   windowSizeSelect.addEventListener("change", updateView);
+}
+
+// Trend category dropdown: pick the charted stat without scrolling the scorecard.
+if (trendStatSelect) {
+  trendStatSelect.addEventListener("change", () => {
+    statSelect.value = trendStatSelect.value;
+    // Keep the left-panel highlights in sync with the dropdown selection.
+    scorecardGrid.querySelectorAll('.stat-scorecard').forEach(c =>
+      c.classList.toggle('active', c.dataset.stat === statSelect.value));
+    if (aggregateStats) {
+      aggregateStats.querySelectorAll('.aggregate-stat').forEach(c => c.classList.remove('active'));
+    }
+    updateChartAndTable();
+  });
 }
 
 // League filtering is handled by the chip picker's onChange (see populateLeagueFilter).
