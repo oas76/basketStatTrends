@@ -100,9 +100,13 @@
         </div>
         <div class="modal-actions">
           <button type="button" class="secondary" id="gameStatsCloseBtn">Close</button>
+          <button type="button" class="primary" id="gameStatsExport">Export PDF</button>
         </div>
       </div>
     </div>
+
+    <!-- Hidden print-only box score sheet (populated by games.js on export) -->
+    <div class="boxscore-print-sheet" id="boxScorePrintSheet" aria-hidden="true"></div>
 
     <footer class="app-footer">
       <span>Record games from the mobile recorder or upload CSVs from the Admin page</span>

@@ -2516,6 +2516,115 @@ button.danger:hover {
 }
 
 /* ========================================
+   BOX SCORE PDF EXPORT (print-only sheet)
+   ======================================== */
+
+/* The sheet only materializes while printing; hidden during normal use. */
+.boxscore-print-sheet {
+  display: none;
+}
+
+.boxscore-print-sheet .bps-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 2px solid #111827;
+  padding-bottom: 8px;
+}
+
+.boxscore-print-sheet .bps-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.boxscore-print-sheet .bps-date {
+  font-size: 14px;
+  color: #374151;
+}
+
+.boxscore-print-sheet .bps-meta {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.boxscore-print-sheet .bps-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 14px;
+  font-size: 12px;
+  color: #111827;
+}
+
+.boxscore-print-sheet .bps-table th,
+.boxscore-print-sheet .bps-table td {
+  border: 1px solid #d1d5db;
+  padding: 4px 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.boxscore-print-sheet .bps-table th {
+  background: #f3f4f6;
+  font-weight: 700;
+}
+
+.boxscore-print-sheet .bps-table .bps-player {
+  text-align: left;
+  font-weight: 600;
+}
+
+.boxscore-print-sheet .bps-table .bps-totals td {
+  border-top: 2px solid #111827;
+  font-weight: 700;
+  background: #f9fafb;
+}
+
+.boxscore-print-sheet .bps-empty {
+  text-align: center;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.boxscore-print-sheet .bps-footer {
+  margin-top: 16px;
+  font-size: 10px;
+  color: #6b7280;
+}
+
+@media print {
+  body.print-boxscore {
+    background: #ffffff !important;
+    color: #111827 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Hide the whole app, then reveal only the print sheet. */
+  body.print-boxscore * {
+    visibility: hidden !important;
+  }
+
+  body.print-boxscore .boxscore-print-sheet,
+  body.print-boxscore .boxscore-print-sheet * {
+    visibility: visible !important;
+  }
+
+  body.print-boxscore .boxscore-print-sheet {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 14mm;
+    background: #ffffff;
+  }
+}
+
+/* ========================================
    SETTINGS PAGE STYLES
    ======================================== */
 
