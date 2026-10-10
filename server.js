@@ -642,6 +642,7 @@ app.use('/ai-insights.js', express.static(path.join(__dirname, 'ai-insights.js')
 app.use('/league-chips.js', express.static(path.join(__dirname, 'league-chips.js')));
 app.use('/app.js', express.static(path.join(__dirname, 'app.js')));
 app.use('/games.js', express.static(path.join(__dirname, 'games.js')));
+app.use('/boxscore-edit.js', express.static(path.join(__dirname, 'boxscore-edit.js')));
 app.use('/admin.js', express.static(path.join(__dirname, 'admin.js')));
 app.use('/platform-admin.js', express.static(path.join(__dirname, 'platform-admin.js')));
 app.use('/reference-stats.js', express.static(path.join(__dirname, 'reference-stats.js')));
@@ -672,6 +673,7 @@ const authMiddleware = async (req, res, next) => {
     '/ai-insights.js',
     '/league-chips.js',
     '/app.js',
+    '/boxscore-edit.js',
     '/admin.js',
     '/platform-admin.js',
     '/reference-stats.js',
