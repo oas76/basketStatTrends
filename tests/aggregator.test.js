@@ -205,6 +205,47 @@ describe('eventsToPerformances', () => {
   });
 });
 
+describe('unassigned events', () => {
+  const ev = (type, player) => ({ id: type, type, player: player || null });
+
+  test('isUnassignedEvent: attributable stat without a player is unassigned', () => {
+    expect(AGG.isUnassignedEvent(ev('2pt_made', null))).toBe(true);
+    expect(AGG.isUnassignedEvent(ev('3pt_miss', null))).toBe(true);
+    expect(AGG.isUnassignedEvent(ev('ast', null))).toBe(true);
+    expect(AGG.isUnassignedEvent(ev('foul', null))).toBe(true);
+    expect(AGG.isUnassignedEvent(ev('dreb', null))).toBe(true);
+  });
+
+  test('isUnassignedEvent: assigned stat events are fine', () => {
+    expect(AGG.isUnassignedEvent(ev('2pt_made', 'A'))).toBe(false);
+    expect(AGG.isUnassignedEvent(ev('ast', 'B'))).toBe(false);
+  });
+
+  test('isUnassignedEvent: opponent events, subs and markers never count', () => {
+    expect(AGG.isUnassignedEvent(ev('opp_pts', null))).toBe(false);
+    expect(AGG.isUnassignedEvent(ev('opp_foul', null))).toBe(false);
+    expect(AGG.isUnassignedEvent(ev('sub_in', null))).toBe(false);
+    expect(AGG.isUnassignedEvent(ev('sub_out', null))).toBe(false);
+    expect(AGG.isUnassignedEvent(ev('finish', null))).toBe(false);
+    expect(AGG.isUnassignedEvent(ev('period_end', null))).toBe(false);
+    expect(AGG.isUnassignedEvent(null)).toBe(false);
+  });
+
+  test('countUnassigned tallies only unassigned attributable events', () => {
+    const events = [
+      ev('2pt_made', 'A'),
+      ev('3pt_made', null), // unassigned
+      ev('ast', null),      // unassigned
+      ev('opp_pts', null),  // not attributable
+      ev('finish', null),   // marker
+      ev('foul', 'B')
+    ];
+    expect(AGG.countUnassigned(events)).toBe(2);
+    expect(AGG.countUnassigned([])).toBe(0);
+    expect(AGG.countUnassigned(null)).toBe(0);
+  });
+});
+
 describe('period time helpers', () => {
   const meta = { periods: 4, periodLengthMin: 10, otLengthMin: 5 };
   test('globalTimeOf accumulates across periods', () => {

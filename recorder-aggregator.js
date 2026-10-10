@@ -63,6 +63,17 @@
     'oreb', 'dreb', 'ast', 'stl', 'blk', 'to', 'foul'
   ]);
 
+  // An event is "unassigned" when it is a player-attributable stat event but has
+  // no player set. Opponent events, subs and markers (finish/period_end) are not
+  // attributable and never count. Used to block finalizing a game until every
+  // such event has been assigned (or deleted).
+  function isUnassignedEvent(ev) {
+    return !!ev && SUBJECT_STAT_TYPES.has(ev.type) && !ev.player;
+  }
+  function countUnassigned(events) {
+    return (Array.isArray(events) ? events : []).filter(isUnassignedEvent).length;
+  }
+
   const DEFAULT_PERIODS = 4;
   const DEFAULT_PERIOD_MIN = 10;
   const DEFAULT_OT_MIN = 5;
@@ -286,6 +297,8 @@
     EVENT_TYPES,
     POINT_VALUES,
     SUBJECT_STAT_TYPES,
+    isUnassignedEvent,
+    countUnassigned,
     periodLengthMs,
     periodOffsetMs,
     globalTimeOf,

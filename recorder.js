@@ -92,7 +92,7 @@
     saveTimer: null,
     screen: 'home',
     finishEventId: null,
-    logFilter: { period: 'all', type: 'all' }
+    logFilter: { period: 'all', type: 'all', unassignedOnly: false }
   };
 
   // ---------- API ----------
@@ -746,6 +746,9 @@
   function afterChange() {
     recompute();
     renderLive();
+    // When the play log is opened over the Review screen, keep its preview and
+    // the finalize guard (banner + Save enabled state) in sync as events change.
+    if (state.screen === 'review') renderReview();
     scheduleSave();
   }
 
@@ -1075,15 +1078,28 @@
     typeSel.addEventListener('change', () => { filter.type = typeSel.value; openLogSheet(); });
     list.appendChild(el('div', { class: 'rec-btn-row', style: 'gap:8px; margin-bottom:12px;' }, [periodSel, typeSel]));
 
+    // "Unassigned only" toggle: a quick way to find and resolve events that are
+    // still missing a player (the ones that block finalizing the game).
+    const unassignedTotal = AGG.countUnassigned(all);
+    const toggle = el('button', {
+      class: 'rec-unassigned-toggle' + (filter.unassignedOnly ? ' on' : ''),
+      'aria-pressed': filter.unassignedOnly ? 'true' : 'false',
+      text: unassignedTotal > 0 ? `Unassigned only (${unassignedTotal})` : 'Unassigned only',
+      onclick: () => { filter.unassignedOnly = !filter.unassignedOnly; openLogSheet(); }
+    });
+    list.appendChild(el('div', { style: 'margin-bottom:12px;' }, [toggle]));
+
     const events = all.filter((e) =>
       (filter.period === 'all' || String(e.period) === filter.period) &&
-      (filter.type === 'all' || e.type === filter.type)
+      (filter.type === 'all' || e.type === filter.type) &&
+      (!filter.unassignedOnly || AGG.isUnassignedEvent(e))
     ).reverse();
 
     if (!all.length) list.appendChild(el('div', { class: 'rec-empty', text: 'No events yet.' }));
+    else if (filter.unassignedOnly && !events.length) list.appendChild(el('div', { class: 'rec-empty', text: 'All events are assigned.' }));
     else if (!events.length) list.appendChild(el('div', { class: 'rec-empty', text: 'No events match this filter.' }));
     events.forEach((ev) => {
-      const unassigned = AGG.SUBJECT_STAT_TYPES.has(ev.type) && !ev.player;
+      const unassigned = AGG.isUnassignedEvent(ev);
       let tagCls = '';
       if (AGG.POINT_VALUES[ev.type]) tagCls = ' pos';
       else if (ev.type === 'opp_pts' || ev.type === 'opp_foul' || ev.type === 'to' || ev.type === 'foul') tagCls = ' neg';
@@ -1256,10 +1272,35 @@
     const fin = addEvent({ type: 'finish' });
     state.finishEventId = fin.id;
     recompute();
+    renderReview();
+    showScreen('review');
+  }
+
+  // Render the Review screen body: the box-score preview plus a finalize guard.
+  // A game cannot be saved as complete while any attributable event is still
+  // unassigned (no player) — the recorder must assign or delete them first.
+  function renderReview() {
     const wrap = $('#recBoxPreview');
     wrap.innerHTML = '';
     wrap.appendChild(buildBoxTable(state.draft.boxScore.performances || {}));
-    showScreen('review');
+
+    const n = AGG.countUnassigned(state.draft.events);
+    const warn = $('#recReviewWarn');
+    const saveBtn = $('#recSaveComplete');
+    if (warn) {
+      warn.innerHTML = '';
+      if (n > 0) {
+        warn.appendChild(el('div', { class: 'rec-review-warn-text',
+          text: `${n} event${n === 1 ? ' is' : 's are'} not assigned to a player. Assign or remove ${n === 1 ? 'it' : 'them'} before finalizing.` }));
+        warn.appendChild(el('button', { class: 'rec-btn block', style: 'margin-top:10px;',
+          text: `Resolve unassigned (${n})`,
+          onclick: () => { state.logFilter.unassignedOnly = true; openLogSheet(); } }));
+        warn.hidden = false;
+      } else {
+        warn.hidden = true;
+      }
+    }
+    if (saveBtn) saveBtn.disabled = n > 0;
   }
 
   // Build the box-score table from a performances map. Shared by the Finish review
@@ -1308,6 +1349,15 @@
   }
 
   async function saveComplete() {
+    // Finalize guard: never upload a game with unassigned events. Defensive even
+    // though the Review button is disabled — redirect the recorder to resolve.
+    const pending = AGG.countUnassigned(state.draft.events);
+    if (pending > 0) {
+      toast(`Assign ${pending} event${pending === 1 ? '' : 's'} to a player first`);
+      state.logFilter.unassignedOnly = true;
+      openLogSheet();
+      return;
+    }
     // Keep the finish anchor — it marks the end of the game for minutes.
     state.finishEventId = null;
     state.draft.status = 'completed';

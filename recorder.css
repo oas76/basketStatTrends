@@ -426,6 +426,22 @@ body.recorder-body {
 .rec-log-item.unassigned .rec-log-main { color: var(--accent); }
 .rec-log-item .rec-log-tag.assign { background: var(--accent); color: #04201b; }
 
+/* "Unassigned only" toggle chip in the play log */
+.rec-unassigned-toggle {
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  padding: 7px 12px; border-radius: 999px;
+  background: var(--surface); color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.rec-unassigned-toggle.on { background: var(--accent); color: #04201b; border-color: var(--accent); }
+
+/* Finalize guard banner on the Review screen */
+.rec-review-warn {
+  margin-top: 14px; padding: 12px 14px; border-radius: var(--radius-md);
+  background: rgba(248,113,113,0.08); border: 1px solid var(--negative);
+}
+.rec-review-warn .rec-review-warn-text { font-size: 13px; font-weight: 600; color: var(--negative); }
+
 /* Box score preview table */
 .rec-box-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: var(--radius-md); }
 table.rec-box { border-collapse: collapse; width: 100%; font-size: 13px; }
