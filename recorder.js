@@ -867,13 +867,13 @@
   function openAssistSheet(scorer, basketEv) {
     const onCourt = Array.from(computeOnCourt()).filter((n) => n !== scorer && !isFouledOut(n));
     const grid = el('div', { class: 'rec-assistmenu' }, onCourt.map((n) => el('button', {
-      class: 'rec-btn block', onclick: () => { addEvent({ type: 'ast', player: n, linkedEventId: basketEv.id }); closeSheet(); toast('Assist \u2014 ' + n); },
+      class: 'rec-btn block', onclick: () => { addEvent({ type: 'ast', player: n, linkedEventId: basketEv.id }, { autoStart: false }); closeSheet(); toast('Assist \u2014 ' + n); },
       html: `#${rosterNumber(n)}<span class="sub">${esc(n)}</span>`
     })));
     const noAssist = el('button', { class: 'rec-btn block', text: 'No assist', style: 'margin-top:12px;', onclick: closeSheet });
     const later = el('button', {
       class: 'rec-btn ghost block', text: 'Assign later', style: 'margin-top:8px;',
-      onclick: () => { addEvent({ type: 'ast', player: null, linkedEventId: basketEv.id }); closeSheet(); toast('Assist \u2014 assign later'); }
+      onclick: () => { addEvent({ type: 'ast', player: null, linkedEventId: basketEv.id }, { autoStart: false }); closeSheet(); toast('Assist \u2014 assign later'); }
     });
     openSheet('Assisted by?', el('div', {}, [grid, noAssist, later]));
   }
@@ -1370,11 +1370,71 @@
     openSheet('Edit game details', body);
   }
 
+  // ---------- edit clock ----------
+  // Edit the live clock directly: set the period + remaining time, or reset to
+  // the start of the current period or the whole game. None of these start the
+  // clock (setPeriod leaves it stopped), so adjusting the time never resumes play.
+  // This only moves the clock; recorded events in the log are untouched.
+  function openEditClockSheet() {
+    if (!state.clock) { closeSheet(); return; }
+    const s = state.clock.getState();
+    const periodInput = el('input', { class: 'rec-num-input', type: 'number', value: s.period, min: 1 });
+    const timeInput = el('input', { class: 'rec-input', type: 'text', value: fmtClock(s.remainingMs), placeholder: 'mm:ss', style: 'flex:1;' });
+
+    // setPeriod/setRemaining both emit state changes that re-render via the
+    // controller's onStateChange; call explicitly too so the UI is always synced.
+    const render = () => { renderClock(); updateClockButton(); };
+
+    const saveBtn = el('button', {
+      class: 'rec-btn primary block', text: 'Save time', style: 'margin-top:14px;',
+      onclick: () => {
+        const p = Math.max(1, parseInt(periodInput.value, 10) || 1);
+        const m = /^(\d+):(\d{1,2})$/.exec(timeInput.value.trim());
+        if (!m) { toast('Enter time as mm:ss'); timeInput.focus(); return; }
+        const ms = (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) * 1000;
+        state.clock.setPeriod(p);     // resets to the period's full length + stops the clock
+        state.clock.setRemaining(ms); // override to the typed remaining time
+        render();
+        closeSheet();
+        toast('Clock set to ' + periodLabel(p) + ' ' + fmtClock(ms));
+      }
+    });
+
+    const body = el('div', {}, [
+      el('div', { class: 'rec-sheet-section', text: 'Set clock' }),
+      el('div', { class: 'rec-btn-row', style: 'align-items:center;' }, [
+        el('div', { style: 'flex:0 0 auto;', html: '<span class="rec-note" style="margin:0;">Period</span>' }),
+        periodInput, timeInput
+      ]),
+      saveBtn,
+      el('button', {
+        class: 'rec-btn block', text: 'Reset to start of period', style: 'margin-top:14px;',
+        onclick: () => {
+          const cur = state.clock.getState().period;
+          state.clock.setPeriod(cur);
+          render(); closeSheet();
+          toast('Clock reset to start of ' + periodLabel(cur));
+        }
+      }),
+      el('button', {
+        class: 'rec-btn block', text: 'Reset to start of game', style: 'margin-top:10px;',
+        onclick: () => {
+          if (!confirm('Reset the clock to the start of the game (P1, full time)? This only moves the clock \u2014 recorded events are kept.')) return;
+          state.clock.setPeriod(1);
+          render(); closeSheet();
+          toast('Clock reset to start of game');
+        }
+      })
+    ]);
+    openSheet('Edit time', body);
+  }
+
   // ---------- menu ----------
   function openMenu() {
     const body = el('div', {}, [
       state.screen === 'live' ? el('button', { class: 'rec-btn primary block', text: 'Finish game', style: 'margin-bottom:10px;', onclick: () => { closeSheet(); openReview(); } }) : null,
       state.screen === 'live' ? el('button', { class: 'rec-btn block', text: 'Set lineup', style: 'margin-bottom:10px;', onclick: () => { closeSheet(); openLineupSheet(); } }) : null,
+      (state.screen === 'live' && state.clock) ? el('button', { class: 'rec-btn block', text: 'Edit time', style: 'margin-bottom:10px;', onclick: () => { closeSheet(); openEditClockSheet(); } }) : null,
       state.draft ? el('button', { class: 'rec-btn block', text: 'Edit game details', style: 'margin-bottom:10px;', onclick: () => {
         closeSheet();
         openEditGameSheet({ meta: state.draft.meta, teamData: state.teamData, onSave: async (vals) => {
