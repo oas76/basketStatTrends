@@ -5,11 +5,14 @@
 //   - Precache the recorder app shell on install.
 //   - Navigations: network-first, falling back to the cached recorder shell so
 //     a cold load works with no connectivity.
-//   - Same-origin static assets: cache-first (and refresh the cache on hit).
+//   - Same-origin static assets: network-first, falling back to cache when
+//     offline. (Cache-first would pin stale app code — e.g. games.js — and ship
+//     a broken UI after a deploy; freshness while online matters more than the
+//     tiny speed-up, and offline still works from the precached shell + cache.)
 //   - /api/* : always bypass the cache (recorder-store/recorder-sync own the
 //     offline data model; the SW must never serve stale API responses).
 
-const CACHE = 'recorder-shell-v1';
+const CACHE = 'recorder-shell-v2';
 
 // App shell: everything needed to boot and record a match offline.
 const SHELL = [
@@ -70,19 +73,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets → cache-first, revalidate in the background.
+  // Static assets → network-first: always serve fresh app code while online and
+  // refresh the cache; fall back to the cache only when the network fails
+  // (offline), so the precached shell still boots the recorder.
   event.respondWith(
-    caches.match(req).then((cached) => {
-      const network = fetch(req)
-        .then((res) => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(req)
+      .then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        }
+        return res;
+      })
+      .catch(() => caches.match(req))
   );
 });
