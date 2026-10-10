@@ -17,10 +17,24 @@ const gameStatsBody = document.getElementById("gameStatsBody");
 const gameStatsClose = document.getElementById("gameStatsClose");
 const gameStatsCloseBtn = document.getElementById("gameStatsCloseBtn");
 const gameStatsExport = document.getElementById("gameStatsExport");
+const gameStatsEdit = document.getElementById("gameStatsEdit");
+const gameStatsActions = document.getElementById("gameStatsActions");
 const boxScorePrintSheet = document.getElementById("boxScorePrintSheet");
+
+// Pure box-score event helpers (increments + percentage recompute).
+const BE = window.boxscoreEdit;
 
 // The game currently shown in the box score modal (so Export knows what to print).
 let currentGame = null;
+
+// ---------- edit-mode state ----------
+// Edits are modelled as an immutable base snapshot + an ordered list of ops, so
+// Undo is a pop and there are no reverse-increment bugs. computeWorking() folds
+// the ops back over the snapshot and re-derives percentages + computed stats.
+let editing = false;
+let editBase = null;        // deep clone of game.performances on enter
+let pendingOps = [];        // [{name, type}] or [{addPlayer:true, name, number}]
+let selectedPlayer = null;
 
 // ---------- helpers (mirrors admin.js) ----------
 const escapeHtml = (s) =>
@@ -119,14 +133,29 @@ function renderGames() {
 }
 
 // ---------- drill-down: per-game box score ----------
-function openGameStats(game) {
-  currentGame = game;
-  const locationLabel = game.homeAway === "home" ? "vs" : "@";
-  gameStatsTitle.textContent = `${formatDate(game.date)} ${locationLabel} ${game.opponent || ""}`.trim();
 
-  // Column set = union of stat keys across all players in this game.
+// Can the current user edit stats? Mirrors the server rule for
+// PUT /api/teams/:id/data (platform admin OR team admin).
+function canEditActiveTeam() {
+  const bt = window.BasketTeams || {};
+  if (bt.role === "admin") return true; // platform admin
+  const active = (bt.list || []).find((t) => t.id === bt.activeId);
+  const roles = active ? (active.roles || (active.role ? [active.role] : [])) : [];
+  return roles.includes("admin");
+}
+
+// Performances to render: live working copy while editing, else the saved game.
+function currentPerformances() {
+  return editing ? computeWorking() : (currentGame && currentGame.performances) || {};
+}
+
+// Render the box score head + body from the current performances. In edit mode
+// rows are selectable and the active player is highlighted.
+function renderBoxScore() {
+  const perf = currentPerformances();
+
   const allStats = new Set();
-  Object.values(game.performances || {}).forEach((stats) => {
+  Object.values(perf).forEach((stats) => {
     Object.keys(stats || {}).forEach((key) => allStats.add(key));
   });
   const statKeys = Array.from(allStats);
@@ -138,29 +167,281 @@ function openGameStats(game) {
     </tr>
   `;
 
-  const players = Object.entries(game.performances || {})
-    .sort(([, a], [, b]) => {
-      const pa = Number(a && (a.pts != null ? a.pts : a.points)) || 0;
-      const pb = Number(b && (b.pts != null ? b.pts : b.points)) || 0;
-      return pb - pa;
-    });
+  const players = Object.entries(perf).sort(([, a], [, b]) => {
+    const pa = Number(a && (a.pts != null ? a.pts : a.points)) || 0;
+    const pb = Number(b && (b.pts != null ? b.pts : b.points)) || 0;
+    return pb - pa;
+  });
 
   gameStatsBody.innerHTML = players.length
     ? players
-        .map(([name, stats]) => `
-          <tr>
+        .map(([name, stats]) => {
+          const sel = editing && name === selectedPlayer ? " selected" : "";
+          const cls = editing ? ` class="bs-row bs-selectable${sel}"` : "";
+          const attr = editing ? ` data-player="${escapeHtml(name)}"` : "";
+          return `
+          <tr${cls}${attr}>
             <td><strong>${escapeHtml(name)}</strong></td>
             ${statKeys.map((key) => `<td>${formatStatValue(stats ? stats[key] : null, key)}</td>`).join("")}
           </tr>
-        `)
+        `;
+        })
         .join("")
     : `<tr><td colspan="${statKeys.length + 1}" class="empty-state">No player stats recorded for this game.</td></tr>`;
+}
 
+function openGameStats(game) {
+  currentGame = game;
+  editing = false;
+  pendingOps = [];
+  selectedPlayer = null;
+  const locationLabel = game.homeAway === "home" ? "vs" : "@";
+  gameStatsTitle.textContent = `${formatDate(game.date)} ${locationLabel} ${game.opponent || ""}`.trim();
+
+  renderBoxScore();
+  setEditChrome(false);
+  if (gameStatsEdit) gameStatsEdit.hidden = !canEditActiveTeam();
   gameStatsModal.classList.add("active");
 }
 
 function closeGameStats() {
+  if (editing && pendingOps.length &&
+      !confirm("Discard unsaved stat edits?")) return;
+  editing = false;
+  pendingOps = [];
+  selectedPlayer = null;
+  setEditChrome(false);
   gameStatsModal.classList.remove("active");
+}
+
+// ---------- after-the-fact stat editing ----------
+
+// Fold the pending ops over the base snapshot, then re-derive percentages and
+// the computed metrics (reb, a/to, atk, def, shoot) for every line.
+function computeWorking() {
+  const base = JSON.parse(JSON.stringify(editBase || {}));
+  pendingOps.forEach((op) => {
+    if (op.addPlayer) {
+      if (!base[op.name]) base[op.name] = BE.emptyLine();
+    } else {
+      base[op.name] = BE.applyEvent(base[op.name] || BE.emptyLine(), op.type);
+    }
+  });
+  Object.keys(base).forEach((name) => {
+    BE.recomputePercentages(base[name]);
+    base[name] = window.basketStatData.addComputedStats(base[name]);
+  });
+  return base;
+}
+
+// Build the edit panel (quick-add actions + add-player sub-form) and the edit
+// action buttons once; they live inside the modal and toggle with edit mode.
+let editUIBuilt = false;
+let boxEditPanel, boxEditHint, boxAddPlayerForm;
+let editActionBtns = [];
+function ensureEditUI() {
+  if (editUIBuilt) return;
+  editUIBuilt = true;
+
+  const modalBody = gameStatsModal.querySelector(".modal-body");
+
+  // --- quick-add panel ---
+  boxEditPanel = document.createElement("div");
+  boxEditPanel.className = "box-edit-panel";
+  boxEditPanel.hidden = true;
+
+  boxEditHint = document.createElement("div");
+  boxEditHint.className = "box-edit-hint";
+  boxEditPanel.appendChild(boxEditHint);
+
+  const makeGroup = (label, group) => {
+    const wrap = document.createElement("div");
+    wrap.className = "box-edit-group";
+    const lbl = document.createElement("div");
+    lbl.className = "box-edit-group-label";
+    lbl.textContent = label;
+    wrap.appendChild(lbl);
+    const row = document.createElement("div");
+    row.className = "box-edit-actions";
+    BE.ACTIONS.filter((a) => a.group === group).forEach((a) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "box-edit-btn" +
+        (a.made === true ? " made" : a.made === false ? " miss" : "");
+      btn.textContent = a.label;
+      btn.dataset.action = a.type;
+      btn.disabled = true;
+      btn.addEventListener("click", () => applyQuickAdd(a.type));
+      editActionBtns.push(btn);
+      row.appendChild(btn);
+    });
+    wrap.appendChild(row);
+    return wrap;
+  };
+
+  boxEditPanel.appendChild(makeGroup("Shooting", "shooting"));
+  boxEditPanel.appendChild(makeGroup("Other", "other"));
+
+  // --- add-player sub-form ---
+  boxAddPlayerForm = document.createElement("div");
+  boxAddPlayerForm.className = "box-add-player";
+  boxAddPlayerForm.hidden = true;
+  boxAddPlayerForm.innerHTML = `
+    <div class="box-edit-group-label">Add a player to this box score</div>
+    <div class="box-add-player-row">
+      <select class="box-add-select" id="boxAddSelect"></select>
+      <input type="text" class="box-add-name" id="boxAddName" placeholder="or type a new name" />
+      <input type="number" class="box-add-number" id="boxAddNumber" placeholder="#" min="0" />
+      <button type="button" class="btn-small" id="boxAddConfirm">Add</button>
+      <button type="button" class="btn-small secondary" id="boxAddCancel">Cancel</button>
+    </div>
+  `;
+  boxEditPanel.appendChild(boxAddPlayerForm);
+
+  modalBody.appendChild(boxEditPanel);
+
+  boxAddPlayerForm.querySelector("#boxAddConfirm").addEventListener("click", confirmAddPlayer);
+  boxAddPlayerForm.querySelector("#boxAddCancel").addEventListener("click", () => { boxAddPlayerForm.hidden = true; });
+
+  // --- edit action buttons (added to the modal action row, hidden by default) ---
+  const mkBtn = (id, label, cls) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.id = id;
+    b.className = cls;
+    b.textContent = label;
+    b.hidden = true;
+    gameStatsActions.appendChild(b);
+    return b;
+  };
+  editAddPlayerBtn = mkBtn("boxEditAddPlayer", "Add player", "secondary");
+  editUndoBtn = mkBtn("boxEditUndo", "Undo", "secondary");
+  editCancelBtn = mkBtn("boxEditCancel", "Cancel", "secondary");
+  editSaveBtn = mkBtn("boxEditSave", "Save", "primary");
+
+  editAddPlayerBtn.addEventListener("click", openAddPlayer);
+  editUndoBtn.addEventListener("click", undoLastOp);
+  editCancelBtn.addEventListener("click", () => { editing = false; pendingOps = []; selectedPlayer = null; renderBoxScore(); setEditChrome(false); });
+  editSaveBtn.addEventListener("click", saveEdits);
+}
+
+let editAddPlayerBtn, editUndoBtn, editCancelBtn, editSaveBtn;
+
+// Toggle the modal between view and edit chrome (buttons + panel visibility).
+function setEditChrome(on) {
+  ensureEditUI();
+  [gameStatsEdit, gameStatsCloseBtn, gameStatsExport].forEach((b) => { if (b) b.hidden = on; });
+  [editAddPlayerBtn, editUndoBtn, editCancelBtn, editSaveBtn].forEach((b) => { if (b) b.hidden = !on; });
+  if (gameStatsEdit && !on) gameStatsEdit.hidden = !canEditActiveTeam();
+  boxEditPanel.hidden = !on;
+  if (!on && boxAddPlayerForm) boxAddPlayerForm.hidden = true;
+  if (on) updateEditPanel();
+}
+
+function enterEditMode() {
+  if (!currentGame) return;
+  editing = true;
+  editBase = JSON.parse(JSON.stringify(currentGame.performances || {}));
+  pendingOps = [];
+  selectedPlayer = null;
+  renderBoxScore();
+  setEditChrome(true);
+}
+
+// Enable/disable the quick-add buttons and show which player is targeted.
+function updateEditPanel() {
+  const has = !!selectedPlayer;
+  editActionBtns.forEach((b) => { b.disabled = !has; });
+  boxEditHint.textContent = has
+    ? `Adding events to: ${selectedPlayer}`
+    : "Select a player row, then tap an event to add it.";
+  if (editUndoBtn) editUndoBtn.disabled = pendingOps.length === 0;
+}
+
+function selectPlayer(name) {
+  selectedPlayer = name;
+  renderBoxScore();
+  updateEditPanel();
+}
+
+function applyQuickAdd(type) {
+  if (!selectedPlayer) return;
+  pendingOps.push({ name: selectedPlayer, type });
+  renderBoxScore();
+  updateEditPanel();
+}
+
+function undoLastOp() {
+  if (!pendingOps.length) return;
+  const removed = pendingOps.pop();
+  // If we undid the add of a player who has no remaining ops, drop the selection.
+  if (removed.addPlayer && !pendingOps.some((o) => o.name === removed.name)) {
+    if (selectedPlayer === removed.name) selectedPlayer = null;
+  }
+  renderBoxScore();
+  updateEditPanel();
+}
+
+function openAddPlayer() {
+  const data = window.basketStatData.loadData();
+  const roster = Object.keys(data.players || {});
+  const inGame = new Set(Object.keys(currentPerformances()));
+  const eligible = roster.filter((n) => !inGame.has(n)).sort((a, b) => a.localeCompare(b));
+  const sel = boxAddPlayerForm.querySelector("#boxAddSelect");
+  sel.innerHTML =
+    '<option value="">— roster player —</option>' +
+    eligible.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+  boxAddPlayerForm.querySelector("#boxAddName").value = "";
+  boxAddPlayerForm.querySelector("#boxAddNumber").value = "";
+  boxAddPlayerForm.hidden = false;
+}
+
+function confirmAddPlayer() {
+  const sel = boxAddPlayerForm.querySelector("#boxAddSelect");
+  const nameInput = boxAddPlayerForm.querySelector("#boxAddName");
+  const numInput = boxAddPlayerForm.querySelector("#boxAddNumber");
+  const name = (nameInput.value.trim() || sel.value || "").trim();
+  if (!name) { nameInput.focus(); return; }
+  if (currentPerformances()[name]) { // already present
+    selectPlayer(name);
+    boxAddPlayerForm.hidden = true;
+    return;
+  }
+  const number = numInput.value === "" ? null : Number(numInput.value);
+  pendingOps.push({ addPlayer: true, name, number });
+  boxAddPlayerForm.hidden = true;
+  selectPlayer(name);
+}
+
+async function saveEdits() {
+  const working = computeWorking();
+  const data = window.basketStatData.loadData();
+  const g = data.games.find((x) => String(x.id) === String(currentGame.id));
+  if (!g) { alert("Game not found; cannot save."); return; }
+  g.performances = working;
+  // Register any newly added players in the roster registry.
+  pendingOps.filter((o) => o.addPlayer).forEach(({ name, number }) => {
+    if (!data.players[name]) {
+      data.players[name] = { number: (number === 0 || number) ? number : null, active: true };
+    }
+  });
+
+  editSaveBtn.disabled = true;
+  let ok = false;
+  try { ok = await window.basketStatData.saveData(data, { immediate: true }); }
+  catch (e) { ok = false; }
+  editSaveBtn.disabled = false;
+
+  if (!ok) {
+    boxEditHint.textContent = "Save failed — only team admins can edit stats. Your changes are kept here; try again.";
+    return;
+  }
+  // Success: refresh the list (team PTS changed) and re-open in view mode.
+  editing = false;
+  pendingOps = [];
+  selectedPlayer = null;
+  renderGames();
+  openGameStats(g);
 }
 
 // ---------- PDF export (print-to-PDF) ----------
@@ -297,6 +578,16 @@ gameStatsCloseBtn.addEventListener("click", closeGameStats);
 if (gameStatsExport) {
   gameStatsExport.addEventListener("click", () => { if (currentGame) exportBoxScorePdf(currentGame); });
 }
+if (gameStatsEdit) {
+  gameStatsEdit.addEventListener("click", enterEditMode);
+}
+// Row selection while editing: click a player row to target quick-add events.
+gameStatsBody.addEventListener("click", (e) => {
+  if (!editing) return;
+  const row = e.target.closest("tr[data-player]");
+  if (!row) return;
+  selectPlayer(row.dataset.player);
+});
 gameStatsModal.addEventListener("click", (e) => {
   // Click on the backdrop (outside the .modal) closes.
   if (e.target === gameStatsModal) closeGameStats();

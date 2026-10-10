@@ -2625,6 +2625,99 @@ button.danger:hover {
 }
 
 /* ========================================
+   BOX SCORE AFTER-THE-FACT EDITING
+   ======================================== */
+
+/* Selectable rows while editing. View mode is unaffected (no bs-selectable). */
+.bs-selectable { cursor: pointer; }
+.bs-selectable:hover { background: var(--surface-raised); }
+.bs-selectable.selected { background: var(--accent-dim); }
+.bs-selectable.selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+
+.box-edit-panel {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.box-edit-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.box-edit-group { margin-bottom: 12px; }
+
+.box-edit-group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.box-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.box-edit-btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+.box-edit-btn:hover:not(:disabled) { border-color: var(--accent); }
+.box-edit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.box-edit-btn.made { color: var(--positive); border-color: rgba(74, 222, 128, 0.4); }
+.box-edit-btn.miss { color: var(--negative); border-color: rgba(248, 113, 113, 0.4); }
+
+.box-add-player {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.box-add-player-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.box-add-player-row .box-add-select,
+.box-add-player-row .box-add-name {
+  flex: 1;
+  min-width: 140px;
+}
+.box-add-player-row .box-add-number { width: 70px; }
+
+.btn-small {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #06201b;
+  cursor: pointer;
+}
+.btn-small.secondary {
+  background: var(--surface-raised);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* ========================================
    SETTINGS PAGE STYLES
    ======================================== */
 
