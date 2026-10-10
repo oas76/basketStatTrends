@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0c10" />
     <title>Game Recorder | BasketStat</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Recorder" />
+    <link rel="apple-touch-icon" href="recorder-icon.svg" />
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="recorder.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>" />
@@ -24,6 +29,7 @@
           <div class="rec-title" id="recTitle">Game Recorder</div>
           <div class="rec-sub" id="recSubtitle"></div>
         </div>
+        <div class="rec-conn" id="recConn" title="Connection status" hidden></div>
         <button class="rec-btn ghost" id="recMenuBtn" style="min-height:40px; padding:8px 12px; font-size:13px;">Menu</button>
       </header>
 
@@ -179,6 +185,16 @@
 
     <script src="recorder-aggregator.js"></script>
     <script src="recorder-clock.js"></script>
+    <script src="recorder-store.js"></script>
+    <script src="recorder-sync.js"></script>
     <script src="recorder.js"></script>
+    <script>
+      // Register the service worker so the recorder can cold-start offline.
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>

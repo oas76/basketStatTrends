@@ -679,7 +679,12 @@ const authMiddleware = async (req, res, next) => {
     '/recorder.css',
     '/recorder.js',
     '/recorder-aggregator.js',
-    '/recorder-clock.js'
+    '/recorder-clock.js',
+    '/recorder-store.js',
+    '/recorder-sync.js',
+    '/recorder-icon.svg',
+    '/manifest.webmanifest',
+    '/sw.js'
   ];
 
   // Admin-only paths (require admin role)

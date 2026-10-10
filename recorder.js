@@ -11,6 +11,11 @@
 
   const AGG = window.recorderAggregator;
   const CLK = window.recorderClock;
+  // Offline layer: localStorage-backed store + server reconciliation. Both are
+  // optional — if the scripts failed to load the recorder still works online.
+  const STORE = window.recorderStore || null;
+  const SYNC = window.recorderSync || null;
+  const isOnline = () => (typeof navigator === 'undefined' || navigator.onLine !== false);
 
   // ---------- tiny DOM helpers ----------
   const $ = (sel) => document.querySelector(sel);
@@ -39,6 +44,9 @@
   }
 
   const uid = () => 'e_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  // Client-generated draft id so a game can be created offline and later upserted
+  // on the server (the drafts API keys on this id).
+  const newDraftId = () => 'd_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
   const todayISO = () => {
     const d = new Date();
     const p = (n) => String(n).padStart(2, '0');
@@ -90,6 +98,8 @@
     clock: null,
     seq: 0,
     saveTimer: null,
+    syncTimer: null,
+    syncing: false,
     screen: 'home',
     finishEventId: null,
     logFilter: { period: 'all', type: 'all', unassignedOnly: false },
@@ -115,6 +125,79 @@
     try { data = await res.json(); } catch (e) { /* ignore */ }
     if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status})`);
     return data;
+  }
+
+  // ---------- connectivity & background sync ----------
+  // Team roster + competitions, cache-first: refresh from the network when
+  // online (and cache it), otherwise fall back to whatever was last cached so a
+  // new game can be set up offline.
+  async function loadTeamData(teamId) {
+    if (isOnline()) {
+      try {
+        const data = await api('GET', `/api/teams/${encodeURIComponent(teamId)}/data`);
+        if (STORE) STORE.setTeamData(teamId, data);
+        return data;
+      } catch (e) { /* fall through to cache */ }
+    }
+    const cached = STORE ? STORE.getTeamData(teamId) : null;
+    return cached || { players: {}, games: [], leagues: [], finishedLeagues: [] };
+  }
+
+  // Push locally-saved drafts and reconcile from the server. Guarded so it is a
+  // no-op offline or while a sync is already running.
+  async function triggerSync() {
+    if (!SYNC || !STORE || !isOnline() || state.syncing || !state.teams.length) return;
+    state.syncing = true;
+    updateConnBadge();
+    try { await SYNC.syncAll(state.teams, { api, store: STORE }); }
+    catch (e) { /* best-effort; stays dirty for the next attempt */ }
+    state.syncing = false;
+    updateConnBadge();
+    if (state.screen === 'home') renderDraftList();
+  }
+
+  // Debounced sync so rapid autosaves during live play don't hammer the network.
+  function scheduleSync() {
+    updateConnBadge();
+    if (!isOnline()) return;
+    if (state.syncTimer) clearTimeout(state.syncTimer);
+    state.syncTimer = setTimeout(triggerSync, 1500);
+  }
+
+  function totalUnsynced() {
+    if (!STORE || !state.teams.length) return 0;
+    return state.teams.reduce((n, t) => n + STORE.unsyncedCount(t.id), 0);
+  }
+
+  // Topbar pill reflecting connection + pending-sync state.
+  function updateConnBadge() {
+    const badge = $('#recConn');
+    if (!badge) return;
+    const unsynced = totalUnsynced();
+    badge.hidden = false;
+    if (!isOnline()) {
+      badge.className = 'rec-conn offline';
+      badge.textContent = unsynced ? `Offline \u00b7 ${unsynced} unsynced` : 'Offline';
+    } else if (state.syncing) {
+      badge.className = 'rec-conn syncing';
+      badge.textContent = 'Syncing\u2026';
+    } else if (unsynced) {
+      badge.className = 'rec-conn syncing';
+      badge.textContent = `${unsynced} unsynced`;
+    } else {
+      badge.className = 'rec-conn online';
+      badge.textContent = 'Online';
+    }
+  }
+
+  function wireSyncTriggers() {
+    window.addEventListener('online', () => { updateConnBadge(); triggerSync(); });
+    window.addEventListener('offline', updateConnBadge);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) { updateConnBadge(); triggerSync(); }
+    });
+    // Light periodic catch-up while the recorder is open and online.
+    setInterval(() => { if (isOnline()) triggerSync(); }, 30000);
   }
 
   // ---------- toast ----------
@@ -203,52 +286,57 @@
       ]));
     });
 
-    // Resume drafts across all teams
+    renderDraftList();
+    showScreen('home');
+    // Reconcile with the server in the background; re-renders drafts on finish.
+    triggerSync();
+  }
+
+  // Build the "Continue recording" list from the local store (cache-first) so it
+  // renders instantly and works offline. Drafts with unpushed local changes are
+  // flagged with an "Unsynced" marker.
+  function renderDraftList() {
     const draftList = $('#recDraftList');
+    if (!draftList) return;
     draftList.innerHTML = '';
     let anyDraft = false;
     for (const t of state.teams) {
-      try {
-        const { drafts } = await api('GET', `/api/teams/${encodeURIComponent(t.id)}/drafts`);
-        (drafts || []).filter((d) => d.status !== 'completed').forEach((d) => {
-          anyDraft = true;
-          const evs = Array.isArray(d.events) ? d.events.length : 0;
-          // A <div> tile (not <button>) so it can host a nested Edit button.
-          const editBtn = el('button', { class: 'rec-btn ghost rec-tile-edit', text: 'Edit', onclick: async (ev) => {
-            ev.stopPropagation();
-            let teamData;
-            try { teamData = await api('GET', `/api/teams/${encodeURIComponent(t.id)}/data`); }
-            catch (e) { teamData = { players: {}, games: [], leagues: [], finishedLeagues: [] }; }
-            openEditGameSheet({ meta: d.meta || {}, teamData, onSave: async (vals) => {
-              const updated = { ...d, meta: { ...(d.meta || {}), ...vals } };
-              await api('PUT', `/api/teams/${encodeURIComponent(t.id)}/drafts/${encodeURIComponent(d.id)}`, updated);
-              toast('Game details updated');
-              renderHome();
-            } });
+      const drafts = STORE ? STORE.activeDrafts(t.id) : [];
+      drafts.filter((d) => d.status !== 'completed').forEach((d) => {
+        anyDraft = true;
+        const evs = Array.isArray(d.events) ? d.events.length : 0;
+        // A <div> tile (not <button>) so it can host a nested Edit button.
+        const editBtn = el('button', { class: 'rec-btn ghost rec-tile-edit', text: 'Edit', onclick: async (ev) => {
+          ev.stopPropagation();
+          const teamData = await loadTeamData(t.id);
+          openEditGameSheet({ meta: d.meta || {}, teamData, onSave: async (vals) => {
+            const updated = Object.assign({}, d, { meta: Object.assign({}, d.meta || {}, vals) });
+            if (STORE) STORE.putDraft(t.id, updated);
+            toast('Game details updated');
+            scheduleSync();
+            renderDraftList();
           } });
-          draftList.appendChild(el('div', { class: 'rec-tile rec-tile-draft', onclick: () => resumeDraft(t, d) }, [
-            el('div', { class: 'rec-tile-main' }, [
-              el('div', { class: 'rec-tile-title', text: `${t.name} vs ${d.meta ? d.meta.opponent : '?'}` }),
-              el('div', { class: 'rec-tile-meta', text: `${d.meta ? d.meta.league || '' : ''} \u00b7 ${evs} events \u00b7 ${d.meta ? d.meta.date : ''}` })
-            ]),
-            editBtn,
-            el('span', { class: 'rec-badge', text: 'Resume' })
-          ]));
-        });
-      } catch (e) { /* ignore per-team */ }
+        } });
+        const children = [
+          el('div', { class: 'rec-tile-main' }, [
+            el('div', { class: 'rec-tile-title', text: `${t.name} vs ${d.meta ? d.meta.opponent : '?'}` }),
+            el('div', { class: 'rec-tile-meta', text: `${d.meta ? d.meta.league || '' : ''} \u00b7 ${evs} events \u00b7 ${d.meta ? d.meta.date : ''}` })
+          ]),
+          editBtn,
+          d._dirty ? el('span', { class: 'rec-unsynced', text: 'Unsynced' }) : null,
+          el('span', { class: 'rec-badge', text: 'Resume' })
+        ];
+        draftList.appendChild(el('div', { class: 'rec-tile rec-tile-draft', onclick: () => resumeDraft(t, d) }, children));
+      });
     }
     if (!anyDraft) draftList.appendChild(el('div', { class: 'rec-empty', text: 'No in-progress recordings.' }));
-    showScreen('home');
+    updateConnBadge();
   }
 
   async function selectTeam(team) {
     state.teamId = team.id;
     state.teamName = team.name;
-    try {
-      state.teamData = await api('GET', `/api/teams/${encodeURIComponent(team.id)}/data`);
-    } catch (e) {
-      state.teamData = { players: {}, games: [], leagues: [], finishedLeagues: [] };
-    }
+    state.teamData = await loadTeamData(team.id);
     setupNewGame();
   }
 
@@ -429,13 +517,12 @@
       .filter((r) => r.included)
       .map((r) => ({ name: r.name, number: r.number, starter: !!r.starter }));
 
-    try {
-      const { draft } = await api('POST', `/api/teams/${encodeURIComponent(state.teamId)}/drafts`, state.draft);
-      state.draft = normalizeDraft(draft);
-    } catch (e) {
-      toast('Could not save draft: ' + e.message);
-      return;
-    }
+    // Local-first: give the draft a stable client id, persist it immediately so
+    // the game survives a reload with no network, then sync in the background.
+    if (!state.draft.id) state.draft.id = newDraftId();
+    state.draft = normalizeDraft(state.draft);
+    if (STORE) STORE.putDraft(state.teamId, state.draft);
+    scheduleSync();
     enterLive();
   }
 
@@ -789,6 +876,14 @@
   }
   async function saveDraft() {
     if (!state.draft || !state.draft.id) return;
+    // Local-first: the authoritative copy lives in the store and is always
+    // written synchronously, so a lost connection never loses the recording.
+    if (STORE) {
+      STORE.putDraft(state.teamId, state.draft);
+      scheduleSync();
+      return;
+    }
+    // Fallback path when the offline store isn't available.
     try {
       const { draft } = await api('PUT',
         `/api/teams/${encodeURIComponent(state.teamId)}/drafts/${encodeURIComponent(state.draft.id)}`,
@@ -1388,22 +1483,32 @@
     state.finishEventId = null;
     state.draft.status = 'completed';
     recompute();
-    try {
-      await api('PUT', `/api/teams/${encodeURIComponent(state.teamId)}/drafts/${encodeURIComponent(state.draft.id)}`, state.draft);
-      toast('Saved. An admin can now import it.');
-      if (state.clock) { state.clock.destroy(); state.clock = null; }
-      setTimeout(() => { state.draft = null; renderHome(); }, 900);
-    } catch (e) {
-      toast('Save failed: ' + e.message);
+    // Local-first: persist the completed recording immediately, then try to push.
+    if (STORE) STORE.putDraft(state.teamId, state.draft);
+    let synced = false;
+    if (SYNC && STORE && isOnline()) {
+      try {
+        const res = await SYNC.syncTeam(state.teamId, { api, store: STORE });
+        synced = res.errors.length === 0;
+      } catch (e) { synced = false; }
+    } else if (!STORE) {
+      // Fallback when the offline store isn't available.
+      try {
+        await api('PUT', `/api/teams/${encodeURIComponent(state.teamId)}/drafts/${encodeURIComponent(state.draft.id)}`, state.draft);
+        synced = true;
+      } catch (e) { synced = false; }
     }
+    toast(synced ? 'Saved. An admin can now import it.' : 'Saved offline \u2014 will sync when back online.');
+    if (state.clock) { state.clock.destroy(); state.clock = null; }
+    updateConnBadge();
+    setTimeout(() => { state.draft = null; renderHome(); }, 900);
   }
 
   // ---------- resume ----------
   async function resumeDraft(team, draft) {
     state.teamId = team.id;
     state.teamName = team.name;
-    try { state.teamData = await api('GET', `/api/teams/${encodeURIComponent(team.id)}/data`); }
-    catch (e) { state.teamData = { players: {}, games: [], leagues: [], finishedLeagues: [] }; }
+    state.teamData = await loadTeamData(team.id);
     state.draft = normalizeDraft(draft);
     enterLive();
   }
@@ -1529,17 +1634,25 @@
   async function discardDraft() {
     if (!state.draft || !state.draft.id) { closeSheet(); return; }
     if (!confirm('Delete this recording? This cannot be undone.')) return;
-    try {
-      await api('DELETE', `/api/teams/${encodeURIComponent(state.teamId)}/drafts/${encodeURIComponent(state.draft.id)}`);
-      // Clear the discarded game and reset the UI to the New Game create form for
-      // the same team (the draft is already removed server-side, so Home would no
-      // longer list it either).
-      if (state.clock) { state.clock.destroy(); state.clock = null; }
-      state.draft = null;
-      closeSheet();
-      if (state.teamId) setupNewGame();
-      else renderHome();
-    } catch (e) { toast('Delete failed: ' + e.message); }
+    if (STORE) {
+      // Local-first delete: tombstone a draft that reached the server (so the
+      // delete syncs), otherwise drop a never-synced local-only draft outright.
+      const existing = STORE.getDraft(state.teamId, state.draft.id);
+      if (existing && existing._syncedAt) STORE.tombstone(state.teamId, state.draft.id);
+      else STORE.removeDraft(state.teamId, state.draft.id);
+      scheduleSync();
+    } else {
+      try {
+        await api('DELETE', `/api/teams/${encodeURIComponent(state.teamId)}/drafts/${encodeURIComponent(state.draft.id)}`);
+      } catch (e) { toast('Delete failed: ' + e.message); return; }
+    }
+    // Clear the discarded game and reset the UI to the New Game create form for
+    // the same team.
+    if (state.clock) { state.clock.destroy(); state.clock = null; }
+    state.draft = null;
+    closeSheet();
+    if (state.teamId) setupNewGame();
+    else renderHome();
   }
   async function logout() {
     try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) { /* ignore */ }
@@ -1576,14 +1689,44 @@
   // ---------- init ----------
   async function init() {
     bind();
-    let info;
-    try { info = await api('GET', '/api/auth/check'); }
-    catch (e) { return; }
-    if (!info || !info.authenticated) { window.location.href = '/login.html?redirect=/recorder.html'; return; }
-    state.auth = info;
-    state.teams = Array.isArray(info.teams) ? info.teams : [];
+    wireSyncTriggers();
+
+    // Cache-first boot: try the network, but fall back to the cached session so
+    // the recorder cold-starts (even first screen) with no connectivity. We must
+    // never block here — the loading overlay is always cleared below.
+    let info = null;
+    if (isOnline()) {
+      try { info = await api('GET', '/api/auth/check'); }
+      catch (e) {
+        if (e && e.message === 'unauthorized') return; // api() is redirecting to login
+        info = null; // network error → fall back to cache
+      }
+    }
+
+    if (info && info.authenticated) {
+      state.auth = info;
+      state.teams = Array.isArray(info.teams) ? info.teams : [];
+      if (STORE) STORE.setAuth({ email: info.email, name: info.name, teams: state.teams });
+    } else if (info && !info.authenticated) {
+      window.location.href = '/login.html?redirect=/recorder.html';
+      return;
+    } else {
+      // Offline (or the check failed): boot from the cached session if we have one.
+      const cached = STORE ? STORE.getAuth() : null;
+      if (cached) {
+        state.auth = cached;
+        state.teams = Array.isArray(cached.teams) ? cached.teams : [];
+      } else {
+        // No network and no cached session — show a hint instead of a dead spinner.
+        const msg = $('#recLoading .loading-spinner div:last-child');
+        if (msg) msg.textContent = 'Offline — connect once to sign in.';
+        return; // keep the overlay with the message
+      }
+    }
+
     await renderHome();
     $('#recLoading').classList.add('hidden');
+    updateConnBadge();
   }
 
   document.addEventListener('DOMContentLoaded', init);

@@ -136,6 +136,22 @@ body.recorder-body {
 }
 .rec-empty { color: var(--text-muted); font-size: 14px; padding: 24px 8px; text-align: center; }
 
+/* ---- Connectivity / sync status ---- */
+.rec-conn {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.03em;
+  padding: 4px 9px; border-radius: 999px; white-space: nowrap;
+  flex: 0 0 auto;
+}
+.rec-conn.online { background: rgba(46, 160, 67, 0.16); color: #3fb950; }
+.rec-conn.syncing { background: var(--accent-dim); color: var(--accent); }
+.rec-conn.offline { background: rgba(210, 153, 34, 0.16); color: #d29922; }
+/* Per-draft "unsynced" marker on home tiles. */
+.rec-tile .rec-unsynced {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 3px 7px; border-radius: 999px;
+  background: rgba(210, 153, 34, 0.16); color: #d29922;
+}
+
 /* ---- Squad (empty-start, tap-cycle tiles) ---- */
 .rec-squad-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));

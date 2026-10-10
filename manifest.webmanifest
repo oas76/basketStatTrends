@@ -1,0 +1,19 @@
+{
+  "name": "BasketStat Game Recorder",
+  "short_name": "Recorder",
+  "description": "Record basketball games live — works offline.",
+  "start_url": "/recorder.html",
+  "scope": "/recorder.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0c10",
+  "theme_color": "#0a0c10",
+  "icons": [
+    {
+      "src": "/recorder-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
