@@ -243,8 +243,6 @@ function ensureEditUI() {
   if (editUIBuilt) return;
   editUIBuilt = true;
 
-  const modalBody = gameStatsModal.querySelector(".modal-body");
-
   // --- quick-add panel ---
   boxEditPanel = document.createElement("div");
   boxEditPanel.className = "box-edit-panel";
@@ -298,7 +296,11 @@ function ensureEditUI() {
   `;
   boxEditPanel.appendChild(boxAddPlayerForm);
 
-  modalBody.appendChild(boxEditPanel);
+  // Place the panel between the scrollable table body and the action row so the
+  // quick-add controls stay visible on entering edit mode — appending it inside
+  // .modal-body (max-height:60vh; overflow:auto) buries it below a tall roster.
+  const modal = gameStatsModal.querySelector(".modal");
+  modal.insertBefore(boxEditPanel, gameStatsActions);
 
   boxAddPlayerForm.querySelector("#boxAddConfirm").addEventListener("click", confirmAddPlayer);
   boxAddPlayerForm.querySelector("#boxAddCancel").addEventListener("click", () => { boxAddPlayerForm.hidden = true; });

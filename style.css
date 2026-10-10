@@ -2634,10 +2634,18 @@ button.danger:hover {
 .bs-selectable.selected { background: var(--accent-dim); }
 .bs-selectable.selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
+/* Edit mode adds a quick-add panel between the (scrolling) table and the action
+   row. Make only the games modal a flex column so the table body shrinks and the
+   panel + action buttons stay visible instead of being clipped by max-height. */
+#gameStatsModal .modal { display: flex; flex-direction: column; }
+#gameStatsModal .modal-body { flex: 1 1 auto; min-height: 0; max-height: none; }
+
 .box-edit-panel {
-  margin-top: 16px;
-  padding-top: 14px;
+  padding: 14px 20px;
   border-top: 1px solid var(--border);
+  background: var(--surface-raised);
+  max-height: 34vh;
+  overflow-y: auto;
 }
 
 .box-edit-hint {
