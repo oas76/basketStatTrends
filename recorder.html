@@ -113,6 +113,12 @@
           <button class="rec-btn" id="recNextPeriod">Next period ›</button>
         </div>
 
+        <!-- Input mode: player-first (default) records by tapping a player; stat-first records by tapping a stat then picking a player. -->
+        <div class="rec-mode-toggle" id="recModeToggle" role="tablist" aria-label="Input mode">
+          <button type="button" data-mode="player" role="tab">Player</button>
+          <button type="button" data-mode="stat" role="tab">Stat</button>
+        </div>
+
         <div class="rec-event-groups">
           <div class="rec-eg-label">Shooting</div>
           <div class="rec-event-grid shooting">
@@ -138,6 +144,12 @@
 
         <div class="rec-h oncourt-h">On court</div>
         <div class="rec-oncourt info" id="recOnCourt"></div>
+
+        <!-- Player-first secondary actions: the other team's events live here, under the players. -->
+        <div class="rec-opp-bar" id="recOppBar">
+          <button class="rec-ev opp" data-opp-menu="1">Opponent Score</button>
+          <button class="rec-ev opp" data-opp-foul="1">Opponent Foul</button>
+        </div>
       </section>
 
       <!-- REVIEW -->

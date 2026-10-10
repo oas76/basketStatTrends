@@ -337,6 +337,43 @@ body.recorder-body {
 }
 #recOnCourt .rec-empty { padding: 8px; white-space: nowrap; }
 
+/* ---- Input mode toggle (player-first vs stat-first) ---- */
+.rec-mode-toggle {
+  display: flex; gap: 4px; padding: 3px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+.rec-mode-toggle button {
+  flex: 1; min-width: 0; appearance: none; border: 0; cursor: pointer;
+  font-family: inherit; font-weight: 700; font-size: 14px;
+  padding: 8px; border-radius: 8px; background: transparent; color: var(--text-secondary);
+  touch-action: manipulation;
+}
+.rec-mode-toggle button.active { background: var(--accent); color: #04201b; }
+#screen-live .rec-mode-toggle { flex: 0 0 auto; }
+
+/* ---- Player-first secondary opponent bar (under the players) ---- */
+#recOppBar.rec-opp-bar { margin-top: 0; gap: 10px; }
+#recOppBar .rec-ev { flex: 1; min-width: 0; }
+#screen-live #recOppBar { flex: 0 0 auto; }
+
+/* ---- Input-mode visibility (portrait base) ---- */
+/* Player-first (default): big on-court grid is the primary, flexible region;
+   the stat-first event grid is hidden. */
+#screen-live.mode-player .rec-event-groups { display: none; }
+#screen-live.mode-player #recOnCourt {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  grid-auto-rows: 1fr; flex: 1 1 auto; min-height: 0; overflow: hidden; padding-bottom: 0;
+}
+#screen-live.mode-player #recOnCourt .rec-player-tile {
+  min-width: 0; width: auto; padding: 10px 8px; justify-content: center;
+}
+#screen-live.mode-player #recOnCourt .rec-player-num { width: 44px; height: 44px; font-size: 20px; }
+#screen-live.mode-player #recOnCourt .rec-player-name {
+  font-size: 13px; max-width: none; white-space: normal;
+}
+/* Stat-first: hide the player-first opponent bar (opp actions live in the Play grid). */
+#screen-live.mode-stat #recOppBar { display: none; }
+
 /* ---- No-scroll squad picker (mirrors #screen-live) ---- */
 #screen-squad.active {
   height: calc(100dvh - 56px);
@@ -475,30 +512,66 @@ table.rec-box thead th { color: var(--text-secondary); font-size: 11px; text-tra
   }
 
   /* ---- Two-column live layout ----
-     Left: scoreboard, clock controls, fouls, reminder, on-court.
-     Right: the event-entry grids, spanning the full height. */
+     Game state on the left; the primary input region (players or event grid,
+     depending on mode) spans the full height on the right. */
   #screen-live.active {
     display: grid;
     grid-template-columns: minmax(300px, 410px) 1fr;
-    grid-template-rows: auto auto auto auto auto 1fr;
-    grid-template-areas:
-      "score    events"
-      "controls events"
-      "fouls    events"
-      "remind   events"
-      "oncourtH events"
-      "oncourt  events";
     gap: 12px 18px;
     align-content: start;
     padding: 16px 18px calc(84px + env(safe-area-inset-bottom));
   }
+  /* Shared left-column placements. */
   #screen-live .rec-scoreboard { grid-area: score; margin-bottom: 0; }
   #screen-live .rec-clock-controls { grid-area: controls; margin: 0; }
+  #screen-live .rec-mode-toggle { grid-area: toggle; }
   #screen-live .rec-foulbar { grid-area: fouls; margin: 0; }
   #screen-live .rec-reminder-banner { grid-area: remind; margin: 0; }
-  #screen-live .rec-h.oncourt-h { grid-area: oncourtH; margin: 0; }
-  #screen-live #recOnCourt { grid-area: oncourt; align-self: start; }
-  #screen-live .rec-event-groups { grid-area: events; min-height: 0; gap: 8px; }
+
+  /* Stat-first: event grid on the right; on-court strip on the left. */
+  #screen-live.mode-stat {
+    grid-template-rows: auto auto auto auto auto auto 1fr;
+    grid-template-areas:
+      "score    events"
+      "controls events"
+      "toggle   events"
+      "fouls    events"
+      "remind   events"
+      "oncourtH events"
+      "oncourt  events";
+  }
+  #screen-live.mode-stat .rec-h.oncourt-h { grid-area: oncourtH; margin: 0; }
+  #screen-live.mode-stat #recOnCourt {
+    grid-area: oncourt; align-self: start;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    overflow: visible; padding-bottom: 0; flex: initial;
+  }
+  #screen-live.mode-stat #recOnCourt .rec-player-tile { min-width: 0; width: auto; padding: 12px 8px; }
+  #screen-live.mode-stat #recOnCourt .rec-player-num { width: 46px; height: 46px; font-size: 20px; }
+  #screen-live.mode-stat #recOnCourt .rec-player-name { font-size: 13px; max-width: none; white-space: normal; }
+  #screen-live.mode-stat .rec-event-groups { grid-area: events; min-height: 0; gap: 8px; }
+
+  /* Player-first: big player grid on the right, opponent bar spanning beneath. */
+  #screen-live.mode-player {
+    grid-template-rows: auto auto auto auto 1fr auto;
+    grid-template-areas:
+      "score    players"
+      "controls players"
+      "toggle   players"
+      "fouls    players"
+      "remind   players"
+      "oppbar   oppbar";
+  }
+  #screen-live.mode-player .rec-h.oncourt-h { display: none; }
+  #screen-live.mode-player #recOnCourt {
+    grid-area: players; align-self: stretch;
+    display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr;
+    gap: 12px; overflow: hidden; padding-bottom: 0;
+  }
+  #screen-live.mode-player #recOnCourt .rec-player-tile { min-width: 0; width: auto; padding: 12px 8px; }
+  #screen-live.mode-player #recOnCourt .rec-player-num { width: 46px; height: 46px; font-size: 20px; }
+  #screen-live.mode-player #recOnCourt .rec-player-name { font-size: 13px; max-width: none; white-space: normal; }
+  #screen-live.mode-player #recOppBar { grid-area: oppbar; }
 
   /* Larger, comfortable targets now that there is room. */
   #screen-live .rec-score-side .val { font-size: 36px; }
@@ -508,13 +581,4 @@ table.rec-box thead th { color: var(--text-secondary); font-size: 11px; text-tra
   #screen-live .rec-clock-controls .rec-btn { min-height: 54px; padding: 12px; font-size: 16px; }
   #screen-live .rec-eg-label { font-size: 12px; margin: 4px 0 2px; }
   #screen-live .rec-ev { font-size: 17px; padding: 10px; }
-
-  /* On court becomes a wrapping grid (no horizontal scroll) in the left column. */
-  #screen-live #recOnCourt {
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
-    overflow: visible; padding-bottom: 0;
-  }
-  #screen-live #recOnCourt .rec-player-tile { min-width: 0; width: auto; padding: 12px 8px; }
-  #screen-live #recOnCourt .rec-player-num { width: 46px; height: 46px; font-size: 20px; }
-  #screen-live #recOnCourt .rec-player-name { font-size: 13px; max-width: none; }
 }

@@ -92,7 +92,14 @@
     saveTimer: null,
     screen: 'home',
     finishEventId: null,
-    logFilter: { period: 'all', type: 'all', unassignedOnly: false }
+    logFilter: { period: 'all', type: 'all', unassignedOnly: false },
+    // Live input mode: 'player' (tap a player, then a stat) is the primary flow;
+    // 'stat' (tap a stat, then pick a player) is kept as a secondary mode. The
+    // recorder's choice persists across games.
+    inputMode: (function () {
+      try { return localStorage.getItem('rec_input_mode') === 'stat' ? 'stat' : 'player'; }
+      catch (e) { return 'player'; }
+    })()
   };
 
   // ---------- API ----------
@@ -452,8 +459,27 @@
     $('#recUsLbl').textContent = state.teamName.length > 8 ? state.teamName.slice(0, 8) + '\u2026' : state.teamName;
     $('#recThemLbl').textContent = 'Opp';
     recompute();
+    applyInputMode();
     renderLive();
     showScreen('live');
+  }
+
+  // ---------- live input mode (player-first vs stat-first) ----------
+  function setInputMode(mode) {
+    state.inputMode = mode === 'stat' ? 'stat' : 'player';
+    try { localStorage.setItem('rec_input_mode', state.inputMode); } catch (e) { /* ignore */ }
+    applyInputMode();
+  }
+  // Reflect the current mode on the live screen (CSS swaps the layout) and in the
+  // toggle's active state.
+  function applyInputMode() {
+    const live = $('#screen-live');
+    if (live) {
+      live.classList.toggle('mode-player', state.inputMode === 'player');
+      live.classList.toggle('mode-stat', state.inputMode === 'stat');
+    }
+    document.querySelectorAll('#recModeToggle button').forEach((b) =>
+      b.classList.toggle('active', b.dataset.mode === state.inputMode));
   }
 
   function initClock() {
@@ -1538,6 +1564,7 @@
       toast('Opponent foul');
     }));
     document.querySelectorAll('.rec-ev[data-ev]').forEach((b) => b.addEventListener('click', () => openPlayerPickerForType(b.dataset.ev)));
+    document.querySelectorAll('#recModeToggle button').forEach((b) => b.addEventListener('click', () => setInputMode(b.dataset.mode)));
     $('#recUndo').addEventListener('click', undo);
     $('#recSubs').addEventListener('click', () => openSubSheet(null));
     $('#recLog').addEventListener('click', openLogSheet);
