@@ -952,7 +952,10 @@ function renderPendingDrafts() {
     pendingTable.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No pending recordings</td></tr>';
     return;
   }
-  pendingTable.innerHTML = pendingDraftsCache.map((d) => {
+  // Show most recent recording first. Sort a copy so we never mutate the cache.
+  pendingTable.innerHTML = [...pendingDraftsCache]
+    .sort((a, b) => new Date((b.meta && b.meta.date) || 0) - new Date((a.meta && a.meta.date) || 0))
+    .map((d) => {
     const m = d.meta || {};
     const status = d.status === 'completed'
       ? '<span style="color: var(--positive); font-size:12px;">● complete</span>'

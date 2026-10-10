@@ -194,6 +194,25 @@ nav a:hover {
   flex: none;
 }
 
+/* Active-team selector that lives inside the settings nav, beside Team Admin. */
+.nav-team-switch {
+  display: inline-flex;
+  align-items: center;
+}
+.nav-group #teamSwitcher {
+  height: 34px;
+  width: auto;
+  margin: 0;
+  padding: 6px 28px 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
 .nav-actions {
   display: flex;
   align-items: center;

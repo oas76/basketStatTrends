@@ -113,8 +113,10 @@ async function applyTeamUI() {
 }
 
 function renderTeamSwitcher() {
-  const nav = document.querySelector('.app-header nav');
-  if (!nav) return;
+  // The switcher lives only in the Settings nav, beside "Team Admin". Pages
+  // without this slot (main app pages, other admin tools) get no switcher.
+  const slot = document.getElementById('teamSwitcherSlot');
+  if (!slot) return;
   const teams = window.BasketTeams.list || [];
 
   // Nothing to switch between and not an admin -> no control.
@@ -125,11 +127,7 @@ function renderTeamSwitcher() {
     wrap = document.createElement('select');
     wrap.id = 'teamSwitcher';
     wrap.title = 'Active team';
-    wrap.style.cssText =
-      'background: var(--panel, #1b2233); color: var(--text, #e6e9f0); ' +
-      'border: 1px solid var(--border, #2b3348); border-radius: 8px; ' +
-      'padding: 6px 10px; font-size: 13px; font-weight: 500; cursor: pointer; margin-right: 4px;';
-    nav.insertBefore(wrap, nav.firstChild);
+    slot.appendChild(wrap);
     wrap.addEventListener('change', () => {
       const id = wrap.value;
       try { localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, id); } catch (e) { /* ignore */ }
