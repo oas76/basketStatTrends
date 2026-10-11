@@ -194,12 +194,19 @@ nav a:hover {
   flex: none;
 }
 
-/* Active-team selector that lives inside the settings nav, beside Team Admin. */
+/* Active-team selector. Lives in the settings nav (admin pages) and in the main
+   app header (index/games/team/team-builder) so multi-team members can switch. */
 .nav-team-switch {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
 }
-.nav-group #teamSwitcher {
+.nav-team-switch-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+#teamSwitcher {
   height: 34px;
   width: auto;
   margin: 0;
@@ -211,6 +218,12 @@ nav a:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
+}
+
+/* On narrow screens drop the "Team:" label so the control fits the header. */
+@media (max-width: 640px) {
+  .nav-team-switch-label { display: none; }
+  #teamSwitcher { max-width: 44vw; }
 }
 
 .nav-actions {

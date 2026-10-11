@@ -113,17 +113,24 @@ async function applyTeamUI() {
 }
 
 function renderTeamSwitcher() {
-  // The switcher lives only in the Settings nav, beside "Team Admin". Pages
-  // without this slot (main app pages, other admin tools) get no switcher.
+  // Active-team context selector. Rendered into #teamSwitcherSlot, which lives
+  // both in the Settings nav (admin pages) and in the main app header
+  // (index/games/team/team-builder) so multi-team members can switch context
+  // without needing platform-admin access.
   const slot = document.getElementById('teamSwitcherSlot');
   if (!slot) return;
   const teams = window.BasketTeams.list || [];
 
-  // Nothing to switch between and not an admin -> no control.
-  if (teams.length === 0) return;
+  // Only useful when there are at least two teams to switch between.
+  if (teams.length < 2) { slot.innerHTML = ''; return; }
 
   let wrap = document.getElementById('teamSwitcher');
   if (!wrap) {
+    const label = document.createElement('span');
+    label.className = 'nav-team-switch-label';
+    label.textContent = 'Team:';
+    slot.appendChild(label);
+
     wrap = document.createElement('select');
     wrap.id = 'teamSwitcher';
     wrap.title = 'Active team';
