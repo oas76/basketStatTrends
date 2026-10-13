@@ -367,10 +367,17 @@ body.recorder-body {
 .rec-mode-toggle button.active { background: var(--accent); color: #04201b; }
 #screen-live .rec-mode-toggle { flex: 0 0 auto; }
 
-/* ---- Player-first secondary opponent bar (under the players) ---- */
-#recOppBar.rec-opp-bar { margin-top: 0; gap: 10px; }
-#recOppBar .rec-ev { flex: 1; min-width: 0; }
-#screen-live #recOppBar { flex: 0 0 auto; }
+/* ---- Player-first opponent tile (6th slot of the on-court grid) ----
+   Same footprint as a player tile, but dashed/slate so it reads as "the other team". */
+#screen-live.mode-player #recOnCourt .rec-opp-tile {
+  background: rgba(148,163,184,0.10); border: 1px dashed rgba(148,163,184,0.6);
+}
+#screen-live.mode-player #recOnCourt .rec-opp-tile .rec-player-num {
+  border-color: rgba(148,163,184,0.7); color: var(--text-secondary);
+  font-size: 12px; letter-spacing: 0.08em;
+}
+#screen-live.mode-player #recOnCourt .rec-opp-tile .rec-player-name { color: var(--text-secondary); }
+#screen-live.mode-stat #recOnCourt .rec-opp-tile { display: none; }
 
 /* ---- Input-mode visibility (portrait base) ---- */
 /* Player-first (default): big on-court grid is the primary, flexible region;
@@ -387,9 +394,6 @@ body.recorder-body {
 #screen-live.mode-player #recOnCourt .rec-player-name {
   font-size: 13px; max-width: none; white-space: normal;
 }
-/* Stat-first: hide the player-first opponent bar (opp actions live in the Play grid). */
-#screen-live.mode-stat #recOppBar { display: none; }
-
 /* ---- No-scroll squad picker (mirrors #screen-live) ---- */
 #screen-squad.active {
   height: calc(100dvh - 56px);
@@ -403,9 +407,6 @@ body.recorder-body {
 #screen-squad #recStartGame { flex: 0 0 auto; margin-top: 0 !important; }
 
 /* ---- Opponent quick score ---- */
-.rec-opp-bar { display: flex; gap: 8px; margin-top: 14px; }
-.rec-event-groups .rec-opp-bar { margin-top: 2px; }
-.rec-opp-bar .rec-btn { padding: 12px; min-height: 50px; font-size: 15px; }
 /* Opponent points (+1/+2/+3) and assist chooser — laid out in a single row of
    equal-width buttons: a big value with a small label underneath. */
 .rec-oppmenu, .rec-assistmenu { display: flex; flex-direction: row; gap: 10px; }
@@ -567,16 +568,15 @@ table.rec-box thead th { color: var(--text-secondary); font-size: 11px; text-tra
   #screen-live.mode-stat #recOnCourt .rec-player-name { font-size: 13px; max-width: none; white-space: normal; }
   #screen-live.mode-stat .rec-event-groups { grid-area: events; min-height: 0; gap: 8px; }
 
-  /* Player-first: big player grid on the right, opponent bar spanning beneath. */
+  /* Player-first: big player grid (incl. the opponent tile) on the right. */
   #screen-live.mode-player {
-    grid-template-rows: auto auto auto auto 1fr auto;
+    grid-template-rows: auto auto auto auto 1fr;
     grid-template-areas:
       "score    players"
       "controls players"
       "toggle   players"
       "fouls    players"
-      "remind   players"
-      "oppbar   oppbar";
+      "remind   players";
   }
   #screen-live.mode-player .rec-h.oncourt-h { display: none; }
   #screen-live.mode-player #recOnCourt {
@@ -587,8 +587,6 @@ table.rec-box thead th { color: var(--text-secondary); font-size: 11px; text-tra
   #screen-live.mode-player #recOnCourt .rec-player-tile { min-width: 0; width: auto; padding: 12px 8px; }
   #screen-live.mode-player #recOnCourt .rec-player-num { width: 46px; height: 46px; font-size: 20px; }
   #screen-live.mode-player #recOnCourt .rec-player-name { font-size: 13px; max-width: none; white-space: normal; }
-  #screen-live.mode-player #recOppBar { grid-area: oppbar; }
-
   /* Larger, comfortable targets now that there is room. */
   #screen-live .rec-score-side .val { font-size: 36px; }
   #screen-live .rec-clock-time { font-size: 36px; }

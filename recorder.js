@@ -696,6 +696,14 @@
       ]));
     });
     if (!onCourt.size) grid.appendChild(el('div', { class: 'rec-empty', text: 'No players on court. Use Subs to add players.' }));
+    // Player-first only (CSS hides it in stat mode): the other team's actions fill
+    // the 6th slot of the 3x2 on-court grid.
+    grid.appendChild(el('button', { class: 'rec-player-tile rec-opp-tile', onclick: openOppActionsSheet }, [
+      el('div', { class: 'rec-player-num', text: 'OPP' }),
+      el('div', { class: 'rec-player-name', text: 'Opponent' }),
+      el('div', { class: 'rec-player-pm', text: 'Score / Foul' }),
+      el('div', { class: 'rec-player-pf', text: 'TF ' + foulsThisPeriod('opp_foul') })
+    ]));
   }
 
   // "Next period ›": for regulation periods this just advances. On the last
@@ -764,16 +772,31 @@
   function openOppPointsSheet() {
     const body = el('div', {});
     body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Opponent scored' }));
+    body.appendChild(oppPointsRow());
+    openSheet('Opponent point', body);
+  }
+  function oppPointsRow() {
     const labels = { 1: 'Free throw', 2: 'Field goal', 3: 'Three' };
-    const grid = el('div', { class: 'rec-oppmenu' }, [1, 2, 3].map((v) =>
+    return el('div', { class: 'rec-oppmenu' }, [1, 2, 3].map((v) =>
       el('button', {
         class: 'rec-btn block',
         html: `+${v}<span class="sub">${labels[v]}</span>`,
         onclick: () => { addEvent({ type: 'opp_pts', value: v }); toast('Opponent +' + v); closeSheet(); }
       })
     ));
-    body.appendChild(grid);
-    openSheet('Opponent point', body);
+  }
+
+  // Player-first opponent tile: scoring and fouls for the other team in one sheet.
+  function openOppActionsSheet() {
+    const body = el('div', {});
+    body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Scored' }));
+    body.appendChild(oppPointsRow());
+    body.appendChild(el('div', { class: 'rec-sheet-section', text: 'Foul' }));
+    body.appendChild(el('button', {
+      class: 'rec-btn block', text: 'Opponent foul',
+      onclick: () => { addEvent({ type: 'opp_foul' }); toast('Opponent foul'); closeSheet(); }
+    }));
+    openSheet('Opponent', body);
   }
 
   // Record a foul on one of our players, then offer the opponent's free-throw

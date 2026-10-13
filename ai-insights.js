@@ -85,7 +85,8 @@
       const store = kind === 'local'
         ? (typeof localStorage !== 'undefined' ? localStorage : null)
         : (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
-      return store;
+      // Node 25+ exposes a stub localStorage without methods unless --localstorage-file is set.
+      return store && typeof store.getItem === 'function' ? store : null;
     } catch (e) {
       return null;
     }
