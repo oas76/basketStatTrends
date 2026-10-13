@@ -24,6 +24,7 @@
           "league-chips.js",
           "app.js",
           "games.js",
+          "boxscore-edit.js",
           "admin.js",
           "platform-admin.js",
           "reference-stats.js",
@@ -31,6 +32,11 @@
           "recorder.js",
           "recorder-aggregator.js",
           "recorder-clock.js",
+          "recorder-store.js",
+          "recorder-sync.js",
+          "sw.js",
+          "manifest.webmanifest",
+          "recorder-icon.svg",
           "csv/**"
         ]
       }

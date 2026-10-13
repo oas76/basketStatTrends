@@ -98,6 +98,8 @@
     clock: null,
     seq: 0,
     saveTimer: null,
+    serverDrafts: {},   // teamId -> drafts, only used when the offline store is unavailable
+    fetchingDrafts: false,
     syncTimer: null,
     syncing: false,
     screen: 'home',
@@ -299,13 +301,16 @@
   // Build the "Continue recording" list from the local store (cache-first) so it
   // renders instantly and works offline. Drafts with unpushed local changes are
   // flagged with an "Unsynced" marker.
-  function renderDraftList() {
+  function renderDraftList(skipFetch) {
     const draftList = $('#recDraftList');
     if (!draftList) return;
+    // Without the offline store, list the server's drafts instead (fetched in the
+    // background, then re-rendered once).
+    if (!STORE && !skipFetch) fetchServerDrafts();
     draftList.innerHTML = '';
     let anyDraft = false;
     for (const t of state.teams) {
-      const drafts = STORE ? STORE.activeDrafts(t.id) : [];
+      const drafts = STORE ? STORE.activeDrafts(t.id) : (state.serverDrafts[t.id] || []);
       drafts.filter((d) => d.status !== 'completed').forEach((d) => {
         anyDraft = true;
         const evs = Array.isArray(d.events) ? d.events.length : 0;
@@ -322,6 +327,10 @@
           openEditGameSheet({ meta: d.meta || {}, teamData, onSave: async (vals) => {
             const updated = Object.assign({}, d, { meta: Object.assign({}, d.meta || {}, vals) });
             if (STORE) STORE.putDraft(t.id, updated);
+            else {
+              await api('PUT', `/api/teams/${encodeURIComponent(t.id)}/drafts/${encodeURIComponent(d.id)}`, updated);
+              state.serverDrafts[t.id] = (state.serverDrafts[t.id] || []).map((x) => (x.id === d.id ? updated : x));
+            }
             toast('Game details updated');
             scheduleSync();
             renderDraftList();
@@ -341,6 +350,22 @@
     }
     if (!anyDraft) draftList.appendChild(el('div', { class: 'rec-empty', text: 'No in-progress recordings.' }));
     updateConnBadge();
+  }
+
+  async function fetchServerDrafts() {
+    if (!isOnline() || state.fetchingDrafts) return;
+    state.fetchingDrafts = true;
+    try {
+      for (const t of state.teams) {
+        try {
+          const resp = await api('GET', `/api/teams/${encodeURIComponent(t.id)}/drafts`);
+          state.serverDrafts[t.id] = (resp && resp.drafts) || [];
+        } catch (e) { /* keep whatever was listed before */ }
+      }
+    } finally {
+      state.fetchingDrafts = false;
+    }
+    if (state.screen === 'home') renderDraftList(true);
   }
 
   async function selectTeam(team) {
@@ -553,6 +578,7 @@
     if (!state.draft.id) state.draft.id = newDraftId();
     state.draft = normalizeDraft(state.draft);
     if (STORE) STORE.putDraft(state.teamId, state.draft);
+    else saveDraft();
     scheduleSync();
     enterLive();
   }
