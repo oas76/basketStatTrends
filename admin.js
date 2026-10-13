@@ -957,9 +957,12 @@ function renderPendingDrafts() {
     .sort((a, b) => new Date((b.meta && b.meta.date) || 0) - new Date((a.meta && a.meta.date) || 0))
     .map((d) => {
     const m = d.meta || {};
+    const notStarted = d.status === 'setup';
     const status = d.status === 'completed'
       ? '<span style="color: var(--positive); font-size:12px;">● complete</span>'
-      : '<span style="color: var(--text-muted); font-size:12px;">○ in progress</span>';
+      : (notStarted
+        ? '<span style="color: var(--text-muted); font-size:12px;">○ not started</span>'
+        : '<span style="color: var(--text-muted); font-size:12px;">○ in progress</span>');
     return `
       <tr data-draft-id="${escapeHtml(d.id)}">
         <td style="font-size:12px;">${escapeHtml(m.date || '')}</td>
@@ -969,7 +972,7 @@ function renderPendingDrafts() {
         <td>${status}</td>
         <td style="white-space:nowrap; display:flex; gap:4px; flex-wrap:wrap;">
           <button class="secondary" data-draft-action="review" data-id="${escapeHtml(d.id)}" style="font-size:11px; padding:4px 8px;">Review</button>
-          <button class="secondary" data-draft-action="import" data-id="${escapeHtml(d.id)}" style="font-size:11px; padding:4px 8px;">Import</button>
+          ${notStarted ? '' : `<button class="secondary" data-draft-action="import" data-id="${escapeHtml(d.id)}" style="font-size:11px; padding:4px 8px;">Import</button>`}
           <button class="danger-link" data-draft-action="discard" data-id="${escapeHtml(d.id)}" style="font-size:11px; padding:4px 8px;">Discard</button>
         </td>
       </tr>`;
@@ -1001,6 +1004,7 @@ function openReviewDraft(draft) {
     }).join('');
   reviewDraftBody.innerHTML = rows || '<tr><td colspan="15" style="text-align:center; color: var(--text-muted);">No players with stats</td></tr>';
 
+  if (importDraftBtn) importDraftBtn.style.display = draft.status === 'setup' ? 'none' : '';
   reviewDraftModal.classList.add('active');
 }
 
@@ -1012,6 +1016,7 @@ function closeReviewDraft() {
 async function importDraft(draftId) {
   const draft = pendingDraftsCache.find((d) => String(d.id) === String(draftId));
   if (!draft) return;
+  if (draft.status === 'setup') { alert('This game has not been started yet, so there is nothing to import.'); return; }
   const teamId = window.basketStatData.getActiveTeam && window.basketStatData.getActiveTeam();
   if (!teamId) { alert('No active team selected.'); return; }
 

@@ -194,7 +194,8 @@
     window.addEventListener('online', () => { updateConnBadge(); triggerSync(); });
     window.addEventListener('offline', updateConnBadge);
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) { updateConnBadge(); triggerSync(); }
+      if (document.hidden) flushSave();
+      else { updateConnBadge(); triggerSync(); }
     });
     // Light periodic catch-up while the recorder is open and online.
     setInterval(() => { if (isOnline()) triggerSync(); }, 30000);
@@ -263,8 +264,11 @@
   function goBack() {
     // Re-fetch drafts when returning Home so discarded/deleted recordings drop off
     // the "Continue recording" list (renderHome ends by showing the home screen).
-    if (state.screen === 'setup') renderHome();
-    else if (state.screen === 'squad') showScreen('setup');
+    if (state.screen === 'setup') { flushSave(); state.draft = null; renderHome(); }
+    else if (state.screen === 'squad') {
+      if (state.draft) fillSetupForm(state.draft.meta);
+      showScreen('setup');
+    }
     else if (state.screen === 'live') renderHome();
     else if (state.screen === 'review') keepRecording();
   }
@@ -305,6 +309,12 @@
       drafts.filter((d) => d.status !== 'completed').forEach((d) => {
         anyDraft = true;
         const evs = Array.isArray(d.events) ? d.events.length : 0;
+        const prepared = d.status === 'setup';
+        const inSquad = Array.isArray(d.roster) ? d.roster.filter((r) => r.included).length : 0;
+        const m = d.meta || {};
+        const metaText = prepared
+          ? `Not started \u00b7 ${m.date || ''} \u00b7 ${inSquad} in squad`
+          : `${m.league || ''} \u00b7 ${evs} events \u00b7 ${m.date || ''}`;
         // A <div> tile (not <button>) so it can host a nested Edit button.
         const editBtn = el('button', { class: 'rec-btn ghost rec-tile-edit', text: 'Edit', onclick: async (ev) => {
           ev.stopPropagation();
@@ -320,11 +330,11 @@
         const children = [
           el('div', { class: 'rec-tile-main' }, [
             el('div', { class: 'rec-tile-title', text: `${t.name} vs ${d.meta ? d.meta.opponent : '?'}` }),
-            el('div', { class: 'rec-tile-meta', text: `${d.meta ? d.meta.league || '' : ''} \u00b7 ${evs} events \u00b7 ${d.meta ? d.meta.date : ''}` })
+            el('div', { class: 'rec-tile-meta', text: metaText })
           ]),
           editBtn,
           d._dirty ? el('span', { class: 'rec-unsynced', text: 'Unsynced' }) : null,
-          el('span', { class: 'rec-badge', text: 'Resume' })
+          el('span', { class: 'rec-badge', text: prepared ? 'Set up' : 'Resume' })
         ];
         draftList.appendChild(el('div', { class: 'rec-tile rec-tile-draft', onclick: () => resumeDraft(t, d) }, children));
       });
@@ -368,21 +378,29 @@
   }
 
   function setupNewGame() {
-    $('#recDate').value = todayISO();
-    $('#recOpponent').value = '';
-    $('#recPeriods').value = 4;
-    $('#recPeriodMin').value = 10;
-    $('#recOtMin').value = 5;
-    // home/away default home
-    document.querySelectorAll('#recHomeAway button').forEach((b) => b.classList.toggle('active', b.dataset.val === 'home'));
+    flushSave();
+    state.draft = null;
+    fillSetupForm({});
+    showScreen('setup');
+  }
+
+  // Fill the New game form from a draft's meta (or defaults for a fresh game).
+  function fillSetupForm(meta) {
+    const m = meta || {};
+    $('#recDate').value = m.date || todayISO();
+    $('#recOpponent').value = m.opponent || '';
+    $('#recPeriods').value = m.periods || 4;
+    $('#recPeriodMin').value = m.periodLengthMin || 10;
+    $('#recOtMin').value = m.otLengthMin || 5;
+    const homeAway = m.homeAway === 'away' ? 'away' : 'home';
+    document.querySelectorAll('#recHomeAway button').forEach((b) => b.classList.toggle('active', b.dataset.val === homeAway));
 
     const leagues = availableLeagues(state.teamData);
     const sel = $('#recLeague');
-    fillLeagueSelect(sel, leagues, '');
+    const list = fillLeagueSelect(sel, leagues, m.league || '');
     const note = $('#recLeagueNote');
-    if (note) note.style.display = leagues.length ? 'none' : 'block';
-    sel.disabled = !leagues.length;
-    showScreen('setup');
+    if (note) note.style.display = list.length ? 'none' : 'block';
+    sel.disabled = !list.length;
   }
 
   function selectedHomeAway() {
@@ -400,22 +418,32 @@
     const periodLengthMin = Math.max(1, parseInt($('#recPeriodMin').value, 10) || 10);
     const otLengthMin = Math.max(1, parseInt($('#recOtMin').value, 10) || 5);
 
-    state.draft = {
-      status: 'in_progress',
-      meta: {
-        date: $('#recDate').value || todayISO(),
-        league,
-        opponent,
-        homeAway: selectedHomeAway(),
-        periods,
-        periodLengthMin,
-        otLengthMin,
-        clockRules: Object.assign({}, CLK.DEFAULT_CLOCK_RULES)
-      },
-      roster: buildInitialRoster(),
-      events: [],
-      boxScore: { performances: {} }
+    const meta = {
+      date: $('#recDate').value || todayISO(),
+      league,
+      opponent,
+      homeAway: selectedHomeAway(),
+      periods,
+      periodLengthMin,
+      otLengthMin
     };
+    if (state.draft) {
+      // Back on the form for a game already being prepared: update it in place
+      // so it keeps its id and squad selection.
+      state.draft.meta = Object.assign({}, state.draft.meta, meta);
+    } else {
+      // Status 'setup' = prepared but not started; the roster keeps every player
+      // with included/starter flags so the squad screen can be restored.
+      state.draft = {
+        id: newDraftId(),
+        status: 'setup',
+        meta: Object.assign(meta, { clockRules: Object.assign({}, CLK.DEFAULT_CLOCK_RULES) }),
+        roster: buildInitialRoster(),
+        events: [],
+        boxScore: { performances: {} }
+      };
+    }
+    saveDraft();
     renderSquad();
     showScreen('squad');
   }
@@ -456,6 +484,7 @@
         r.number = v === '' ? null : parseInt(v, 10);
         numInput.classList.toggle('missing', r.included && r.number == null);
         updateSquadNote();
+        scheduleSave();
       });
       // On blur, persist the number back to the team registry so the fix sticks
       // for future games and stats (not just this draft's snapshot).
@@ -476,6 +505,7 @@
         else if (!r.starter) { r.starter = true; }
         else { r.included = false; r.starter = false; }
         renderSquad();
+        scheduleSave();
       };
       tile.addEventListener('click', cycle);
       tile.addEventListener('keydown', (e) => {
@@ -516,6 +546,7 @@
     state.draft.roster = state.draft.roster
       .filter((r) => r.included)
       .map((r) => ({ name: r.name, number: r.number, starter: !!r.starter }));
+    state.draft.status = 'in_progress';
 
     // Local-first: give the draft a stable client id, persist it immediately so
     // the game survives a reload with no network, then sync in the background.
@@ -895,7 +926,14 @@
   // ---------- autosave ----------
   function scheduleSave() {
     if (state.saveTimer) clearTimeout(state.saveTimer);
-    state.saveTimer = setTimeout(saveDraft, 700);
+    state.saveTimer = setTimeout(() => { state.saveTimer = null; saveDraft(); }, 700);
+  }
+  // Write a pending debounced save now (before state.draft is replaced).
+  function flushSave() {
+    if (!state.saveTimer) return;
+    clearTimeout(state.saveTimer);
+    state.saveTimer = null;
+    saveDraft();
   }
   async function saveDraft() {
     if (!state.draft || !state.draft.id) return;
@@ -1532,8 +1570,29 @@
     state.teamId = team.id;
     state.teamName = team.name;
     state.teamData = await loadTeamData(team.id);
+    flushSave();
     state.draft = normalizeDraft(draft);
+    if (state.draft.status === 'setup') {
+      state.draft.roster = mergeRosterWithTeam(state.draft.roster);
+      renderSquad();
+      showScreen('squad');
+      return;
+    }
     enterLive();
+  }
+
+  // A prepared game's saved squad, plus any active team players registered since
+  // (added as "out"). Saved flags and numbers win; paused players are dropped
+  // unless they were already picked.
+  function mergeRosterWithTeam(saved) {
+    const byName = new Map((saved || []).map((r) => [r.name, r]));
+    const merged = buildInitialRoster().map((r) => {
+      const s = byName.get(r.name);
+      byName.delete(r.name);
+      return s ? Object.assign({}, r, s) : r;
+    });
+    byName.forEach((s) => { if (s.included) merged.push(s); });
+    return merged;
   }
 
   // ---------- edit game details ----------
@@ -1639,7 +1698,7 @@
       state.screen === 'live' ? el('button', { class: 'rec-btn primary block', text: 'Finish game', style: 'margin-bottom:10px;', onclick: () => { closeSheet(); openReview(); } }) : null,
       state.screen === 'live' ? el('button', { class: 'rec-btn block', text: 'Set lineup', style: 'margin-bottom:10px;', onclick: () => { closeSheet(); openLineupSheet(); } }) : null,
       (state.screen === 'live' && state.clock) ? el('button', { class: 'rec-btn block', text: 'Edit time', style: 'margin-bottom:10px;', onclick: () => { closeSheet(); openEditClockSheet(); } }) : null,
-      state.draft ? el('button', { class: 'rec-btn block', text: 'Edit game details', style: 'margin-bottom:10px;', onclick: () => {
+      (state.draft && state.screen !== 'setup') ? el('button', { class: 'rec-btn block', text: 'Edit game details', style: 'margin-bottom:10px;', onclick: () => {
         closeSheet();
         openEditGameSheet({ meta: state.draft.meta, teamData: state.teamData, onSave: async (vals) => {
           Object.assign(state.draft.meta, vals);
@@ -1648,8 +1707,9 @@
           toast('Game details updated');
         } });
       } }) : null,
-      el('button', { class: 'rec-btn block', text: 'Open stats app', style: 'margin-bottom:10px;', onclick: () => { window.location.href = '/'; } }),
-      state.screen === 'live' ? el('button', { class: 'rec-btn danger block', text: 'Discard this recording', style: 'margin-bottom:10px;', onclick: discardDraft }) : null,
+      el('button', { class: 'rec-btn block', text: 'Open stats app', style: 'margin-bottom:10px;', onclick: () => { flushSave(); window.location.href = '/'; } }),
+      (state.screen === 'live' || (state.screen === 'squad' && state.draft && state.draft.id))
+        ? el('button', { class: 'rec-btn danger block', text: 'Discard this recording', style: 'margin-bottom:10px;', onclick: discardDraft }) : null,
       el('button', { class: 'rec-btn ghost block', text: 'Log out', onclick: logout })
     ]);
     openSheet('Menu', body);
@@ -1657,6 +1717,9 @@
   async function discardDraft() {
     if (!state.draft || !state.draft.id) { closeSheet(); return; }
     if (!confirm('Delete this recording? This cannot be undone.')) return;
+    // A pending autosave would otherwise re-create the draft after deleting it.
+    if (state.saveTimer) { clearTimeout(state.saveTimer); state.saveTimer = null; }
+    const fromSquad = state.screen === 'squad';
     if (STORE) {
       // Local-first delete: tombstone a draft that reached the server (so the
       // delete syncs), otherwise drop a never-synced local-only draft outright.
@@ -1669,12 +1732,12 @@
         await api('DELETE', `/api/teams/${encodeURIComponent(state.teamId)}/drafts/${encodeURIComponent(state.draft.id)}`);
       } catch (e) { toast('Delete failed: ' + e.message); return; }
     }
-    // Clear the discarded game and reset the UI to the New Game create form for
-    // the same team.
+    // Clear the discarded game. From live, reset to the New Game form for the
+    // same team; a prepared game discarded from the squad screen goes Home.
     if (state.clock) { state.clock.destroy(); state.clock = null; }
     state.draft = null;
     closeSheet();
-    if (state.teamId) setupNewGame();
+    if (state.teamId && !fromSquad) setupNewGame();
     else renderHome();
   }
   async function logout() {

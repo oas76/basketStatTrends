@@ -108,6 +108,33 @@ describe('recorder-sync', () => {
     expect(out.t2.pushed).toBe(1);
   });
 
+  test('a prepared (setup) game with no events survives push and pull', async () => {
+    const roster = [
+      { name: 'Ola', number: 4, included: true, starter: true },
+      { name: 'Kari', number: 7, included: false, starter: false }
+    ];
+    store.putDraft('t1', {
+      id: 'prep', status: 'setup', events: [], roster,
+      meta: { date: '2026-11-01', opponent: 'Fyllingen', league: 'U15' }
+    });
+    const { api, table } = fakeApi([]);
+    const res = await sync.syncTeam('t1', { api, store });
+    expect(res.errors).toEqual([]);
+    expect(table.get('prep').status).toBe('setup');
+    expect(table.get('prep').roster).toEqual(roster);
+
+    const active = store.activeDrafts('t1');
+    expect(active.map((d) => d.id)).toEqual(['prep']);
+    expect(active[0].events).toEqual([]);
+    expect(active[0].meta.date).toBe('2026-11-01');
+    expect(active[0].roster).toEqual(roster);
+
+    // A later pull from another device keeps it as well.
+    const res2 = await sync.syncTeam('t1', { api, store });
+    expect(res2.errors).toEqual([]);
+    expect(store.activeDrafts('t1').map((d) => d.id)).toEqual(['prep']);
+  });
+
   test('no-op without deps', async () => {
     const res = await sync.syncTeam('t1', {});
     expect(res).toEqual({ pushed: 0, deleted: 0, pulled: 0, errors: [] });
