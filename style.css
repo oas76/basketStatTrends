@@ -2699,6 +2699,7 @@ button.danger:hover {
 .box-edit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .box-edit-btn.made { color: var(--positive); border-color: rgba(74, 222, 128, 0.4); }
 .box-edit-btn.miss { color: var(--negative); border-color: rgba(248, 113, 113, 0.4); }
+.box-edit-btn.remove { color: var(--negative); border-style: dashed; border-color: rgba(248, 113, 113, 0.6); }
 
 .box-add-player {
   margin-top: 10px;

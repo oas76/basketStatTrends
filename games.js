@@ -265,7 +265,7 @@ function ensureEditUI() {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "box-edit-btn" +
-        (a.made === true ? " made" : a.made === false ? " miss" : "");
+        (a.remove ? " remove" : a.made === true ? " made" : a.made === false ? " miss" : "");
       btn.textContent = a.label;
       btn.dataset.action = a.type;
       btn.disabled = true;
@@ -278,6 +278,7 @@ function ensureEditUI() {
   };
 
   boxEditPanel.appendChild(makeGroup("Shooting", "shooting"));
+  boxEditPanel.appendChild(makeGroup("Remove made shot", "remove"));
   boxEditPanel.appendChild(makeGroup("Other", "other"));
 
   // --- add-player sub-form ---
@@ -351,12 +352,16 @@ function enterEditMode() {
 }
 
 // Enable/disable the quick-add buttons and show which player is targeted.
+// Remove buttons also need a matching made shot on the player's working line.
 function updateEditPanel() {
   const has = !!selectedPlayer;
-  editActionBtns.forEach((b) => { b.disabled = !has; });
+  const line = has ? computeWorking()[selectedPlayer] : null;
+  editActionBtns.forEach((b) => {
+    b.disabled = !has || !BE.canApply(line, b.dataset.action);
+  });
   boxEditHint.textContent = has
-    ? `Adding events to: ${selectedPlayer}`
-    : "Select a player row, then tap an event to add it.";
+    ? `Adding/removing events for: ${selectedPlayer}`
+    : "Select a player row, then tap an event to add or remove it.";
   if (editUndoBtn) editUndoBtn.disabled = pendingOps.length === 0;
 }
 
@@ -368,6 +373,7 @@ function selectPlayer(name) {
 
 function applyQuickAdd(type) {
   if (!selectedPlayer) return;
+  if (!BE.canApply(computeWorking()[selectedPlayer], type)) return;
   pendingOps.push({ name: selectedPlayer, type });
   renderBoxScore();
   updateEditPanel();
