@@ -685,6 +685,7 @@ const authMiddleware = async (req, res, next) => {
     '/recorder-store.js',
     '/recorder-sync.js',
     '/recorder-icon.svg',
+    '/apple-touch-icon.png',
     '/manifest.webmanifest',
     '/sw.js'
   ];

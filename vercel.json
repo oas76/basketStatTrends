@@ -37,6 +37,7 @@
           "sw.js",
           "manifest.webmanifest",
           "recorder-icon.svg",
+          "apple-touch-icon.png",
           "csv/**"
         ]
       }
